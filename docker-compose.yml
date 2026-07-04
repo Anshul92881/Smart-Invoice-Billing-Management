@@ -13,7 +13,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
       MYSQL_INITDB_SKIP_TZINFO: 'yes'
     ports:
-      - "3306:3306"
+      - "3307:3306"
     networks:
       - app-network
     volumes:
