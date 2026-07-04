@@ -13,7 +13,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
       MYSQL_INITDB_SKIP_TZINFO: 'yes'
     ports:
-      - "3307:3306"
+      - "3307:3306" # Public host port 3307 maps to container port 3306
     networks:
       - app-network
     volumes:
@@ -46,7 +46,7 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${BACKEND_PORT:-5000}
       DB_HOST: db
-      DB_PORT: ${MYSQL_PORT:-3306}
+      DB_PORT: 3306  # ◄ FIXED: Internal container networks talk over 3306
       DB_NAME: ${MYSQL_DATABASE:-invoice_db}
       DB_USER: ${MYSQL_USER:-appuser}
       DB_PASSWORD: ${MYSQL_PASSWORD:-apppassword}
@@ -57,8 +57,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
-    ports:
-      - "${BACKEND_PORT:-5000}:${BACKEND_PORT:-5000}"
+    # ◄ REMOVED: Public port block removed to prevent port 5000 conflicts on host
     networks:
       - app-network
     volumes:
@@ -73,7 +72,6 @@ services:
       start_period: 20s
 
   # React Frontend Service (Nginx)
-# React Frontend Service (Nginx)
   frontend:
     build:
       context: ./client
@@ -83,8 +81,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "8090:80"  # ◄ CHANGED: Map internal container port 80 to VPS port 8080
-      # ◄ REMOVED: Port 443 is removed completely because Host Nginx handles SSL
+      - "8090:80"
     networks:
       - app-network
     environment:
