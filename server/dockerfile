@@ -1,0 +1,66 @@
+# Stage 1: Dependencies stage
+FROM node:22-alpine AS dependencies
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production
+
+# Stage 2: Build stage (optional, for any build steps)
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+
+# Install all dependencies (including dev)
+RUN npm ci
+
+COPY . .
+
+# Run any build/compilation steps if needed
+# RUN npm run build
+
+# Stage 3: Production stage
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Install dumb-init for proper signal handling and curl for health checks
+RUN apk add --no-cache dumb-init curl
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copy production dependencies from dependencies stage
+COPY --from=dependencies --chown=nodejs:nodejs /app/node_modules ./node_modules
+
+# Copy application code
+COPY --chown=nodejs:nodejs . .
+
+# Create upload directories with proper permissions
+RUN mkdir -p /app/upload /app/uploads && \
+    chown -R nodejs:nodejs /app/upload /app/uploads && \
+    chmod -R 755 /app/upload /app/uploads
+
+# Switch to non-root user
+USER nodejs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:5000/ || exit 1
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["/sbin/dumb-init", "--"]
+
+# Start the application
+CMD ["node", "server.js"]
+
+EXPOSE 5000
+
+LABEL maintainer="your-team"
+LABEL description="Backend service - Node.js Express application"
