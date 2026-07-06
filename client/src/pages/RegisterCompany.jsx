@@ -31,24 +31,26 @@ const BRANCH_CODE_REGEX = /^[a-zA-Z0-9_-]{2,20}$/;
 const PASSWORD_MESSAGE =
   "Password must be 8-128 characters and include uppercase, lowercase, number and special character";
 
-const cleanString = (value) => String(value || "").replace(/<[^>]*>?/gm, "").trim();
+const cleanString = (value) =>
+  String(value || "")
+    .replace(/<[^>]*>?/gm, "")
+    .trim();
+
 const normalizeEmail = (email) => cleanString(email).toLowerCase();
 const normalizeUpper = (value) => cleanString(value).toUpperCase();
 
-const isStrongPassword = (password) => {
-  return (
-    typeof password === "string" &&
-    password.length >= 8 &&
-    password.length <= 128 &&
-    /[A-Z]/.test(password) &&
-    /[a-z]/.test(password) &&
-    /\d/.test(password) &&
-    /[^A-Za-z0-9]/.test(password)
-  );
-};
+const isStrongPassword = (password) =>
+  typeof password === "string" &&
+  password.length >= 8 &&
+  password.length <= 128 &&
+  /[A-Z]/.test(password) &&
+  /[a-z]/.test(password) &&
+  /\d/.test(password) &&
+  /[^A-Za-z0-9]/.test(password);
 
 function RegisterCompany() {
   const navigate = useNavigate();
+
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -212,13 +214,8 @@ function RegisterCompany() {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
 
-      if (data.token) {
-        localStorage.setItem("kyc_token", data.token);
-      }
-
-      if (data.user) {
-        localStorage.setItem("kyc_user", JSON.stringify(data.user));
-      }
+      if (data.token) localStorage.setItem("kyc_token", data.token);
+      if (data.user) localStorage.setItem("kyc_user", JSON.stringify(data.user));
 
       localStorage.setItem("pending_company_id", data.company_id);
       localStorage.setItem("pending_admin_email", payload.admin_email);
@@ -237,34 +234,34 @@ function RegisterCompany() {
     }
   };
 
-    return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 px-4 py-4">
-      <div className="mx-auto grid h-[calc(100vh-32px)] w-full max-w-6xl grid-cols-1 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl lg:grid-cols-[1.05fr_.95fr]">
-        <div className="relative hidden overflow-hidden bg-slate-950 p-8 text-white lg:block">
+  return (
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100 p-3 sm:p-4 lg:p-6">
+      <div className="mx-auto grid min-h-[calc(100vh-24px)] w-full max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:min-h-[calc(100vh-32px)] lg:min-h-[calc(100vh-48px)] lg:grid-cols-[1.05fr_.95fr]">
+        <section className="relative hidden overflow-hidden bg-slate-950 p-8 text-white lg:block xl:p-10">
           <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-blue-600/25 blur-3xl" />
           <div className="absolute -bottom-28 left-10 h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
 
-          <div className="relative z-10 flex h-full flex-col justify-between py-4">
+          <div className="relative z-10 flex h-full flex-col justify-between">
             <div>
-              <div className="mb-8 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 shadow-lg shadow-blue-900/30">
-                  <FileText size={24} />
+              <div className="mb-10 flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 shadow-lg shadow-blue-900/30">
+                  <FileText size={26} />
                 </div>
 
                 <div>
-                  <h1 className="text-xl font-bold">Smart Invoice</h1>
-                  <p className="text-xs text-slate-400">
+                  <h1 className="text-2xl font-bold">Smart Invoice</h1>
+                  <p className="text-sm text-slate-400">
                     SaaS Billing Management
                   </p>
                 </div>
               </div>
 
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold text-blue-100">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold text-blue-100">
                 <Sparkles size={14} />
                 Start your company workspace
               </div>
 
-              <h2 className="max-w-lg text-3xl font-extrabold leading-[1.15] tracking-tight">
+              <h2 className="max-w-lg text-3xl font-extrabold leading-tight xl:text-4xl">
                 Start Your Business Journey with Smart Invoice
               </h2>
 
@@ -274,7 +271,7 @@ function RegisterCompany() {
               </p>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <FeatureItem
                 icon={<Building2 size={19} />}
                 title="Company Workspace"
@@ -294,30 +291,34 @@ function RegisterCompany() {
               />
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="flex h-full items-center p-5 sm:p-8 lg:p-10">
+        <section className="flex min-h-full items-center overflow-y-auto px-4 py-8 sm:px-8 sm:py-10 lg:px-10">
           <div className="mx-auto w-full max-w-md">
             <button
               type="button"
               onClick={() => navigate("/")}
-              className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-blue-700"
+              className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-blue-700"
             >
               <ArrowLeft size={16} />
               Back to login
             </button>
 
-            <div className="mb-5">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+            <div className="mb-5 text-center sm:text-left">
+              <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20 lg:hidden">
+                <FileText size={28} />
+              </div>
+
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
                 <Building2 size={14} />
                 Company Signup
               </div>
 
-              <h2 className="text-2xl font-bold text-slate-900">
+              <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">
                 Create Company Account
               </h2>
 
-              <p className="mt-1 text-sm leading-6 text-slate-500">
+              <p className="mt-2 text-sm leading-6 text-slate-500">
                 Step {step} of 2 —{" "}
                 {step === 1 ? "Company and HQ details" : "Admin details"}
               </p>
@@ -325,12 +326,12 @@ function RegisterCompany() {
 
             <div className="mb-5 h-2 overflow-hidden rounded-full bg-slate-100">
               <div
-                className="h-full rounded-full bg-blue-600 transition-all"
+                className="h-full rounded-full bg-blue-600 transition-all duration-300"
                 style={{ width: `${progress}%` }}
               />
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3.5" noValidate>
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
               {step === 1 ? (
                 <>
                   <Input
@@ -372,7 +373,7 @@ function RegisterCompany() {
                     error={errors.company_phone}
                   />
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <Input
                       label="GST Number"
                       name="gst_number"
@@ -396,13 +397,13 @@ function RegisterCompany() {
                     />
                   </div>
 
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3.5">
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
                     <div className="mb-3 flex items-center gap-2 text-sm font-bold text-blue-800">
                       <Building2 size={17} />
                       Main Branch / Head Office
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <Input
                         label="HQ Branch Name"
                         name="hq_branch_name"
@@ -437,7 +438,7 @@ function RegisterCompany() {
                   <button
                     type="button"
                     onClick={goNext}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
                   >
                     Continue
                     <ArrowRight size={18} />
@@ -482,13 +483,9 @@ function RegisterCompany() {
                       <button
                         type="button"
                         onClick={() => setShowPassword((prev) => !prev)}
-                        className="text-slate-400 hover:text-slate-700"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                       >
-                        {showPassword ? (
-                          <EyeOff size={18} />
-                        ) : (
-                          <Eye size={18} />
-                        )}
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     }
                     required
@@ -511,7 +508,7 @@ function RegisterCompany() {
                         onClick={() =>
                           setShowConfirmPassword((prev) => !prev)
                         }
-                        className="text-slate-400 hover:text-slate-700"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                       >
                         {showConfirmPassword ? (
                           <EyeOff size={18} />
@@ -523,11 +520,11 @@ function RegisterCompany() {
                     required
                   />
 
-                  <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
                     <button
                       type="button"
                       onClick={() => setStep(1)}
-                      className="rounded-xl border border-slate-300 bg-white py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                      className="rounded-xl border border-slate-300 bg-white py-3.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                     >
                       Back
                     </button>
@@ -535,7 +532,7 @@ function RegisterCompany() {
                     <button
                       type="submit"
                       disabled={loading}
-                      className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+                      className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
                     >
                       {loading ? "Creating..." : "Create Account"}
                       {!loading && <ArrowRight size={18} />}
@@ -545,7 +542,7 @@ function RegisterCompany() {
               )}
             </form>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
@@ -583,8 +580,8 @@ function Input({
           onChange={onChange}
           autoComplete="off"
           placeholder={placeholder}
-          className={`w-full rounded-xl border bg-white py-3 pl-11 text-sm font-medium outline-none transition focus:ring-4 ${
-            rightIcon ? "pr-11" : "pr-3"
+          className={`w-full rounded-xl border bg-white py-3.5 pl-11 text-sm font-medium text-slate-800 outline-none transition focus:ring-4 ${
+            rightIcon ? "pr-12" : "pr-3"
           } ${
             error
               ? "border-red-400 focus:border-red-500 focus:ring-red-100"
@@ -593,7 +590,7 @@ function Input({
         />
 
         {rightIcon && (
-          <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
+          <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
             {rightIcon}
           </div>
         )}
@@ -602,7 +599,9 @@ function Input({
       {error ? (
         <p className="mt-1 text-xs font-semibold text-red-600">{error}</p>
       ) : helper ? (
-        <p className="mt-1 text-xs font-medium text-slate-400">{helper}</p>
+        <p className="mt-1 text-xs font-medium leading-5 text-slate-400">
+          {helper}
+        </p>
       ) : null}
     </div>
   );
@@ -610,13 +609,13 @@ function Input({
 
 function FeatureItem({ icon, title, text }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/10 p-3.5 backdrop-blur">
+    <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
       <div className="flex items-start gap-3">
-        <div className="rounded-xl bg-blue-500/20 p-2 text-blue-300">
+        <div className="shrink-0 rounded-xl bg-blue-500/20 p-2 text-blue-300">
           {icon}
         </div>
 
-        <div>
+        <div className="min-w-0">
           <h3 className="text-sm font-bold text-white">{title}</h3>
           <p className="mt-1 text-xs leading-5 text-slate-400">{text}</p>
         </div>
