@@ -3,7 +3,7 @@ dotenv.config();
 
 import http from "http";
 import { Server } from "socket.io";
-
+import { setSocketIo } from "./src/utils/socketEvents.js";
 import { startNotificationCron } from "./src/cron/notificationCorn.js";
 import app from "./src/app.js";
 import { startInactiveAdminCron } from "./src/cron/inactiveAdminChecker.js";
@@ -22,6 +22,8 @@ export const io = new Server(server, {
     credentials: true,
   },
 });
+
+setSocketIo(io);
 
 io.on("connection", (socket) => {
   // console.log("Socket connected:", socket.id);

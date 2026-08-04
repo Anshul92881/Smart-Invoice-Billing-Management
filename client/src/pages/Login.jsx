@@ -277,7 +277,9 @@ function Login() {
                 </div>
 
                 <div>
-                  <h1 className="text-2xl font-bold">Smart Invoice</h1>
+                  <h1 className="text-2xl font-bold">
+                    Smart Billing & Invoice
+                  </h1>
                   <p className="text-sm text-slate-400">
                     SaaS Billing Management
                   </p>
@@ -290,8 +292,7 @@ function Login() {
               </div>
 
               <h2 className="max-w-xl text-2xl font-bold leading-tight">
-                Run invoices, subscriptions and payments from one powerful
-                dashboard.
+                Run invoices and payments from one powerful dashboard.
               </h2>
 
               <p className="mt-4 max-w-md text-base leading-relaxed text-slate-400">
@@ -300,29 +301,29 @@ function Login() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
+            <div className="mt-3 grid grid-cols-1 gap-4">
               <FeatureItem
                 icon={<ShieldCheck size={21} />}
-                title="Secure RBAC Access"
-                text="SuperAdmin, Company Admin, Accountant, Sales User and Customer Portal."
+                title="Role-Based Access Control"
+                text="Granular permissions for Accountants & Sales Users"
               />
 
               <FeatureItem
                 icon={<Building2 size={21} />}
-                title="Company & Branch Isolation"
-                text="Each company works in its own secure tenant workspace."
+                title="Multi-Tenant Architecture"
+                text="Every company operates in an isolated, secure workspace with full data separation."
               />
 
               <FeatureItem
                 icon={<BarChart3 size={21} />}
-                title="Billing & Revenue Tracking"
-                text="Subscription invoices, payments and platform revenue summary."
+                title="Subscription & Revenue Insights"
+                text="Track invoices, payments, and platform-wide revenue in real time."
               />
             </div>
           </div>
         </div>
 
-        <div className="flex min-h-full items-center overflow-y-auto p-6 sm:p-10 lg:min-h-0 lg:p-12">
+        <div className="flex min-h-full items-center overflow-y-hidden p-6 sm:p-10 lg:min-h-0 lg:p-12">
           <div className="mx-auto w-full max-w-md">
             <div className="mb-8">
               <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">

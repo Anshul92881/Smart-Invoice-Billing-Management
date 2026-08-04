@@ -692,7 +692,7 @@ function BranchForm({
             value={formData.branch_name}
             onChange={handleChange}
             className={`input ${errors.branch_name ? "input-error" : ""}`}
-            placeholder="Main Office"
+            placeholder="Branch Office"
           />
         </Field>
 
@@ -708,7 +708,7 @@ function BranchForm({
             value={formData.branch_code}
             onChange={handleChange}
             className={`input ${errors.branch_code ? "input-error" : ""}`}
-            placeholder="001"
+            placeholder="####"
           />
         </Field>
 
@@ -730,7 +730,7 @@ function BranchForm({
             value={formData.phone}
             onChange={handleChange}
             className={`input ${errors.phone ? "input-error" : ""}`}
-            placeholder="9876543210"
+            placeholder="0000000000"
           />
         </Field>
 
@@ -778,7 +778,7 @@ function BranchForm({
             value={formData.zip_code}
             onChange={handleChange}
             className={`input ${errors.zip_code ? "input-error" : ""}`}
-            placeholder="110001"
+            placeholder="******"
           />
         </Field>
 

@@ -59,6 +59,7 @@ function DashboardLayout() {
   const role = user?.role;
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [openMenuGroups, setOpenMenuGroups] = useState({});
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem("theme") === "dark";
@@ -276,153 +277,182 @@ function DashboardLayout() {
       : item.branch_name;
   };
 
-  const allMenuItems = [
+  const menuGroups = [
     {
-      name: "Dashboard",
-      path: "/dashboard",
-      icon: <LayoutDashboard size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-    },
-
-    // Daily Work
-    {
-      name: "Customers",
-      path: "/dashboard/customers",
-      icon: <Users size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
+      key: "dashboard",
+      label: null,
+      items: [
+        {
+          name: "Dashboard",
+          path: "/dashboard",
+          icon: <LayoutDashboard size={19} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+        },
+      ],
     },
     {
-      name: "Products",
-      path: "/dashboard/products",
-      icon: <Package size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
+      key: "business",
+      label: "Business",
+      icon: <Building2 size={19} />,
+      items: [
+        {
+          name: "Customers",
+          path: "/dashboard/customers",
+          icon: <Users size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+        },
+        {
+          name: "Products",
+          path: "/dashboard/products",
+          icon: <Package size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+        },
+        {
+          name: "Vendors",
+          path: "/dashboard/vendors",
+          icon: <Truck size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+          permissionKey: "vendors",
+        },
+        {
+          name: "Branches",
+          path: "/dashboard/branches",
+          icon: <Building2 size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+          permissionKey: "branches",
+        },
+        {
+          name: "Company",
+          path: "/dashboard/company",
+          icon: <Building2 size={18} />,
+          roles: ["company_admin"],
+        },
+      ],
     },
     {
-      name: "Quotations",
-      path: "/dashboard/quotations",
-      icon: <FileText size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-      permissionKey: "quotations",
-    },
-    {
-      name: "Invoices",
-      path: "/dashboard/invoices",
-      icon: <FileText size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-    },
-    {
-      name: "Payments",
-      path: "/dashboard/payments",
+      key: "sales",
+      label: "Sales",
       icon: <Receipt size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-      permissionKey: "payments",
-    },
-
-    // Accounting
-    {
-      name: "Expenses",
-      path: "/dashboard/expenses",
-      icon: <Wallet size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-      permissionKey: "expenses",
-    },
-    {
-      name: "Vendors",
-      path: "/dashboard/vendors",
-      icon: <Truck size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-      permissionKey: "vendors",
-    },
-    {
-      name: "Taxes",
-      path: "/dashboard/taxes",
-      icon: <Percent size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-      permissionKey: "taxes",
+      items: [
+        {
+          name: "Quotations",
+          path: "/dashboard/quotations",
+          icon: <FileText size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+          permissionKey: "quotations",
+        },
+        {
+          name: "Invoices",
+          path: "/dashboard/invoices",
+          icon: <FileText size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+        },
+        {
+          name: "Payments",
+          path: "/dashboard/payments",
+          icon: <Receipt size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+          permissionKey: "payments",
+        },
+      ],
     },
     {
-      name: "Reports",
-      path: "/dashboard/reports",
+      key: "finance",
+      label: "Finance",
       icon: <BarChart3 size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-      permissionKey: "reports",
+      items: [
+        {
+          name: "Expenses",
+          path: "/dashboard/expenses",
+          icon: <Wallet size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+          permissionKey: "expenses",
+        },
+        {
+          name: "Taxes",
+          path: "/dashboard/taxes",
+          icon: <Percent size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+          permissionKey: "taxes",
+        },
+        {
+          name: "Reports",
+          path: "/dashboard/reports",
+          icon: <BarChart3 size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+          permissionKey: "reports",
+        },
+        {
+          name: "Billing / Subscription",
+          path: "/dashboard/billing",
+          icon: <ShieldCheck size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+          permissionKey: "billing",
+        },
+      ],
     },
-
-    // Branch & Team
     {
-      name: "Branches",
-      path: "/dashboard/branches",
-      icon: <Building2 size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-      permissionKey: "branches",
-    },
-    {
-      name: "Accountants",
-      path: "/dashboard/accountants",
-      icon: <UserCog size={19} />,
-      roles: ["company_admin"],
-    },
-    {
-      name: "Sales Users",
-      path: "/dashboard/sales-users",
+      key: "users",
+      label: "Users",
       icon: <Users size={19} />,
-      roles: ["company_admin"],
+      items: [
+        {
+          name: "Accountants",
+          path: "/dashboard/accountants",
+          icon: <UserCog size={18} />,
+          roles: ["company_admin"],
+        },
+        {
+          name: "Sales Users",
+          path: "/dashboard/sales-users",
+          icon: <Users size={18} />,
+          roles: ["company_admin"],
+        },
+        {
+          name: "Role Permissions",
+          path: "/dashboard/role-permissions",
+          icon: <ShieldCheck size={18} />,
+          roles: ["company_admin"],
+        },
+      ],
     },
     {
-      name: "Role Permissions",
-      path: "/dashboard/role-permissions",
-      icon: <ShieldCheck size={19} />,
-      roles: ["company_admin"],
-    },
-
-    // Company
-    {
-      name: "Company",
-      path: "/dashboard/company",
-      icon: <Building2 size={19} />,
-      roles: ["company_admin"],
-    },
-    {
-      name: "Billing Template",
-      path: "/dashboard/billing-template",
-      icon: <WalletCards size={19} />,
-      roles: ["company_admin"],
-    },
-    {
-      name: "Company Settings",
-      path: "/dashboard/company-settings",
+      key: "settings",
+      label: "Settings",
       icon: <Settings size={19} />,
-      roles: ["company_admin"],
-    },
-
-    // Subscription
-    {
-      name: "Billing / Subscription",
-      path: "/dashboard/billing",
-      icon: <ShieldCheck size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-      permissionKey: "billing",
-    },
-
-    // Monitoring
-    {
-      name: "Audit Logs",
-      path: "/dashboard/audit-logs",
-      icon: <Activity size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-      permissionKey: "audit_logs",
-    },
-    {
-      name: "Notifications",
-      path: "/dashboard/notifications",
-      icon: <Bell size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
-    },
-    {
-      name: "Profile",
-      path: "/dashboard/profile",
-      icon: <UserCircle size={19} />,
-      roles: ["company_admin", "accountant", "sales_user"],
+      items: [
+        {
+          name: "Profile",
+          path: "/dashboard/profile",
+          icon: <UserCircle size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+        },
+        {
+          name: "Notifications",
+          path: "/dashboard/notifications",
+          icon: <Bell size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+        },
+        {
+          name: "Billing Template",
+          path: "/dashboard/billing-template",
+          icon: <WalletCards size={18} />,
+          roles: ["company_admin"],
+        },
+        {
+          name: "Company Settings",
+          path: "/dashboard/company-settings",
+          icon: <Settings size={18} />,
+          roles: ["company_admin"],
+        },
+        {
+          name: "Audit Logs",
+          path: "/dashboard/audit-logs",
+          icon: <Activity size={18} />,
+          roles: ["company_admin", "accountant", "sales_user"],
+          permissionKey: "audit_logs",
+        },
+      ],
     },
   ];
 
@@ -432,17 +462,43 @@ function DashboardLayout() {
     "/dashboard/notifications",
   ];
 
-  const menuItems = allMenuItems.filter((item) => {
-    if (!item.roles.includes(role)) return false;
+  const isMenuItemActive = (item) =>
+    location.pathname === item.path ||
+    (item.path !== "/dashboard" &&
+      location.pathname.startsWith(`${item.path}/`));
 
-    if (!hasPermission(item.permissionKey)) return false;
+  const visibleMenuGroups = menuGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (!item.roles.includes(role)) return false;
+        if (!hasPermission(item.permissionKey)) return false;
+        if (trialExpired) return allowedExpiredRoutes.includes(item.path);
+        return true;
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
 
-    if (trialExpired) {
-      return allowedExpiredRoutes.includes(item.path);
-    }
+  useEffect(() => {
+    const activeGroup = visibleMenuGroups.find(
+      (group) =>
+        group.label && group.items.some((item) => isMenuItemActive(item)),
+    );
 
-    return true;
-  });
+    if (!activeGroup) return;
+
+    setOpenMenuGroups((prev) => ({
+      ...prev,
+      [activeGroup.key]: true,
+    }));
+  }, [location.pathname, role, rolePermissions, trialExpired]);
+
+  const toggleMenuGroup = (groupKey) => {
+    setOpenMenuGroups((prev) => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }));
+  };
 
   const fetchUnreadNotifications = async () => {
     try {
@@ -612,32 +668,106 @@ function DashboardLayout() {
         }}
         className="sidebar-scroll flex-1 space-y-1 overflow-y-auto p-4"
       >
-        {menuItems.map((item) => {
-          const isActive =
-            location.pathname === item.path ||
-            (item.path !== "/dashboard" &&
-              location.pathname.startsWith(`${item.path}/`));
+        {visibleMenuGroups.map((group) => {
+          if (!group.label) {
+            return group.items.map((item) => {
+              const isActive = isMenuItemActive(item);
+
+              return (
+                <Link
+                  key={item.name}
+                  to={item.path}
+                  onClick={() => {
+                    if (sidebarNavRef.current) {
+                      sidebarScrollRef.current =
+                        sidebarNavRef.current.scrollTop;
+                    }
+
+                    setSidebarOpen(false);
+                  }}
+                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
+                    isActive
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
+                      : "text-slate-300 hover:bg-slate-800/90 hover:text-white"
+                  }`}
+                >
+                  {item.icon}
+                  <span className="truncate">{item.name}</span>
+                </Link>
+              );
+            });
+          }
+
+          const hasActiveItem = group.items.some((item) =>
+            isMenuItemActive(item),
+          );
+          const isGroupOpen =
+            Boolean(openMenuGroups[group.key]) || hasActiveItem;
 
           return (
-            <Link
-              key={item.name}
-              to={item.path}
-              onClick={() => {
-                if (sidebarNavRef.current) {
-                  sidebarScrollRef.current = sidebarNavRef.current.scrollTop;
-                }
+            <div key={group.key} className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleMenuGroup(group.key)}
+                className={`flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
+                  hasActiveItem
+                    ? "bg-slate-800 text-white"
+                    : "text-slate-300 hover:bg-slate-800/90 hover:text-white"
+                }`}
+                aria-expanded={isGroupOpen}
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="shrink-0">{group.icon}</span>
+                  <span className="truncate">{group.label}</span>
+                </span>
 
-                setSidebarOpen(false);
-              }}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
-                isActive
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
-                  : "text-slate-300 hover:bg-slate-800/90 hover:text-white"
-              }`}
-            >
-              {item.icon}
-              {item.name}
-            </Link>
+                <ChevronDown
+                  size={17}
+                  className={`shrink-0 transition-transform duration-200 ${
+                    isGroupOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              <div
+                className={`grid overflow-hidden transition-all duration-200 ${
+                  isGroupOpen
+                    ? "grid-rows-[1fr] opacity-100"
+                    : "grid-rows-[0fr] opacity-0"
+                }`}
+              >
+                <div className="min-h-0">
+                  <div className="ml-4 space-y-1 border-l border-slate-700/80 py-1 pl-3">
+                    {group.items.map((item) => {
+                      const isActive = isMenuItemActive(item);
+
+                      return (
+                        <Link
+                          key={item.name}
+                          to={item.path}
+                          onClick={() => {
+                            if (sidebarNavRef.current) {
+                              sidebarScrollRef.current =
+                                sidebarNavRef.current.scrollTop;
+                            }
+
+                            setSidebarOpen(false);
+                          }}
+                          className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
+                            isActive
+                              ? "bg-blue-600 text-white shadow-md shadow-blue-950/20"
+                              : "text-slate-400 hover:bg-slate-800/80 hover:text-white"
+                          }`}
+                        >
+                          <span className="shrink-0">{item.icon}</span>
+                          <span className="truncate">{item.name}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
           );
         })}
       </nav>
