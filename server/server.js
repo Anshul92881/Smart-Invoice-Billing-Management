@@ -1,17 +1,24 @@
-import express from "express";
 import http from "http";
 import { Server } from "socket.io";
+
+import app from "./src/app.js";
 import { setSocketIo } from "./src/utils/socketEvents.js";
 
-const app = express();
+const PORT = Number(process.env.PORT) || 5000;
+
 const server = http.createServer(app);
+
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  : true;
 
 const io = new Server(server, {
   path: "/socket.io",
   cors: {
-    origin: process.env.CORS_ORIGIN
-      ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
-      : true,
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -22,7 +29,7 @@ setSocketIo(io);
 io.on("connection", (socket) => {
   console.log("Socket connected:", socket.id);
 
-  socket.on("join_rooms", ({ id, company_id, role }) => {
+  socket.on("join_rooms", ({ id, company_id, role } = {}) => {
     if (id) {
       socket.join(`user_${id}`);
     }
@@ -41,6 +48,6 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 5000, "0.0.0.0", () => {
-  console.log(`Server running on port ${process.env.PORT || 5000}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
 });
