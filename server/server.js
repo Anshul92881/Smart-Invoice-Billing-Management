@@ -1,7 +1,7 @@
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
-import { setSocketIo } from "./src/utils/socket.js";
+import { setSocketIo } from "./src/utils/socketEvents.js";
 
 const app = express();
 const server = http.createServer(app);
