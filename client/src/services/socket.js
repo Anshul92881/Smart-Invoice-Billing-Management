@@ -1,13 +1,24 @@
 import { io } from "socket.io-client";
 
-// ◄ CHANGED: Dynamically reads the URL and strips out /api so it maps to Nginx port 8090
-const SOCKET_URL = import.meta.env.VITE_API_BASE_URL 
-  ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') 
-  : "http://localhost:5000";
+const getSocketUrl = () => {
+  const apiBaseUrl =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 
-const socket = io(SOCKET_URL, {
+  try {
+    const url = new URL(apiBaseUrl, window.location.origin);
+    return url.origin;
+  } catch {
+    return window.location.origin;
+  }
+};
+
+const socket = io(getSocketUrl(), {
+  path: "/socket.io",
   transports: ["websocket"],
   autoConnect: false,
+  reconnection: true,
+  reconnectionAttempts: 10,
+  reconnectionDelay: 1000,
 });
 
 let joinedUserKey = null;
@@ -51,5 +62,9 @@ export const disconnectSocket = () => {
     socket.disconnect();
   }
 };
+
+socket.on("connect_error", (error) => {
+  console.error("Socket.IO connection error:", error.message);
+});
 
 export default socket;

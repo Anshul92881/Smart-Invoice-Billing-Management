@@ -1,24 +1,25 @@
-import dotenv from "dotenv";
-dotenv.config();
-
 import http from "http";
 import { Server } from "socket.io";
-import { setSocketIo } from "./src/utils/socketEvents.js";
-import { startNotificationCron } from "./src/cron/notificationCorn.js";
-import app from "./src/app.js";
-import { startInactiveAdminCron } from "./src/cron/inactiveAdminChecker.js";
 
-const PORT = process.env.PORT || 5000;
+import app from "./src/app.js";
+import { setSocketIo } from "./src/utils/socketEvents.js";
+
+const PORT = Number(process.env.PORT) || 5000;
 
 const server = http.createServer(app);
 
 const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",")
-  : ["http://localhost:5173", "http://localhost:3000"];
+  ? process.env.CORS_ORIGIN
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  : true;
 
-export const io = new Server(server, {
+const io = new Server(server, {
+  path: "/socket.io",
   cors: {
     origin: allowedOrigins,
+    methods: ["GET", "POST"],
     credentials: true,
   },
 });
@@ -26,34 +27,27 @@ export const io = new Server(server, {
 setSocketIo(io);
 
 io.on("connection", (socket) => {
-  // console.log("Socket connected:", socket.id);
+  console.log("Socket connected:", socket.id);
 
-  socket.on("join_rooms", (user) => {
-    // console.log("JOIN ROOMS EVENT:", user);
-
-    if (user?.company_id) {
-      socket.join(`company_${user.company_id}`);
-      // console.log(`Joined company_${user.company_id}`);
+  socket.on("join_rooms", ({ id, company_id, role } = {}) => {
+    if (id) {
+      socket.join(`user_${id}`);
     }
 
-    if (user?.id) {
-      socket.join(`user_${user.id}`);
-      // console.log(`Joined user_${user.id}`);
+    if (company_id) {
+      socket.join(`company_${company_id}`);
     }
 
-    if (user?.company_id && user?.role) {
-      socket.join(`role_${user.company_id}_${user.role}`);
-      // console.log(`Joined role_${user.company_id}_${user.role}`);
+    if (role) {
+      socket.join(`role_${role}`);
     }
   });
 
-  socket.on("disconnect", () => {
-    console.log("Socket disconnected:", socket.id);
+  socket.on("disconnect", (reason) => {
+    console.log("Socket disconnected:", socket.id, reason);
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Server Running On Port ${PORT}`);
-  startNotificationCron(io);
-  startInactiveAdminCron();
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
 });
