@@ -290,6 +290,33 @@ function DashboardLayout() {
         },
       ],
     },
+
+    {
+      key: "users",
+      label: "Users",
+      icon: <Users size={19} />,
+      items: [
+        {
+          name: "Accountants",
+          path: "/dashboard/accountants",
+          icon: <UserCog size={18} />,
+          roles: ["company_admin"],
+        },
+        {
+          name: "Sales Users",
+          path: "/dashboard/sales-users",
+          icon: <Users size={18} />,
+          roles: ["company_admin"],
+        },
+        {
+          name: "Role Permissions",
+          path: "/dashboard/role-permissions",
+          icon: <ShieldCheck size={18} />,
+          roles: ["company_admin"],
+        },
+      ],
+    },
+
     {
       key: "business",
       label: "Business",
@@ -391,31 +418,7 @@ function DashboardLayout() {
         },
       ],
     },
-    {
-      key: "users",
-      label: "Users",
-      icon: <Users size={19} />,
-      items: [
-        {
-          name: "Accountants",
-          path: "/dashboard/accountants",
-          icon: <UserCog size={18} />,
-          roles: ["company_admin"],
-        },
-        {
-          name: "Sales Users",
-          path: "/dashboard/sales-users",
-          icon: <Users size={18} />,
-          roles: ["company_admin"],
-        },
-        {
-          name: "Role Permissions",
-          path: "/dashboard/role-permissions",
-          icon: <ShieldCheck size={18} />,
-          roles: ["company_admin"],
-        },
-      ],
-    },
+
     {
       key: "settings",
       label: "Settings",
