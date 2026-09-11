@@ -6,6 +6,7 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
+ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
 # Install production dependencies only
 RUN npm ci --only=production
 
@@ -38,6 +39,8 @@ RUN addgroup -g 1001 -S nodejs && \
 
 # Copy production dependencies from dependencies stage
 COPY --from=dependencies --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=dependencies --chown=nodejs:nodejs /app/.puppeteer-cache ./.puppeteer-cache
+ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
 
 # Copy application code
 COPY --chown=nodejs:nodejs . .
