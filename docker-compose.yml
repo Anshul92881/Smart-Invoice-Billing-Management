@@ -56,6 +56,7 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
+      FRONTEND_URL: http://frontend:80
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     # ◄ REMOVED: Public port block removed to prevent port 5000 conflicts on host
     networks:

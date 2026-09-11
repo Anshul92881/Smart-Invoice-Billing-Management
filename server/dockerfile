@@ -6,6 +6,7 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
 # Install production dependencies only
 RUN npm ci --only=production
@@ -18,6 +19,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install all dependencies (including dev)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 RUN npm ci
 
 COPY . .
@@ -31,7 +33,15 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Install dumb-init for proper signal handling and curl for health checks
-RUN apk add --no-cache dumb-init curl
+RUN apk add --no-cache \
+    dumb-init \
+    curl \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
@@ -39,8 +49,7 @@ RUN addgroup -g 1001 -S nodejs && \
 
 # Copy production dependencies from dependencies stage
 COPY --from=dependencies --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=dependencies --chown=nodejs:nodejs /app/.puppeteer-cache ./.puppeteer-cache
-ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copy application code
 COPY --chown=nodejs:nodejs . .
