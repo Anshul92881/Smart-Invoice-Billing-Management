@@ -140,10 +140,14 @@ export const generateDocumentPDFBuffer = async ({
 
   try {
     browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-
+      headless: "shell", // Modern, faster headless mode for modern Puppeteer
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined, // Tells it to use /usr/bin/chromium-browser from Docker
+      args: [
+        "--no-sandbox", 
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage" // ◄ CRITICAL: Prevents Docker shared memory crash (ENOBUFS/SIGBUS error)
+      ],
+    }); 
     const page = await browser.newPage();
 
     await page.setViewport({
