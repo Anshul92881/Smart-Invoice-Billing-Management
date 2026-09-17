@@ -22,7 +22,7 @@ router.use(authMiddleware);
 router.post("/", authorizePermission("invoices"), createInvoice);
 
 router.get(
-  "/download/:id",
+  "/:id/download",
   authorizeRoles("company_admin", "accountant", "sales_user"),
   downloadInvoice,
 );
