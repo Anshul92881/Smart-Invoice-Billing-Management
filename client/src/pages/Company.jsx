@@ -24,6 +24,7 @@ import {
   XCircle,
   Filter,
   ChevronDown,
+  KeyRound,
 } from "lucide-react";
 
 function Company() {
@@ -53,6 +54,10 @@ function Company() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [formData, setFormData] = useState(initialForm);
+
+  const [crmApiKey, setCrmApiKey] = useState("");
+  const [crmApiKeyConfigured, setCrmApiKeyConfigured] = useState(false);
+
   const [showFormModal, setShowFormModal] = useState(false);
   const [viewCompany, setViewCompany] = useState(null);
   const [logoFile, setLogoFile] = useState(null);
@@ -145,6 +150,10 @@ function Company() {
   const openEditModal = (company) => {
     setEditingId(company.id);
     fillForm(company);
+
+    setCrmApiKey("");
+    setCrmApiKeyConfigured(Boolean(company?.crm_api_key_configured));
+
     setShowFormModal(true);
   };
 
@@ -152,6 +161,9 @@ function Company() {
     setShowFormModal(false);
     setEditingId(null);
     setFormData(initialForm);
+
+    setCrmApiKey("");
+    setCrmApiKeyConfigured(false);
   };
 
   const handleChange = (e) => {
@@ -210,7 +222,16 @@ function Company() {
         toast.success("Company profile updated");
         setIsEditMode(false);
       } else if (editingId) {
-        await api.put(`/companies/${editingId}`, formData);
+        const payload = {
+          ...formData,
+        };
+
+        if (crmApiKey.trim()) {
+          payload.crm_api_key = crmApiKey.trim();
+        }
+
+        await api.put(`/companies/${editingId}`, payload);
+
         toast.success("Company updated");
         closeFormModal();
       } else {
@@ -468,6 +489,9 @@ function Company() {
             isKycApproved={false}
             editingId={editingId}
             onCancel={closeFormModal}
+            crmApiKey={crmApiKey}
+            setCrmApiKey={setCrmApiKey}
+            crmApiKeyConfigured={crmApiKeyConfigured}
           />
         </CompanyFormModal>
       )}
@@ -542,7 +566,9 @@ function StatsCard({ title, value, icon, color }) {
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{title}</p>
+          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+            {title}
+          </p>
           <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
             {value}
           </h2>
@@ -684,7 +710,9 @@ function CompanyFormModal({ title, children, onClose }) {
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                {title}
+              </h2>
               <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
                 Fill company information for invoicing and GST records.
               </p>
@@ -700,7 +728,9 @@ function CompanyFormModal({ title, children, onClose }) {
           </button>
         </div>
 
-        <div className="overflow-auto bg-white p-4 dark:bg-slate-900">{children}</div>
+        <div className="overflow-auto bg-white p-4 dark:bg-slate-900">
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -714,6 +744,9 @@ function CompanyForm({
   isKycApproved,
   editingId,
   onCancel,
+  crmApiKey = "",
+  setCrmApiKey,
+  crmApiKeyConfigured = false,
 }) {
   const updateField = (name, value) => {
     handleChange({
@@ -725,7 +758,10 @@ function CompanyForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-2xl bg-white dark:bg-slate-900">
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-2xl bg-white dark:bg-slate-900"
+    >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Field icon={<Building2 size={16} />} label="Company Name">
           <input
@@ -840,6 +876,23 @@ function CompanyForm({
                 { value: "active", label: "Active" },
                 { value: "inactive", label: "Inactive" },
               ]}
+            />
+          </Field>
+        )}
+
+        {!isCompanyAdmin && editingId && (
+          <Field icon={<KeyRound size={16} />} label="CRM API Key">
+            <input
+              type="password"
+              value={crmApiKey}
+              onChange={(e) => setCrmApiKey?.(e.target.value)}
+              placeholder={
+                crmApiKeyConfigured
+                  ? "Leave blank to keep existing key"
+                  : "Enter CRM API key"
+              }
+              autoComplete="new-password"
+              className="input"
             />
           </Field>
         )}
@@ -1149,7 +1202,9 @@ function CompanyAdminView({
 function ViewField({ label, value, full }) {
   return (
     <div className={full ? "md:col-span-2 xl:col-span-4" : ""}>
-      <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">{label}</p>
+      <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+        {label}
+      </p>
       <div className="min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
         {value || "-"}
       </div>

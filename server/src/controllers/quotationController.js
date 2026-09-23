@@ -4,9 +4,14 @@ import { createAuditLog } from "../utils/auditLogger.js";
 import { notifyBusinessUsers } from "../utils/notificationLoggers.js";
 import { emitDashboardUpdate } from "../utils/socketEvents.js";
 import {
+  syncCustomerToCrm,
+  syncDocumentToCrm,
+} from "../utils/crmIntegrationService.js";
+import {
   buildDocumentSnapshot,
   parseJsonSafe,
-  generateDocumentPDFBuffer,
+  saveDocumentPDFToServer,
+  getSavedDocumentPDFBuffer,
 } from "../utils/documentEngine.js";
 
 const ALLOWED_QUOTATION_STATUS = [
@@ -28,7 +33,9 @@ const getUserAgent = (req) => req.headers["user-agent"] || null;
 
 const normalizeText = (value) => {
   if (value === undefined || value === null) return "";
-  return String(value).replace(/<[^>]*>?/gm, "").trim();
+  return String(value)
+    .replace(/<[^>]*>?/gm, "")
+    .trim();
 };
 
 const normalizeNullable = (value) => {
@@ -63,7 +70,9 @@ const isValidDateString = (value) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
 
   const date = new Date(`${text}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text
+  );
 };
 
 const validateBranch = async (connection, branchId, companyId) => {
@@ -327,7 +336,11 @@ const validateCalculatedItem = (item, index) => {
     return `Item price cannot be negative at row ${row}`;
   }
 
-  if (!Number.isFinite(item.tax_rate) || item.tax_rate < 0 || item.tax_rate > 100) {
+  if (
+    !Number.isFinite(item.tax_rate) ||
+    item.tax_rate < 0 ||
+    item.tax_rate > 100
+  ) {
     return `Tax rate must be between 0 and 100 at row ${row}`;
   }
 
@@ -704,12 +717,44 @@ export const createQuotation = async (req, res) => {
 
     await connection.commit();
 
+    let savedPdf = null;
+
+    try {
+      savedPdf = await saveDocumentPDFToServer({
+        type: "quotation",
+
+        document: {
+          id: quotationId,
+          quotation_number: quotationNumber,
+        },
+
+        companyId,
+        authToken: req.headers.authorization,
+      });
+
+      await db.query(
+        `
+    UPDATE tbl_quotations
+    SET pdf_path = ?
+    WHERE id = ?
+    AND company_id = ?
+    `,
+        [savedPdf.publicPath, quotationId, companyId],
+      );
+
+      console.log("Quotation PDF saved:", savedPdf.publicPath);
+    } catch (pdfError) {
+      console.error("QUOTATION PDF SAVE ERROR:", pdfError.message);
+    }
+
     emitDashboardUpdate({ company_id: companyId });
 
     return res.status(201).json({
       message: "Quotation created successfully",
       quotation_id: quotationId,
       quotation_number: quotationNumber,
+      pdf_saved: Boolean(savedPdf),
+      pdf_path: savedPdf?.publicPath || null,
     });
   } catch (error) {
     await connection.rollback();
@@ -850,7 +895,9 @@ export const getQuotationById = async (req, res) => {
     }
 
     if (!isPositiveInteger(id)) {
-      return res.status(400).json({ message: "Valid quotation id is required" });
+      return res
+        .status(400)
+        .json({ message: "Valid quotation id is required" });
     }
 
     const data = await getQuotationDocumentData(id, companyId);
@@ -884,7 +931,9 @@ export const updateQuotationStatus = async (req, res) => {
     }
 
     if (!isPositiveInteger(id)) {
-      return res.status(400).json({ message: "Valid quotation id is required" });
+      return res
+        .status(400)
+        .json({ message: "Valid quotation id is required" });
     }
 
     if (!ALLOWED_QUOTATION_STATUS.includes(status)) {
@@ -1007,7 +1056,9 @@ export const cancelQuotation = async (req, res) => {
     }
 
     if (!isPositiveInteger(id)) {
-      return res.status(400).json({ message: "Valid quotation id is required" });
+      return res
+        .status(400)
+        .json({ message: "Valid quotation id is required" });
     }
 
     const [quotationRows] = await db.query(
@@ -1098,7 +1149,9 @@ export const convertQuotationToInvoice = async (req, res) => {
 
     if (!isPositiveInteger(id)) {
       await connection.rollback();
-      return res.status(400).json({ message: "Valid quotation id is required" });
+      return res
+        .status(400)
+        .json({ message: "Valid quotation id is required" });
     }
 
     const [quotationRows] = await connection.query(
@@ -1154,7 +1207,11 @@ export const convertQuotationToInvoice = async (req, res) => {
     }
 
     if (quotationBranchId) {
-      const branch = await validateBranch(connection, quotationBranchId, companyId);
+      const branch = await validateBranch(
+        connection,
+        quotationBranchId,
+        companyId,
+      );
 
       if (!branch) {
         await connection.rollback();
@@ -1414,6 +1471,36 @@ export const convertQuotationToInvoice = async (req, res) => {
 
     await connection.commit();
 
+    let savedPdf = null;
+
+    try {
+      savedPdf = await saveDocumentPDFToServer({
+        type: "invoice",
+
+        document: {
+          id: invoiceId,
+          invoice_number: invoiceNumber,
+        },
+
+        companyId,
+        authToken: req.headers.authorization,
+      });
+
+      await db.query(
+        `
+    UPDATE tbl_invoices
+    SET pdf_path = ?
+    WHERE id = ?
+    AND company_id = ?
+    `,
+        [savedPdf.publicPath, invoiceId, companyId],
+      );
+
+      console.log("Converted invoice PDF saved:", savedPdf.publicPath);
+    } catch (pdfError) {
+      console.error("CONVERTED INVOICE PDF SAVE ERROR:", pdfError.message);
+    }
+
     emitDashboardUpdate({ company_id: companyId });
 
     return res.status(201).json({
@@ -1446,7 +1533,9 @@ export const downloadQuotation = async (req, res) => {
     }
 
     if (!isPositiveInteger(id)) {
-      return res.status(400).json({ message: "Valid quotation id is required" });
+      return res
+        .status(400)
+        .json({ message: "Valid quotation id is required" });
     }
 
     const data = await getQuotationDocumentData(id, companyId);
@@ -1457,9 +1546,10 @@ export const downloadQuotation = async (req, res) => {
 
     const { quotation } = data;
 
-    const pdfBuffer = await generateDocumentPDFBuffer({
+    const { pdfBuffer } = await getSavedDocumentPDFBuffer({
       type: "quotation",
       document: quotation,
+      companyId,
       authToken,
     });
 
@@ -1505,7 +1595,9 @@ export const sendQuotationEmail = async (req, res) => {
     }
 
     if (!isPositiveInteger(id)) {
-      return res.status(400).json({ message: "Valid quotation id is required" });
+      return res
+        .status(400)
+        .json({ message: "Valid quotation id is required" });
     }
 
     const data = await getQuotationDocumentData(id, companyId);
@@ -1558,9 +1650,10 @@ export const sendQuotationEmail = async (req, res) => {
 
     const company = companyRows[0];
 
-    const pdfBuffer = await generateDocumentPDFBuffer({
+    const { pdfBuffer } = await getSavedDocumentPDFBuffer({
       type: "quotation",
       document: quotation,
+      companyId,
       authToken,
     });
 
@@ -1707,5 +1800,528 @@ ${company.name || quotation.business_name || "Company"}`,
     return res.status(500).json({
       message: error.response || error.message || "Quotation email send failed",
     });
+  }
+};
+
+export const pushQuotationToCrm = async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    const { id } = req.params;
+
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: "Company ID missing",
+      });
+    }
+
+    if (!isPositiveInteger(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid quotation id is required",
+      });
+    }
+
+    // 1. Quotation + customer data
+    const data = await getQuotationDocumentData(id, companyId);
+
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: "Quotation not found",
+      });
+    }
+
+    const { quotation } = data;
+
+    if (!quotation.customer_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer not found for this quotation",
+      });
+    }
+
+    // 2. Company CRM API key
+    const [companyRows] = await db.query(
+      `
+      SELECT crm_api_key
+      FROM tbl_companies
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [companyId],
+    );
+
+    if (companyRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Company not found",
+      });
+    }
+
+    const crmApiKey = String(companyRows[0].crm_api_key || "").trim();
+
+    if (!crmApiKey) {
+      return res.status(400).json({
+        success: false,
+        message: "Please contact support team to enable CRM integration",
+      });
+    }
+
+    // 3. Customer data
+    const customer = {
+      id: quotation.customer_id,
+      customer_name: quotation.customer_name || "",
+      company_name: quotation.company_name || "",
+      email: quotation.email || "",
+    };
+
+    // 4. CUSTOMER SYNC FIRST
+    const customerCrmResponse = await syncCustomerToCrm({
+      apiKey: crmApiKey,
+      customer,
+    });
+
+    console.log("CRM QUOTATION CUSTOMER SYNC RESPONSE:", customerCrmResponse);
+
+    // 5. Quotation PDF path
+    const pdfPath = String(quotation.pdf_path || "").trim();
+
+    if (!pdfPath) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Quotation PDF is not available. Please generate the quotation PDF before pushing to CRM.",
+      });
+    }
+
+    // 6. Public backend URL
+    const backendPublicUrl = String(process.env.VITE_API_BASE_URL || "")
+      .trim()
+      .replace(/\/+$/, "");
+
+    if (!backendPublicUrl) {
+      return res.status(500).json({
+        success: false,
+        message: "VITE_API_BASE_URL is not configured",
+      });
+    }
+
+    const normalizedPdfPath = pdfPath.startsWith("/") ? pdfPath : `/${pdfPath}`;
+
+    const pdfUrl = `${backendPublicUrl}${normalizedPdfPath}`;
+
+    let parsedPdfUrl;
+
+    try {
+      parsedPdfUrl = new URL(pdfUrl);
+    } catch {
+      return res.status(500).json({
+        success: false,
+        message: "Generated quotation PDF URL is invalid",
+      });
+    }
+
+    if (!["http:", "https:"].includes(parsedPdfUrl.protocol)) {
+      return res.status(500).json({
+        success: false,
+        message: "Quotation PDF URL must use HTTP or HTTPS",
+      });
+    }
+
+    console.log("CRM QUOTATION PDF URL:", pdfUrl);
+
+    // 7. DOCUMENT SYNC
+    const documentCrmResponse = await syncDocumentToCrm({
+      apiKey: crmApiKey,
+
+      externalType: "QUOTATION",
+
+      // Same quotation = same externalId
+      externalId: String(quotation.id),
+
+      // Same customer id used in Customer Sync
+      externalCustomerId: String(quotation.customer_id),
+
+      pdfUrl,
+    });
+
+    console.log("CRM QUOTATION DOCUMENT SYNC RESPONSE:", documentCrmResponse);
+
+    // 8. Final frontend response
+    return res.json({
+      success: true,
+      message: "Quotation pushed to CRM successfully",
+    });
+  } catch (error) {
+    console.error("PUSH QUOTATION TO CRM ERROR:", {
+      message: error.message,
+      code: error.code,
+      statusCode: error.statusCode,
+      crmResponse: error.crmResponse,
+    });
+
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || "Quotation CRM sync failed",
+      code: error.code || "CRM_SYNC_FAILED",
+    });
+  }
+};
+
+export const updateQuotation = async (req, res) => {
+  const connection = await db.getConnection();
+  let transactionStarted = false;
+
+  try {
+    const companyId = req.user.company_id;
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    if (!companyId) {
+      return res.status(400).json({
+        message: "Company ID missing",
+      });
+    }
+
+    if (!isPositiveInteger(id)) {
+      return res.status(400).json({
+        message: "Valid quotation id is required",
+      });
+    }
+
+    await connection.beginTransaction();
+    transactionStarted = true;
+
+    // Existing quotation
+    const existingQuotation = await getQuotationCore(
+      connection,
+      id,
+      companyId,
+    );
+
+    if (!existingQuotation) {
+      await connection.rollback();
+      transactionStarted = false;
+
+      return res.status(404).json({
+        message: "Quotation not found",
+      });
+    }
+
+    // Only draft + sent editable
+    if (!["draft", "sent"].includes(existingQuotation.status)) {
+      await connection.rollback();
+      transactionStarted = false;
+
+      return res.status(400).json({
+        message: `Quotation cannot be edited because its status is ${formatStatus(
+          existingQuotation.status,
+        )}`,
+      });
+    }
+
+    const {
+      customer_id,
+      branch_id,
+      quotation_date,
+      expiry_date,
+      discount_amount,
+      notes,
+      terms_conditions,
+      items,
+    } = req.body;
+
+    const baseValidationError = validateQuotationBasePayload({
+      customer_id,
+      quotation_date,
+      expiry_date,
+      discount_amount,
+      notes,
+      terms_conditions,
+      items,
+    });
+
+    if (baseValidationError) {
+      await connection.rollback();
+      transactionStarted = false;
+
+      return res.status(400).json({
+        message: baseValidationError,
+      });
+    }
+
+    // Branch
+    let finalBranchId = branch_id ? Number(branch_id) : null;
+
+    if (!finalBranchId) {
+      finalBranchId = await getMainBranchId(
+        connection,
+        companyId,
+      );
+    }
+
+    if (!finalBranchId) {
+      await connection.rollback();
+      transactionStarted = false;
+
+      return res.status(400).json({
+        message: "Main HQ branch not found for this company",
+      });
+    }
+
+    const branch = await validateBranch(
+      connection,
+      finalBranchId,
+      companyId,
+    );
+
+    if (!branch) {
+      await connection.rollback();
+      transactionStarted = false;
+
+      return res.status(400).json({
+        message: "Invalid branch selected",
+      });
+    }
+
+    // Customer
+    const [customerRows] = await connection.query(
+      `
+      SELECT id
+      FROM tbl_customers
+      WHERE id = ?
+      AND company_id = ?
+      AND status = 'active'
+      LIMIT 1
+      `,
+      [customer_id, companyId],
+    );
+
+    if (customerRows.length === 0) {
+      await connection.rollback();
+      transactionStarted = false;
+
+      return res.status(400).json({
+        message:
+          "Customer must be active and belong to the same company",
+      });
+    }
+
+    // Recalculate items from backend
+    const calculated = await buildCalculatedItems(
+      connection,
+      items,
+      companyId,
+    );
+
+    if (calculated.error) {
+      await connection.rollback();
+      transactionStarted = false;
+
+      return res.status(400).json({
+        message: calculated.error,
+      });
+    }
+
+    const {
+      calculatedItems,
+      subtotal,
+      taxAmount,
+    } = calculated;
+
+    const discount = toNumber(discount_amount);
+
+    if (discount > subtotal + taxAmount) {
+      await connection.rollback();
+      transactionStarted = false;
+
+      return res.status(400).json({
+        message:
+          "Discount cannot be greater than quotation amount",
+      });
+    }
+
+    const totalAmount =
+      subtotal + taxAmount - discount;
+
+    // Updated snapshot
+    const snapshot = await buildDocumentSnapshot(
+      connection,
+      companyId,
+      finalBranchId,
+    );
+
+    const billingTemplateSnapshot =
+      JSON.stringify(snapshot);
+
+    // IMPORTANT:
+    // quotation_number change nahi hoga
+    // status change nahi hoga
+    await connection.query(
+      `
+      UPDATE tbl_quotations
+      SET
+        customer_id = ?,
+        branch_id = ?,
+        quotation_date = ?,
+        expiry_date = ?,
+        subtotal = ?,
+        tax_amount = ?,
+        discount_amount = ?,
+        total_amount = ?,
+        billing_template_snapshot = ?,
+        notes = ?,
+        terms_conditions = ?
+      WHERE id = ?
+      AND company_id = ?
+      `,
+      [
+        customer_id,
+        finalBranchId,
+        quotation_date ||
+          existingQuotation.quotation_date,
+        expiry_date || null,
+        subtotal,
+        taxAmount,
+        discount,
+        totalAmount,
+        billingTemplateSnapshot,
+        normalizeNullable(notes),
+        normalizeNullable(terms_conditions),
+        id,
+        companyId,
+      ],
+    );
+
+    // Old items remove
+    await connection.query(
+      `
+      DELETE FROM tbl_quotation_items
+      WHERE quotation_id = ?
+      `,
+      [id],
+    );
+
+    // Updated items insert
+    for (const item of calculatedItems) {
+      await connection.query(
+        `
+        INSERT INTO tbl_quotation_items
+        (
+          quotation_id,
+          product_id,
+          item_name,
+          description,
+          hsn_sac_code,
+          quantity,
+          price,
+          tax_rate,
+          tax_amount,
+          line_total
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          id,
+          item.product_id,
+          item.item_name,
+          item.description,
+          item.hsn_sac_code,
+          item.quantity,
+          item.price,
+          item.tax_rate,
+          item.tax_amount,
+          item.line_total,
+        ],
+      );
+    }
+
+    await createAuditLog({
+      company_id: companyId,
+      user_id: userId,
+      role: req.user.role,
+      action: "UPDATE",
+      module_name: "Quotation",
+      record_id: id,
+      description: `Quotation ${existingQuotation.quotation_number} updated`,
+      ip_address: req.ip,
+      user_agent: getUserAgent(req),
+    });
+
+    await connection.commit();
+    transactionStarted = false;
+
+    // Same quotation number = same PDF path
+    let savedPdf = null;
+
+    try {
+      savedPdf = await saveDocumentPDFToServer({
+        type: "quotation",
+
+        document: {
+          id: Number(id),
+          quotation_number:
+            existingQuotation.quotation_number,
+        },
+
+        companyId,
+        authToken: req.headers.authorization,
+      });
+
+      await db.query(
+        `
+        UPDATE tbl_quotations
+        SET pdf_path = ?
+        WHERE id = ?
+        AND company_id = ?
+        `,
+        [
+          savedPdf.publicPath,
+          id,
+          companyId,
+        ],
+      );
+
+      console.log(
+        "Updated quotation PDF saved:",
+        savedPdf.publicPath,
+      );
+    } catch (pdfError) {
+      console.error(
+        "UPDATED QUOTATION PDF SAVE ERROR:",
+        pdfError.message,
+      );
+    }
+
+    emitDashboardUpdate({
+      company_id: companyId,
+    });
+
+    return res.json({
+      message: "Quotation updated successfully",
+      quotation_id: Number(id),
+      quotation_number:
+        existingQuotation.quotation_number,
+      status: existingQuotation.status,
+      pdf_saved: Boolean(savedPdf),
+      pdf_path: savedPdf?.publicPath || null,
+    });
+  } catch (error) {
+    if (transactionStarted) {
+      await connection.rollback();
+    }
+
+    console.error(
+      "UPDATE QUOTATION ERROR:",
+      error,
+    );
+
+    return res.status(500).json({
+      message: "Failed to update quotation",
+      error: error.message,
+    });
+  } finally {
+    connection.release();
   }
 };

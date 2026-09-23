@@ -9,10 +9,13 @@ import {
   convertQuotationToInvoice,
   downloadQuotation,
   sendQuotationEmail,
+  pushQuotationToCrm,
+  updateQuotation,
 } from "../controllers/quotationController.js";
 
 import authMiddleware, {
   authorizePermission,
+  authorizeRoles,
 } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -45,6 +48,25 @@ router.post(
   "/send-email/:id",
   authorizePermission("quotations"),
   sendQuotationEmail,
+);
+
+// Push to CRM
+router.post(
+  "/:id/push-to-crm",
+  authorizeRoles(
+    "company_admin",
+    "accountant",
+    "sales_user",
+  ),
+  pushQuotationToCrm,
+);
+
+
+// Edit Quotation
+router.put(
+  "/:id",
+  authorizePermission("quotations"),
+  updateQuotation,
 );
 
 // Get Single

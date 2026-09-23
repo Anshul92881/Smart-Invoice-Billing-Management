@@ -25,8 +25,14 @@ import authMiddleware, {kycAccessMiddleware} from "./middlewares/authMiddleware.
 
 const app = express();
 
-app.use("/upload", express.static(path.join(process.cwd(), "upload")));
-app.use("/uploads", express.static("uploads"));
+const uploadPath = path.join(process.cwd(), "upload");
+const uploadsPath = path.join(process.cwd(), "uploads");
+
+console.log("Upload path:", uploadPath);
+console.log("Uploads path:", uploadsPath);
+
+app.use("/upload", express.static(uploadPath));
+app.use("/uploads", express.static(uploadsPath));
 
 app.use(cors());
 app.use(express.json());

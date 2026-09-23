@@ -11,6 +11,7 @@ import {
   FileText,
   Mail,
   RefreshCcw,
+  Send,
   XCircle,
 } from "lucide-react";
 
@@ -56,6 +57,12 @@ function ViewInvoice() {
   const { id } = useParams();
   const navigate = useNavigate();
   const printRef = useRef(null);
+
+  const user = JSON.parse(localStorage.getItem("user"));
+
+  const canPushToCrm = ["company_admin", "accountant", "sales_user"].includes(
+    user?.role,
+  );
 
   const [invoice, setInvoice] = useState(null);
   const [items, setItems] = useState([]);
@@ -141,6 +148,16 @@ function ViewInvoice() {
       toast.error(error.response?.data?.message || "Cancel failed");
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handlePushToCrm = async () => {
+    try {
+      const res = await api.post(`/invoices/${id}/push-to-crm`);
+
+      toast.success(res.data?.message || "Customer synced to CRM successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "CRM sync failed");
     }
   };
 
@@ -328,6 +345,17 @@ function ViewInvoice() {
               >
                 <Mail size={18} className={emailing ? "animate-pulse" : ""} />
               </button>
+
+              {canPushToCrm && (
+                <button
+                  type="button"
+                  onClick={handlePushToCrm}
+                  title="Push to CRM"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-white transition hover:bg-violet-700"
+                >
+                  <Send size={18} />
+                </button>
+              )}
 
               {canCancel && (
                 <button

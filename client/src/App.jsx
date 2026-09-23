@@ -43,7 +43,6 @@ import RolePermissions from "./pages/RolePermissions";
 import CompanyKyc from "./pages/CompanyKyc";
 import ForgotPassword from "./pages/ForgotPassword";
 
-
 function App() {
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -81,25 +80,25 @@ function App() {
   return (
     <>
       <Toaster
-  position="top-right"
-  reverseOrder={false}
-  containerStyle={{
-    zIndex: 200000,
-  }}
-  toastOptions={{
-    duration: 4000,
-    style: {
-      zIndex: 200000,
-    },
-    error: {
-      duration: 5000,
-    },
-  }}
-/>
+        position="top-right"
+        reverseOrder={false}
+        containerStyle={{
+          zIndex: 200000,
+        }}
+        toastOptions={{
+          duration: 4000,
+          style: {
+            zIndex: 200000,
+          },
+          error: {
+            duration: 5000,
+          },
+        }}
+      />
 
       <Routes>
         <Route path="/" element={<Login />} />
-        
+
         <Route path="/register-company" element={<RegisterCompany />} />
         <Route
           path="/kyc-verification/:companyId"
@@ -317,6 +316,18 @@ function App() {
 
           <Route
             path="quotations/create"
+            element={
+              <PrivateRoute
+                allowedRoles={["company_admin", "accountant", "sales_user"]}
+                requiredPermission="quotations"
+              >
+                <CreateQuotation />
+              </PrivateRoute>
+            }
+          />
+
+          <Route
+            path="quotations/:id/edit"
             element={
               <PrivateRoute
                 allowedRoles={["company_admin", "accountant", "sales_user"]}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
 
@@ -100,6 +100,15 @@ const normalizeListResponse = (data, key) => {
 
 function CreateQuotation({ modalMode = false, onClose, onCreated }) {
   const navigate = useNavigate();
+
+  const { id } = useParams();
+
+  const isEditMode = Boolean(id) && !modalMode;
+
+  const [loadingQuotation, setLoadingQuotation] = useState(Boolean(id));
+
+  const [editingQuotationNumber, setEditingQuotationNumber] = useState("");
+
   const user = JSON.parse(localStorage.getItem("user"));
 
   const [rolePermissions, setRolePermissions] = useState({});
@@ -361,6 +370,99 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!isEditMode) {
+      setLoadingQuotation(false);
+      return;
+    }
+
+    const fetchQuotationForEdit = async () => {
+      try {
+        setLoadingQuotation(true);
+
+        const res = await api.get(`/quotations/${id}`);
+
+        const quotation = res.data?.quotation;
+
+        const quotationItems = Array.isArray(res.data?.items)
+          ? res.data.items
+          : [];
+
+        if (!quotation) {
+          toast.error("Quotation not found");
+
+          navigate("/dashboard/quotations", { replace: true });
+
+          return;
+        }
+
+        // Frontend edit rule
+        if (!["draft", "sent"].includes(quotation.status)) {
+          toast.error("Only draft or sent quotation can be edited");
+
+          navigate(`/dashboard/quotations/${id}`, { replace: true });
+
+          return;
+        }
+
+        setEditingQuotationNumber(quotation.quotation_number || "");
+
+        setFormData({
+          branch_id: quotation.branch_id ? String(quotation.branch_id) : "",
+
+          customer_id: quotation.customer_id
+            ? String(quotation.customer_id)
+            : "",
+
+          quotation_date: quotation.quotation_date
+            ? String(quotation.quotation_date).slice(0, 10)
+            : getToday(),
+
+          expiry_date: quotation.expiry_date
+            ? String(quotation.expiry_date).slice(0, 10)
+            : "",
+
+          discount_amount: Number(quotation.discount_amount || 0),
+
+          notes: quotation.notes || "",
+
+          terms_conditions: quotation.terms_conditions || "",
+        });
+
+        setItems(
+          quotationItems.length > 0
+            ? quotationItems.map((item) => ({
+                product_id: item.product_id ? String(item.product_id) : "",
+
+                product_name: item.item_name || item.product_name || "",
+
+                description: item.description || item.product_description || "",
+
+                hsn_sac_code:
+                  item.hsn_sac_code || item.product_hsn_sac_code || "",
+
+                quantity: Number(item.quantity || 1),
+
+                price: Number(item.price || 0),
+
+                tax_rate: Number(item.tax_rate || 0),
+              }))
+            : [{ ...blankItem }],
+        );
+      } catch (error) {
+        toast.error(
+          error.response?.data?.message || "Failed to load quotation",
+        );
+
+        navigate("/dashboard/quotations", { replace: true });
+      } finally {
+        setLoadingQuotation(false);
+      }
+    };
+
+    fetchQuotationForEdit();
+  }, [id, isEditMode, navigate]);
 
   const filteredCustomers = useMemo(() => customers, [customers]);
 
@@ -1154,12 +1256,26 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
     try {
       setSaving(true);
 
-      const res = await api.post("/quotations", buildQuotationPayload());
+      const payload = buildQuotationPayload();
 
-      toast.success(res.data?.message || "Quotation created successfully");
+      const res = isEditMode
+        ? await api.put(`/quotations/${id}`, payload)
+        : await api.post("/quotations", payload);
+
+      toast.success(
+        res.data?.message ||
+          (isEditMode
+            ? "Quotation updated successfully"
+            : "Quotation created successfully"),
+      );
 
       if (modalMode) {
         onCreated?.();
+        return;
+      }
+
+      if (isEditMode) {
+        navigate(`/dashboard/quotations/${id}`, { replace: true });
       } else {
         navigate("/dashboard/quotations", { replace: true });
       }
@@ -1167,7 +1283,9 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
       toast.error(
         error.response?.data?.message ||
           error.response?.data?.error ||
-          "Failed to create quotation",
+          (isEditMode
+            ? "Failed to update quotation"
+            : "Failed to create quotation"),
       );
     } finally {
       setSaving(false);
@@ -1178,8 +1296,8 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
     <div
       className={`w-full max-w-full min-w-0 space-y-5 ${
         modalMode
-  ? "max-h-[92vh] overflow-y-auto bg-slate-100 p-4 dark:bg-slate-950"
-  : ""
+          ? "max-h-[92vh] overflow-y-auto bg-slate-100 p-4 dark:bg-slate-950"
+          : ""
       }`}
     >
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -1191,12 +1309,17 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
             </div>
 
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Create Quotation
+              {isEditMode
+                ? `Edit Quotation${
+                    editingQuotationNumber ? ` - ${editingQuotationNumber}` : ""
+                  }`
+                : "Create Quotation"}
             </h1>
 
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Create branch-wise quotation with inline branch, customer and
-              product creation.
+              {isEditMode
+                ? "Update quotation details without creating a new quotation."
+                : "Create branch-wise quotation with inline branch, customer and product creation."}
             </p>
           </div>
 
@@ -1452,7 +1575,13 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Save size={17} />
-              {saving ? "Saving..." : "Save Quotation"}
+              {saving
+                ? isEditMode
+                  ? "Updating..."
+                  : "Saving..."
+                : isEditMode
+                  ? "Update Quotation"
+                  : "Save Quotation"}
             </button>
           </div>
         </div>

@@ -56,6 +56,7 @@ const BILLING_TEMPLATE_ALLOWED_KEYS = [
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const INDIAN_PHONE_REGEX = /^[6-9]\d{9}$/;
+const CRM_API_KEY_REGEX = /^[a-fA-F0-9]{64}$/;
 const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const WEBSITE_REGEX = /^(https?:\/\/)?([\w-]+\.)+[\w-]{2,}(\/.*)?$/;
@@ -530,12 +531,35 @@ export const getCompanies = async (req, res) => {
 
     const [companies] = await db.query(
       `
-      SELECT *
-      FROM tbl_companies
-      ${whereClause}
-      ORDER BY id DESC
-      LIMIT ? OFFSET ?
-      `,
+  SELECT
+    id,
+    name,
+    gst_number,
+    address,
+    currency,
+    status,
+    email,
+    phone,
+    pan_number,
+    website,
+    state,
+    country,
+    zip_code,
+    logo,
+    kyc_status,
+
+    CASE
+      WHEN crm_api_key IS NOT NULL
+        AND TRIM(crm_api_key) != ''
+      THEN 1
+      ELSE 0
+    END AS crm_api_key_configured
+
+  FROM tbl_companies
+  ${whereClause}
+  ORDER BY id DESC
+  LIMIT ? OFFSET ?
+  `,
       [...params, limit, offset],
     );
 
@@ -567,11 +591,28 @@ export const getMyCompany = async (req, res) => {
 
     const [companies] = await db.query(
       `
-      SELECT *
-      FROM tbl_companies
-      WHERE id = ?
-      LIMIT 1
-      `,
+  SELECT
+    id,
+    name,
+    gst_number,
+    address,
+    currency,
+    status,
+    email,
+    phone,
+    pan_number,
+    website,
+    state,
+    country,
+    zip_code,
+    logo,
+    kyc_status,
+    kyc_attempts,
+    last_activity_at
+  FROM tbl_companies
+  WHERE id = ?
+  LIMIT 1
+  `,
       [companyId],
     );
 
@@ -620,10 +661,25 @@ export const updateCompany = async (req, res) => {
       zip_code,
     } = req.body;
 
+    const crmApiKey =
+      req.user.role === "superadmin"
+        ? String(req.body.crm_api_key || "").trim()
+        : "";
+
     const validationError = validateCompanyPayload(req.body);
 
     if (validationError) {
       return res.status(400).json({ message: validationError });
+    }
+
+    if (
+      req.user.role === "superadmin" &&
+      crmApiKey &&
+      !CRM_API_KEY_REGEX.test(crmApiKey)
+    ) {
+      return res.status(400).json({
+        message: "CRM API key must be a valid 64-character hexadecimal key",
+      });
     }
 
     const normalizedName = normalizeText(name);
@@ -710,6 +766,9 @@ export const updateCompany = async (req, res) => {
       });
     }
 
+    const shouldUpdateCrmKey =
+      req.user.role === "superadmin" && Boolean(crmApiKey);
+
     const [result] = await db.query(
       `
       UPDATE tbl_companies
@@ -725,7 +784,11 @@ export const updateCompany = async (req, res) => {
         website = ?,
         state = ?,
         country = ?,
-        zip_code = ?
+        zip_code = ?,
+        crm_api_key = CASE
+      WHEN ? = 1 THEN ?
+      ELSE crm_api_key
+    END
       WHERE id = ?
       `,
       [
@@ -741,6 +804,8 @@ export const updateCompany = async (req, res) => {
         normalizeNullable(state),
         normalizeText(country) || "India",
         normalizeNullable(zip_code),
+        shouldUpdateCrmKey ? 1 : 0,
+        shouldUpdateCrmKey ? crmApiKey : null,
         companyId,
       ],
     );

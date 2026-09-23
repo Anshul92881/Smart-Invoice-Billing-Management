@@ -4,10 +4,10 @@ import {
   createInvoice,
   getInvoices,
   getSingleInvoice,
-  updateInvoice,
   cancelInvoice,
   downloadInvoice,
   sendInvoiceEmail,
+  pushInvoiceToCrm,
 } from "../controllers/invoiceController.js";
 
 import authMiddleware, {
@@ -27,6 +27,12 @@ router.get(
   downloadInvoice,
 );
 
+router.post(
+  "/:id/push-to-crm",
+  authorizeRoles("company_admin", "accountant", "sales_user"),
+  pushInvoiceToCrm,
+);
+
 router.get(
   "/",
   authorizeRoles("company_admin", "accountant", "sales_user"),
@@ -38,8 +44,6 @@ router.get(
   authorizeRoles("company_admin", "accountant", "sales_user"),
   getSingleInvoice,
 );
-
-router.put("/:id", authorizePermission("invoices"), updateInvoice);
 
 router.patch("/:id/cancel", authorizePermission("invoices"), cancelInvoice);
 

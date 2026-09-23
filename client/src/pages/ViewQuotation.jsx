@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   Mail,
   Download,
+  Send,
+  Pencil,
 } from "lucide-react";
 
 const DEFAULT_TEMPLATE = {
@@ -85,6 +87,12 @@ function ViewQuotation() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const printRef = useRef(null);
+
+  const user = JSON.parse(localStorage.getItem("user"));
+
+  const canPushToCrm = ["company_admin", "accountant", "sales_user"].includes(
+    user?.role,
+  );
 
   const isPrint = searchParams.get("print") === "true";
 
@@ -279,6 +287,22 @@ function ViewQuotation() {
     }
   };
 
+  const handlePushToCrm = async () => {
+    try {
+      const response = await api.post(`/quotations/${id}/push-to-crm`);
+
+      toast.success(
+        response.data?.message || "Quotation pushed to CRM successfully",
+      );
+    } catch (error) {
+      console.error("PUSH QUOTATION TO CRM ERROR:", error);
+
+      toast.error(
+        error.response?.data?.message || "Failed to push quotation to CRM",
+      );
+    }
+  };
+
   const snapshot = useMemo(
     () => safeJson(quotation?.billing_template_snapshot),
     [quotation],
@@ -367,6 +391,7 @@ function ViewQuotation() {
     );
   }
 
+  const canEdit = ["draft", "sent"].includes(quotation.status);
   const canConvert = !BLOCKED_CONVERT_STATUSES.includes(quotation.status);
   const canEmail = !BLOCKED_EMAIL_STATUSES.includes(quotation.status);
   const canChangeStatus = !["converted", "cancelled"].includes(
@@ -407,6 +432,18 @@ function ViewQuotation() {
                 Back
               </button>
 
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/dashboard/quotations/${id}/edit`)}
+                  title="Edit Quotation"
+                  className="flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
+                >
+                  <Pencil size={17} />
+                  Edit
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={downloadQuotationPdf}
@@ -432,6 +469,17 @@ function ViewQuotation() {
                     size={18}
                     className={sendingEmail ? "animate-pulse" : ""}
                   />
+                </button>
+              )}
+
+              {canPushToCrm && (
+                <button
+                  type="button"
+                  onClick={handlePushToCrm}
+                  title="Push to CRM"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-white transition hover:bg-violet-700"
+                >
+                  <Send size={18} />
                 </button>
               )}
 

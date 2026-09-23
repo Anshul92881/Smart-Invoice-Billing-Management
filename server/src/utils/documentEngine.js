@@ -1,5 +1,8 @@
 import puppeteer from "puppeteer";
 
+import fs from "fs/promises";
+import path from "path";
+
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://sellspark.in";
 
 export const parseJsonSafe = (value) => {
@@ -73,8 +76,7 @@ export const buildDocumentSnapshot = async (
       gst_number: company.gst_number || "",
       pan_number: company.pan_number || "",
       logo: company.logo || "",
-       authorized_signatory_name:
-    company.authorized_signatory_name || "",
+      authorized_signatory_name: company.authorized_signatory_name || "",
     },
 
     bank: {
@@ -143,11 +145,11 @@ export const generateDocumentPDFBuffer = async ({
       headless: "shell", // Modern, faster headless mode for modern Puppeteer
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined, // Tells it to use /usr/bin/chromium-browser from Docker
       args: [
-        "--no-sandbox", 
+        "--no-sandbox",
         "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage" // ◄ CRITICAL: Prevents Docker shared memory crash (ENOBUFS/SIGBUS error)
+        "--disable-dev-shm-usage", // ◄ CRITICAL: Prevents Docker shared memory crash (ENOBUFS/SIGBUS error)
       ],
-    }); 
+    });
     const page = await browser.newPage();
 
     await page.setViewport({
@@ -196,6 +198,140 @@ export const generateDocumentPDFBuffer = async ({
     if (browser) {
       await browser.close();
     }
+  }
+};
+
+const sanitizePdfFileName = (value = "document") => {
+  return String(value)
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+};
+
+export const saveDocumentPDFToServer = async ({
+  type = "invoice",
+  document = {},
+  companyId,
+  authToken = "",
+}) => {
+  if (!companyId) {
+    throw new Error("Company id is required for saving PDF");
+  }
+
+  if (!document?.id) {
+    throw new Error("Document id is required for saving PDF");
+  }
+
+  const pdfBuffer = await generateDocumentPDFBuffer({
+    type,
+    document,
+    authToken,
+  });
+
+  const folderName = type === "quotation" ? "quotations" : "invoices";
+
+  const documentNumber =
+    type === "quotation" ? document.quotation_number : document.invoice_number;
+
+  const safeFileName = sanitizePdfFileName(
+    documentNumber || `${type}-${document.id}`,
+  );
+
+  const companyFolder = path.join(
+    process.cwd(),
+    "uploads",
+    folderName,
+    String(companyId),
+  );
+
+  await fs.mkdir(companyFolder, {
+    recursive: true,
+  });
+
+  const fileName = `${safeFileName}.pdf`;
+
+  const absolutePath = path.join(companyFolder, fileName);
+
+  await fs.writeFile(absolutePath, pdfBuffer);
+
+  const publicPath = `/uploads/${folderName}/${companyId}/${fileName}`;
+
+  return {
+    fileName,
+    absolutePath,
+    publicPath,
+  };
+};
+
+export const getSavedDocumentPDFBuffer = async ({
+  type = "invoice",
+  document = {},
+  companyId,
+  authToken = "",
+}) => {
+  if (!companyId) {
+    throw new Error("Company id is required");
+  }
+
+  if (!document?.id) {
+    throw new Error("Document id is required");
+  }
+
+  const folderName = type === "quotation" ? "quotations" : "invoices";
+
+  const documentNumber =
+    type === "quotation" ? document.quotation_number : document.invoice_number;
+
+  const safeFileName = sanitizePdfFileName(
+    documentNumber || `${type}-${document.id}`,
+  );
+
+  const fileName = `${safeFileName}.pdf`;
+
+  const absolutePath = path.join(
+    process.cwd(),
+    "uploads",
+    folderName,
+    String(companyId),
+    fileName,
+  );
+
+  const publicPath = `/uploads/${folderName}/${companyId}/${fileName}`;
+
+  try {
+    // Pehle check/read existing PDF
+    const pdfBuffer = await fs.readFile(absolutePath);
+
+    return {
+      pdfBuffer,
+      fileName,
+      absolutePath,
+      publicPath,
+      generated: false,
+    };
+  } catch (error) {
+    // Agar error file missing wala nahi hai,
+    // to actual error forward karo.
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+
+    // Old document hai aur PDF server par nahi hai.
+    // Ek baar generate + save kar do.
+    const savedPdf = await saveDocumentPDFToServer({
+      type,
+      document,
+      companyId,
+      authToken,
+    });
+
+    const pdfBuffer = await fs.readFile(savedPdf.absolutePath);
+
+    return {
+      ...savedPdf,
+      pdfBuffer,
+      generated: true,
+    };
   }
 };
 

@@ -4,16 +4,24 @@ import { createAuditLog } from "../utils/auditLogger.js";
 import { emitDashboardUpdate } from "../utils/socketEvents.js";
 import { notifyBusinessUsers } from "../utils/notificationLoggers.js";
 import {
+  syncCustomerToCrm,
+  syncDocumentToCrm,
+} from "../utils/crmIntegrationService.js";
+
+import {
   buildDocumentSnapshot,
   parseJsonSafe,
-  generateDocumentPDFBuffer,
+  saveDocumentPDFToServer,
+  getSavedDocumentPDFBuffer,
 } from "../utils/documentEngine.js";
 
 const HSN_SAC_REGEX = /^[0-9]{4,8}$/;
 
 const normalizeText = (value) => {
   if (value === undefined || value === null) return "";
-  return String(value).replace(/<[^>]*>?/gm, "").trim();
+  return String(value)
+    .replace(/<[^>]*>?/gm, "")
+    .trim();
 };
 
 const normalizeNullable = (value) => {
@@ -40,7 +48,9 @@ const isValidDateString = (value) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
 
   const date = new Date(`${text}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text
+  );
 };
 
 const getUserAgent = (req) => req.headers["user-agent"] || null;
@@ -200,7 +210,10 @@ const validateInvoiceItem = (item, row) => {
   }
 
   const quantity = toNumber(item.quantity, NaN);
-  const price = item.price !== undefined && item.price !== "" ? toNumber(item.price, NaN) : 0;
+  const price =
+    item.price !== undefined && item.price !== ""
+      ? toNumber(item.price, NaN)
+      : 0;
   const taxRate =
     item.tax_rate !== undefined && item.tax_rate !== ""
       ? toNumber(item.tax_rate, NaN)
@@ -210,7 +223,11 @@ const validateInvoiceItem = (item, row) => {
     return `Quantity must be greater than 0 at row ${row}`;
   }
 
-  if (item.price !== undefined && item.price !== "" && (!Number.isFinite(price) || price <= 0)) {
+  if (
+    item.price !== undefined &&
+    item.price !== "" &&
+    (!Number.isFinite(price) || price <= 0)
+  ) {
     return `Price must be greater than 0 at row ${row}`;
   }
 
@@ -222,7 +239,10 @@ const validateInvoiceItem = (item, row) => {
     return `Tax rate must be between 0 and 100 at row ${row}`;
   }
 
-  if (item.hsn_sac_code && !HSN_SAC_REGEX.test(normalizeText(item.hsn_sac_code))) {
+  if (
+    item.hsn_sac_code &&
+    !HSN_SAC_REGEX.test(normalizeText(item.hsn_sac_code))
+  ) {
     return `HSN/SAC code must be 4 to 8 digits at row ${row}`;
   }
 
@@ -605,7 +625,7 @@ export const createInvoice = async (req, res) => {
       ],
     );
 
-        const invoiceId = invoiceResult.insertId;
+    const invoiceId = invoiceResult.insertId;
 
     for (const item of finalItems) {
       await connection.query(
@@ -672,11 +692,43 @@ export const createInvoice = async (req, res) => {
 
     await connection.commit();
 
+    let savedPdf = null;
+
+    try {
+      savedPdf = await saveDocumentPDFToServer({
+        type: "invoice",
+
+        document: {
+          id: invoiceId,
+          invoice_number,
+        },
+
+        companyId: company_id,
+        authToken: req.headers.authorization,
+      });
+
+      await db.query(
+        `
+    UPDATE tbl_invoices
+    SET pdf_path = ?
+    WHERE id = ?
+    AND company_id = ?
+    `,
+        [savedPdf.publicPath, invoiceId, company_id],
+      );
+
+      console.log("Invoice PDF saved:", savedPdf.publicPath);
+    } catch (pdfError) {
+      console.error("INVOICE PDF SAVE ERROR:", pdfError.message);
+    }
+
     return res.status(201).json({
       success: true,
       message: "Invoice created successfully",
       invoice_id: invoiceId,
       invoice_number,
+      pdf_saved: Boolean(savedPdf),
+      pdf_path: savedPdf?.publicPath || null,
     });
   } catch (error) {
     await connection.rollback();
@@ -763,13 +815,6 @@ export const getSingleInvoice = async (req, res) => {
       error: error.message,
     });
   }
-};
-
-export const updateInvoice = async (req, res) => {
-  return res.status(501).json({
-    message:
-      "Update invoice is temporarily disabled while Document Engine migration is in progress.",
-  });
 };
 
 export const cancelInvoice = async (req, res) => {
@@ -878,9 +923,10 @@ export const downloadInvoice = async (req, res) => {
 
     const { invoice } = data;
 
-    const pdfBuffer = await generateDocumentPDFBuffer({
+    const { pdfBuffer } = await getSavedDocumentPDFBuffer({
       type: "invoice",
       document: invoice,
+      companyId,
       authToken,
     });
 
@@ -979,9 +1025,10 @@ export const sendInvoiceEmail = async (req, res) => {
 
     const company = companyRows[0];
 
-    const pdfBuffer = await generateDocumentPDFBuffer({
+    const { pdfBuffer } = await getSavedDocumentPDFBuffer({
       type: "invoice",
       document: invoice,
+      companyId,
       authToken,
     });
 
@@ -1207,6 +1254,178 @@ ${company.name || invoice.business_name || "Company"}`,
 
     return res.status(500).json({
       message: error.response || error.message || "Invoice email send failed",
+    });
+  }
+};
+
+export const pushInvoiceToCrm = async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    const { id } = req.params;
+
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: "Company id missing",
+      });
+    }
+
+    if (!isPositiveInteger(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid invoice id is required",
+      });
+    }
+
+    // 1. Invoice + customer data
+    const data = await getInvoiceDocumentData(id, companyId);
+
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: "Invoice not found",
+      });
+    }
+
+    const { invoice } = data;
+
+    if (!invoice.customer_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer not found for this invoice",
+      });
+    }
+
+    // 2. Company CRM API key
+    const [companyRows] = await db.query(
+      `
+      SELECT crm_api_key
+      FROM tbl_companies
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [companyId],
+    );
+
+    if (companyRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Company not found",
+      });
+    }
+
+    const crmApiKey = String(companyRows[0].crm_api_key || "").trim();
+
+    if (!crmApiKey) {
+      return res.status(400).json({
+        success: false,
+        message: "Please contact support team to enable CRM integration",
+      });
+    }
+
+    // 3. Prepare customer data
+    const customer = {
+      id: invoice.customer_id,
+      customer_name: invoice.customer_name || "",
+      company_name: invoice.company_name || "",
+      email: invoice.email || "",
+    };
+
+    // 4. CUSTOMER SYNC
+    // CRM document ke according:
+    // customer ko document se pehle sync karna mandatory hai.
+    const customerCrmResponse = await syncCustomerToCrm({
+      apiKey: crmApiKey,
+      customer,
+    });
+
+    console.log("CRM CUSTOMER SYNC RESPONSE:", customerCrmResponse);
+
+    // 5. Saved PDF path check
+    const pdfPath = String(invoice.pdf_path || "").trim();
+
+    if (!pdfPath) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invoice PDF is not available. Please generate the invoice PDF before pushing to CRM.",
+      });
+    }
+
+    // 6. Public backend URL
+    const backendPublicUrl = String(process.env.VITE_API_BASE_URL || "")
+      .trim()
+      .replace(/\/+$/, "");
+
+    if (!backendPublicUrl) {
+      return res.status(500).json({
+        success: false,
+        message: "VITE_API_BASE_URL is not configured",
+      });
+    }
+
+    const normalizedPdfPath = pdfPath.startsWith("/") ? pdfPath : `/${pdfPath}`;
+
+    const pdfUrl = `${backendPublicUrl}${normalizedPdfPath}`;
+
+    // Optional safety validation
+    let parsedPdfUrl;
+
+    try {
+      parsedPdfUrl = new URL(pdfUrl);
+    } catch {
+      return res.status(500).json({
+        success: false,
+        message: "Generated invoice PDF URL is invalid",
+      });
+    }
+
+    if (!["http:", "https:"].includes(parsedPdfUrl.protocol)) {
+      return res.status(500).json({
+        success: false,
+        message: "Invoice PDF URL must use HTTP or HTTPS",
+      });
+    }
+
+    console.log("CRM INVOICE PDF URL:", pdfUrl);
+
+    // 7. DOCUMENT SYNC
+    const documentCrmResponse = await syncDocumentToCrm({
+      apiKey: crmApiKey,
+
+      externalType: "INVOICE",
+
+      // Same invoice ko retry/update karne par
+      // same externalId rahega.
+      externalId: String(invoice.id),
+
+      // Same customer ID jo Customer Sync me gaya.
+      externalCustomerId: String(invoice.customer_id),
+
+      pdfUrl,
+    });
+
+    console.log("CRM DOCUMENT SYNC RESPONSE:", documentCrmResponse);
+
+    // 8. Final response to frontend
+    return res.json({
+      success: true,
+      message: "Invoice pushed to CRM successfully",
+    });
+  } catch (error) {
+    console.error("PUSH INVOICE TO CRM ERROR:", {
+      message: error.message,
+      code: error.code,
+      statusCode: error.statusCode,
+      crmResponse: error.crmResponse,
+    });
+
+    return res.status(error.statusCode || 500).json({
+      success: false,
+
+      message: error.message || "Invoice CRM sync failed",
+
+      code: error.code || "CRM_SYNC_FAILED",
     });
   }
 };
