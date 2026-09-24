@@ -1355,7 +1355,7 @@ export const pushInvoiceToCrm = async (req, res) => {
     // 6. Public backend URL
     const backendPublicUrl = String(process.env.VITE_API_BASE_URL || "")
       .trim()
-      .replace(/\/+$/, "");
+      .replace(/\/api+$/, "");
 
     if (!backendPublicUrl) {
       return res.status(500).json({

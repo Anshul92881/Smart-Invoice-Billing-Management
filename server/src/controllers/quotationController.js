@@ -1898,7 +1898,9 @@ export const pushQuotationToCrm = async (req, res) => {
     // 6. Public backend URL
     const backendPublicUrl = String(process.env.VITE_API_BASE_URL || "")
       .trim()
-      .replace(/\/+$/, "");
+      .replace(/\/api+$/, "");
+
+      console.log("VITE_API_BASE_URL:", backendPublicUrl);
 
     if (!backendPublicUrl) {
       return res.status(500).json({
