@@ -16,6 +16,7 @@ const BASE_ROLE_PERMISSIONS = {
     customers: true,
     quotations: true,
     invoices: true,
+    products: true,
   },
 };
 

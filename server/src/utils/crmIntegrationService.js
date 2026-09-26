@@ -41,24 +41,17 @@ export const syncCustomerToCrm = async ({ apiKey, customer }) => {
 
   const email = String(customer.email || "").trim();
 
-  if (!customerName) {
-    const error = new Error("Customer name is required for CRM sync");
+  if (!customerName && !companyName) {
+    const error = new Error(
+      "Customer name or company name is required for CRM sync",
+    );
 
-    error.code = "CUSTOMER_NAME_MISSING";
+    error.code = "CUSTOMER_NAME_OR_COMPANY_MISSING";
     error.statusCode = 400;
 
     throw error;
   }
-
-  if (!companyName) {
-    const error = new Error("Company name is required for CRM sync");
-
-    error.code = "CUSTOMER_COMPANY_NAME_MISSING";
-    error.statusCode = 400;
-
-    throw error;
-  }
-
+  
   if (!email) {
     const error = new Error("Customer email is required for CRM sync");
 
