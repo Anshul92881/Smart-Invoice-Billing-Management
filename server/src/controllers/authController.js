@@ -869,7 +869,7 @@ export const forgotPassword = async (req, res) => {
       [hashedToken, expiry, user.id],
     );
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const frontendUrl = process.env.APP_URL || "http://localhost:5173";
     const resetUrl = `${frontendUrl}/reset-password/${rawToken}`;
 
     const html = passwordResetTemplate({

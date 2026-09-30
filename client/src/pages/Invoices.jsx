@@ -1252,19 +1252,19 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
     <div className="w-full max-w-full min-w-0 space-y-5 overflow-hidden">
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-              <FileText size={24} />
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
+              <FileText size={17} />
+              Invoice Management
             </div>
 
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                Invoices
-              </h1>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Create GST invoices with branch, customer, HSN/SAC and GST.
-              </p>
-            </div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              Invoices
+            </h1>
+
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Create GST invoices with branch, customer, HSN/SAC and GST.
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

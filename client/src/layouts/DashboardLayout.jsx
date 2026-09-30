@@ -635,7 +635,7 @@ function DashboardLayout() {
         <div className="flex w-full items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700 shadow-xl shadow-blue-950/30">
-              <WalletCards size={21} className="text-white" />
+              <FileText size={21} className="text-white" />
             </div>
 
             <div className="min-w-0">

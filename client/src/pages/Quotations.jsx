@@ -213,9 +213,6 @@ function Quotations() {
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-              <ReceiptText size={24} />
-            </div>
 
             <div>
               <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
