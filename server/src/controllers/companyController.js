@@ -342,6 +342,7 @@ export const createCompany = async (req, res) => {
       state,
       country,
       zip_code,
+      branch_limit,
     } = req.body;
 
     const validationError = validateCompanyPayload({
@@ -352,6 +353,22 @@ export const createCompany = async (req, res) => {
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
+
+    if (
+      branch_limit !== undefined &&
+      branch_limit !== null &&
+      branch_limit !== "" &&
+      !isPositiveInteger(branch_limit)
+    ) {
+      return res.status(400).json({
+        message: "Branch limit must be a positive integer",
+      });
+    }
+
+    const normalizedBranchLimit =
+      branch_limit !== undefined && branch_limit !== null && branch_limit !== ""
+        ? Number(branch_limit)
+        : null;
 
     const normalizedName = normalizeText(name);
     const normalizedEmail = normalizeEmail(email) || null;
@@ -406,26 +423,27 @@ export const createCompany = async (req, res) => {
 
     const [companyResult] = await db.query(
       `
-      INSERT INTO tbl_companies
-      (
-        name,
-        gst_number,
-        address,
-        currency,
-        email,
-        phone,
-        pan_number,
-        website,
-        state,
-        country,
-        zip_code,
-        status,
-        kyc_status,
-        kyc_attempts,
-        last_activity_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', 'pending', 0, NOW())
-      `,
+  INSERT INTO tbl_companies
+  (
+    name,
+    gst_number,
+    address,
+    currency,
+    email,
+    phone,
+    pan_number,
+    website,
+    state,
+    country,
+    zip_code,
+    branch_limit,
+    status,
+    kyc_status,
+    kyc_attempts,
+    last_activity_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', 'pending', 0, NOW())
+  `,
       [
         normalizedName,
         normalizedGST,
@@ -438,6 +456,7 @@ export const createCompany = async (req, res) => {
         normalizeNullable(state),
         normalizeText(country) || "India",
         normalizeNullable(zip_code),
+        normalizedBranchLimit,
       ],
     );
 
@@ -1204,6 +1223,7 @@ export const getInactiveCompanies = async (req, res) => {
         email,
         phone,
         status,
+        branch_limit,
         last_activity_at,
         CASE
           WHEN last_activity_at IS NULL THEN 'never_active'
@@ -1731,6 +1751,75 @@ export const sendTestEmail = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: "Test email failed",
+      error: error.message,
+    });
+  }
+};
+
+export const updateCompanyBranchLimit = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { branch_limit } = req.body;
+
+    if (!isPositiveInteger(id)) {
+      return res.status(400).json({
+        message: "Valid company id is required",
+      });
+    }
+
+    if (!isPositiveInteger(branch_limit)) {
+      return res.status(400).json({
+        message: "Branch limit must be a positive integer",
+      });
+    }
+
+    const [companyRows] = await db.query(
+      `
+      SELECT id, name, branch_limit
+      FROM tbl_companies
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [id],
+    );
+
+    if (companyRows.length === 0) {
+      return res.status(404).json({
+        message: "Company not found",
+      });
+    }
+
+    const newBranchLimit = Number(branch_limit);
+
+    await db.query(
+      `
+      UPDATE tbl_companies
+      SET branch_limit = ?
+      WHERE id = ?
+      `,
+      [newBranchLimit, id],
+    );
+
+    await createAuditLog({
+      company_id: id,
+      user_id: req.user.id,
+      role: req.user.role,
+      action: "UPDATE",
+      module_name: "Company",
+      record_id: id,
+      description: `Branch limit updated to ${newBranchLimit} for ${companyRows[0].name}`,
+      ip_address: req.ip,
+      user_agent: getUserAgent(req),
+    });
+
+    return res.json({
+      message: "Branch limit updated successfully",
+      company_id: Number(id),
+      branch_limit: newBranchLimit,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Update branch limit error",
       error: error.message,
     });
   }

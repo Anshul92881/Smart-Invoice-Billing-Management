@@ -181,16 +181,17 @@ export const kycAccessMiddleware = async (req, res, next) => {
   try {
     const mutationMethods = ["POST", "PUT", "PATCH", "DELETE"];
 
-    // View Only Mode
+    // GET requests are allowed in view-only mode
     if (!mutationMethods.includes(req.method)) {
       return next();
     }
 
-    // Super Admin bypass
+    // SuperAdmin always bypasses KYC restriction
     if (req.user?.role === "superadmin") {
       return next();
     }
 
+    // Non-company users
     if (!req.user?.company_id) {
       return next();
     }
@@ -215,7 +216,21 @@ export const kycAccessMiddleware = async (req, res, next) => {
       companyRows[0].kyc_status || "pending",
     ).toLowerCase();
 
-    if (kycStatus !== "approved") {
+    /*
+    |--------------------------------------------------------------------------
+    | FULL KYC ACCESS
+    |--------------------------------------------------------------------------
+    |
+    | approved         = normal API/OTP verified KYC
+    | manual_verified  = SuperAdmin manually verified KYC
+    |
+    */
+
+    const hasFullKycAccess = ["approved", "manual_verified"].includes(
+      kycStatus,
+    );
+
+    if (!hasFullKycAccess) {
       return res.status(403).json({
         message: "Complete your KYC to use this feature.",
         kyc_required: true,
@@ -223,7 +238,7 @@ export const kycAccessMiddleware = async (req, res, next) => {
       });
     }
 
-    next();
+    return next();
   } catch (error) {
     return res.status(500).json({
       message: "Unable to verify KYC access",

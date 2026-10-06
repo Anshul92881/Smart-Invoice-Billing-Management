@@ -349,7 +349,7 @@ function DashboardLayout() {
           permissionKey: "branches",
         },
         {
-          name: "Company",
+          name: "Company Profile",
           path: "/dashboard/company",
           icon: <Building2 size={18} />,
           roles: ["company_admin"],

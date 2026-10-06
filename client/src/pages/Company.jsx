@@ -46,6 +46,7 @@ function Company() {
     country: "India",
     zip_code: "",
     logo: "",
+    branch_limit: "",
   };
 
   const [companies, setCompanies] = useState([]);
@@ -91,6 +92,10 @@ function Company() {
       country: company?.country || "India",
       zip_code: company?.zip_code || "",
       logo: company?.logo || "",
+      branch_limit:
+        company?.branch_limit !== null && company?.branch_limit !== undefined
+          ? String(company.branch_limit)
+          : "",
     });
   };
 
@@ -216,26 +221,60 @@ function Company() {
       return;
     }
 
+    if (
+      isSuperAdmin &&
+      formData.branch_limit !== "" &&
+      (!Number.isInteger(Number(formData.branch_limit)) ||
+        Number(formData.branch_limit) < 1)
+    ) {
+      toast.warn("Branch limit must be a positive integer");
+      return;
+    }
+
     try {
       if (isCompanyAdmin) {
         await api.put("/companies/my-company", formData);
+
         toast.success("Company profile updated");
         setIsEditMode(false);
       } else if (editingId) {
-        const payload = {
-          ...formData,
-        };
+        const { branch_limit, ...companyPayload } = formData;
 
         if (crmApiKey.trim()) {
-          payload.crm_api_key = crmApiKey.trim();
+          companyPayload.crm_api_key = crmApiKey.trim();
         }
 
-        await api.put(`/companies/${editingId}`, payload);
+        await api.put(`/companies/${editingId}`, companyPayload);
+
+        if (
+          branch_limit !== "" &&
+          branch_limit !== null &&
+          branch_limit !== undefined
+        ) {
+          await api.patch(`/companies/${editingId}/branch-limit`, {
+            branch_limit: Number(branch_limit),
+          });
+        }
 
         toast.success("Company updated");
         closeFormModal();
       } else {
-        await api.post("/companies", formData);
+        const payload = {
+          ...formData,
+        };
+
+        if (
+          payload.branch_limit === "" ||
+          payload.branch_limit === null ||
+          payload.branch_limit === undefined
+        ) {
+          delete payload.branch_limit;
+        } else {
+          payload.branch_limit = Number(payload.branch_limit);
+        }
+
+        await api.post("/companies", payload);
+
         toast.success("Company created");
         closeFormModal();
       }
@@ -247,7 +286,8 @@ function Company() {
   };
 
   const isKycApproved =
-    isCompanyAdmin && companies?.[0]?.kyc_status === "approved";
+    isCompanyAdmin &&
+    ["approved", "manual_verified"].includes(companies?.[0]?.kyc_status);
 
   const handleDelete = async (id) => {
     toast(
@@ -678,7 +718,7 @@ function CompanyTable({ companies, getLogoUrl, onView, onEdit, onDelete }) {
 
           {companies.length === 0 && (
             <tr>
-              <td colSpan="6" className="p-10 text-center">
+              <td colSpan="7" className="p-10 text-center">
                 <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-950">
                   <Building2 className="mx-auto text-slate-400" size={34} />
                   <p className="mt-3 font-semibold text-slate-700 dark:text-slate-200">
@@ -763,154 +803,185 @@ function CompanyForm({
       className="rounded-2xl bg-white dark:bg-slate-900"
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Field icon={<Building2 size={16} />} label="Company Name">
-          <input
-            type="text"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-            disabled={isCompanyAdmin && isKycApproved}
-            className="input"
-          />
-        </Field>
+  <Field icon={<Building2 size={16} />} label="Company Name">
+    <input
+      type="text"
+      name="name"
+      value={formData.name}
+      onChange={handleChange}
+      disabled={isCompanyAdmin && isKycApproved}
+      className="input"
+    />
+  </Field>
 
-        <Field icon={<BadgePercent size={16} />} label="GST Number">
-          <input
-            type="text"
-            name="gst_number"
-            value={formData.gst_number}
-            onChange={handleChange}
-            disabled={isCompanyAdmin && isKycApproved}
-            className="input"
-          />
-        </Field>
+  <Field icon={<BadgePercent size={16} />} label="GST Number">
+    <input
+      type="text"
+      name="gst_number"
+      value={formData.gst_number}
+      onChange={handleChange}
+      disabled={isCompanyAdmin && isKycApproved}
+      className="input"
+    />
+  </Field>
 
-        <Field icon={<Landmark size={16} />} label="PAN Number">
-          <input
-            type="text"
-            name="pan_number"
-            value={formData.pan_number}
-            onChange={handleChange}
-            disabled={isCompanyAdmin && isKycApproved}
-            className="input"
-          />
-        </Field>
+  <Field icon={<Landmark size={16} />} label="PAN Number">
+    <input
+      type="text"
+      name="pan_number"
+      value={formData.pan_number}
+      onChange={handleChange}
+      disabled={isCompanyAdmin && isKycApproved}
+      className="input"
+    />
+  </Field>
 
-        <Field icon={<Wallet size={16} />} label="Currency">
-          <CustomSelect
-            value={formData.currency}
-            onChange={(value) => updateField("currency", value)}
-            options={[
-              { value: "INR", label: "INR" },
-              { value: "USD", label: "USD" },
-            ]}
-          />
-        </Field>
+  <Field icon={<Wallet size={16} />} label="Currency">
+    <CustomSelect
+      value={formData.currency}
+      onChange={(value) => updateField("currency", value)}
+      options={[
+        { value: "INR", label: "INR" },
+        { value: "USD", label: "USD" },
+      ]}
+    />
+  </Field>
 
-        <Field icon={<Mail size={16} />} label="Email">
-          <input
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            className="input"
-          />
-        </Field>
+  <Field icon={<Mail size={16} />} label="Email">
+    <input
+      type="email"
+      name="email"
+      value={formData.email}
+      onChange={handleChange}
+      className="input"
+    />
+  </Field>
 
-        <Field icon={<Phone size={16} />} label="Phone">
-          <input
-            type="text"
-            name="phone"
-            value={formData.phone}
-            onChange={handleChange}
-            className="input"
-          />
-        </Field>
+  <Field icon={<Phone size={16} />} label="Phone">
+    <input
+      type="text"
+      name="phone"
+      value={formData.phone}
+      onChange={handleChange}
+      className="input"
+    />
+  </Field>
 
-        <Field icon={<Globe size={16} />} label="Website">
-          <input
-            type="text"
-            name="website"
-            value={formData.website}
-            onChange={handleChange}
-            className="input"
-          />
-        </Field>
+  <Field icon={<Globe size={16} />} label="Website">
+    <input
+      type="text"
+      name="website"
+      value={formData.website}
+      onChange={handleChange}
+      className="input"
+    />
+  </Field>
 
-        <Field icon={<MapPin size={16} />} label="State">
-          <input
-            type="text"
-            name="state"
-            value={formData.state}
-            onChange={handleChange}
-            className="input"
-          />
-        </Field>
+  <Field icon={<MapPin size={16} />} label="State">
+    <input
+      type="text"
+      name="state"
+      value={formData.state}
+      onChange={handleChange}
+      className="input"
+    />
+  </Field>
 
-        <Field icon={<MapPin size={16} />} label="Country">
-          <input
-            type="text"
-            name="country"
-            value={formData.country}
-            onChange={handleChange}
-            className="input"
-          />
-        </Field>
+  <Field icon={<MapPin size={16} />} label="Country">
+    <input
+      type="text"
+      name="country"
+      value={formData.country}
+      onChange={handleChange}
+      className="input"
+    />
+  </Field>
 
-        <Field icon={<MapPin size={16} />} label="Zip Code">
-          <input
-            type="text"
-            name="zip_code"
-            value={formData.zip_code}
-            onChange={handleChange}
-            className="input"
-          />
-        </Field>
+  <Field icon={<MapPin size={16} />} label="Zip Code">
+    <input
+      type="text"
+      name="zip_code"
+      value={formData.zip_code}
+      onChange={handleChange}
+      className="input"
+    />
+  </Field>
 
-        {!isCompanyAdmin && (
-          <Field label="Status">
-            <CustomSelect
-              value={formData.status}
-              onChange={(value) => updateField("status", value)}
-              options={[
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-              ]}
-            />
-          </Field>
-        )}
+  {!isCompanyAdmin && (
+    <Field icon={<Building2 size={16} />} label="Branch Limit">
+      <input
+        type="number"
+        name="branch_limit"
+        min="1"
+        step="1"
+        value={formData.branch_limit}
+        onChange={handleChange}
+        placeholder="Default (2) / Plan limit"
+        className="input"
+      />
+    </Field>
+  )}
 
-        {!isCompanyAdmin && editingId && (
-          <Field icon={<KeyRound size={16} />} label="CRM API Key">
-            <input
-              type="password"
-              value={crmApiKey}
-              onChange={(e) => setCrmApiKey?.(e.target.value)}
-              placeholder={
-                crmApiKeyConfigured
-                  ? "Leave blank to keep existing key"
-                  : "Enter CRM API key"
-              }
-              autoComplete="new-password"
-              className="input"
-            />
-          </Field>
-        )}
+  {!isCompanyAdmin && (
+    <Field label="Status">
+      <CustomSelect
+        value={formData.status}
+        onChange={(value) => updateField("status", value)}
+        options={[
+          { value: "active", label: "Active" },
+          { value: "inactive", label: "Inactive" },
+        ]}
+      />
+    </Field>
+  )}
 
-        <div className="md:col-span-2 xl:col-span-4">
-          <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-            <MapPin size={16} />
-            Address
-          </label>
-          <textarea
-            name="address"
-            value={formData.address}
-            onChange={handleChange}
-            rows="3"
-            className="input"
-          />
-        </div>
-      </div>
+  {/* CRM API Key + Address */}
+  <div
+    className={`grid grid-cols-1 gap-4 md:col-span-2 xl:col-span-4 ${
+      !isCompanyAdmin && editingId
+        ? "md:grid-cols-2"
+        : ""
+    }`}
+  >
+    {!isCompanyAdmin && editingId && (
+      <Field
+        icon={<KeyRound size={16} />}
+        label="CRM API Key"
+      >
+        <input
+          type="password"
+          value={crmApiKey}
+          onChange={(e) =>
+            setCrmApiKey?.(e.target.value)
+          }
+          placeholder={
+            crmApiKeyConfigured
+              ? "Leave blank to keep existing key"
+              : "Enter CRM API key"
+          }
+          autoComplete="new-password"
+          className="input"
+        />
+      </Field>
+    )}
+
+    <div>
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+        <MapPin size={16} />
+        Address
+      </label>
+
+      <textarea
+        name="address"
+        value={formData.address}
+        onChange={handleChange}
+        rows={1}
+        placeholder="Enter company address"
+        className="input min-h-[42px] resize-none"
+      />
+    </div>
+  </div>
+</div>
 
       <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 dark:border-slate-800 sm:flex-row sm:justify-end">
         <button
@@ -1083,8 +1154,8 @@ function CompanyViewModal({ company, getLogoUrl, onClose }) {
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-auto bg-white p-5 dark:bg-slate-900">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="max-h-[70vh] overflow-y-auto bg-white p-5 dark:bg-slate-900">
+          <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2 xl:grid-cols-4">
             <ViewField label="Company Name" value={company.name} />
             <ViewField
               label="Status"
@@ -1096,10 +1167,21 @@ function CompanyViewModal({ company, getLogoUrl, onClose }) {
             <ViewField label="Phone" value={company.phone} />
             <ViewField label="Website" value={company.website} />
             <ViewField label="Currency" value={company.currency || "INR"} />
+            <ViewField
+              label="Branch Limit"
+              value={
+                company.branch_limit !== null &&
+                company.branch_limit !== undefined
+                  ? company.branch_limit
+                  : "Default (2)"
+              }
+            />
             <ViewField label="State" value={company.state} />
             <ViewField label="Country" value={company.country} />
             <ViewField label="Zip Code" value={company.zip_code} />
-            <ViewField label="Address" value={company.address} full />
+            <div className="sm:col-span-2 xl:col-span-4">
+              <ViewField label="Address" value={company.address} />
+            </div>
           </div>
         </div>
       </div>

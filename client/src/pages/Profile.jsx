@@ -16,8 +16,8 @@ import {
 import toast from "react-hot-toast";
 import api from "../services/api";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL 
-  ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') 
+const BASE_URL = import.meta.env.VITE_API_BASE_URL
+  ? import.meta.env.VITE_API_BASE_URL.replace("/api", "")
   : "http://localhost:5000";
 
 function Profile() {
@@ -256,67 +256,76 @@ function Profile() {
   };
 
   return (
-    <div className="w-full max-w-full min-w-0 space-y-5 overflow-x-hidden">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    // lg+ pe fixed screen-fit (no scroll). Chhoti screens pe natural flow.
+    // Agar parent layout ki height fixed nahi hai to "lg:h-full" ki jagah
+    // "lg:h-[calc(100vh-7rem)]" use karna (header height ke hisaab se adjust).
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-4 lg:h-full lg:overflow-hidden">
+      {/* Header */}
+      <div className="shrink-0 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-indigo-700 dark:text-indigo-300">
-              <UserRoundPen size={17} />
+            <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+              <UserRoundPen size={16} />
               Account Profile
             </div>
 
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
               Profile
             </h1>
 
-            <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+            <p className="mt-0.5 text-sm font-medium text-slate-500 dark:text-slate-400">
               Manage your personal account information, photo and password.
             </p>
           </div>
 
           <div className="flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            <ShieldCheck size={16} className="text-indigo-600 dark:text-indigo-300" />
+            <ShieldCheck
+              size={16}
+              className="text-indigo-600 dark:text-indigo-300"
+            />
             {formatRole[user?.role] || user?.role || "User"}
           </div>
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_0.95fr]">
-        <div className="grid gap-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:grid-cols-[0.85fr_1.15fr] lg:gap-0">
-          <div className="border-slate-200 dark:border-slate-800 lg:border-r lg:pr-6">
+      {/* Content */}
+      <div className="grid min-h-0 gap-4 lg:flex-1 xl:grid-cols-[1fr_0.95fr]">
+        {/* Left card */}
+        <div className="grid min-h-0 gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:grid-cols-[0.85fr_1.15fr] lg:gap-0">
+          <div className="flex min-h-0 flex-col border-slate-200 dark:border-slate-800 lg:border-r lg:pr-6">
             <SectionTitle
               icon={<Camera size={18} />}
               title="Profile Photo"
               description="Upload JPG, PNG or WEBP image up to 2MB."
             />
 
-            <div className="flex flex-col items-center">
+            <div className="flex flex-1 flex-col items-center justify-center">
               <div className="relative">
                 {visibleImage ? (
                   <img
                     src={visibleImage}
                     alt={user?.name || "User"}
-                    className="h-32 w-32 rounded-full border-4 border-white object-cover shadow-lg ring-1 ring-slate-200 dark:border-slate-800 dark:ring-slate-700"
+                    className="h-28 w-28 rounded-full border-4 border-white object-cover shadow-lg ring-1 ring-slate-200 dark:border-slate-800 dark:ring-slate-700"
                   />
                 ) : (
-                  <div className="flex h-32 w-32 items-center justify-center rounded-full bg-indigo-600 text-4xl font-bold text-white shadow-lg ring-1 ring-slate-200 dark:ring-slate-700">
+                  <div className="flex h-28 w-28 items-center justify-center rounded-full bg-indigo-600 text-3xl font-bold text-white shadow-lg ring-1 ring-slate-200 dark:ring-slate-700">
                     {initials}
                   </div>
                 )}
 
-                <div className="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-indigo-600 text-white shadow dark:border-slate-900">
-                  <Camera size={16} />
+                <div className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-indigo-600 text-white shadow dark:border-slate-900">
+                  <Camera size={15} />
                 </div>
               </div>
 
               {previewImage && (
-                <span className="mt-3 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300">
+                <span className="mt-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-0.5 text-xs font-bold text-indigo-700 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300">
                   Preview
                 </span>
               )}
 
-              <div className="mt-6 w-full max-w-sm space-y-3">
-                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm transition hover:border-indigo-400 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-indigo-500 dark:hover:bg-indigo-950/30">
+              <div className="mt-5 w-full max-w-sm space-y-3">
+                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm transition hover:border-indigo-400 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-indigo-500 dark:hover:bg-indigo-950/30">
                   <span className="font-bold text-slate-800 dark:text-slate-100">
                     Choose File
                   </span>
@@ -337,7 +346,7 @@ function Profile() {
                   type="button"
                   onClick={handleProfileImageUpload}
                   disabled={uploading}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-indigo-700 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-indigo-700 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <UploadCloud size={18} />
                   {uploading ? "Uploading..." : "Upload Photo"}
@@ -346,54 +355,53 @@ function Profile() {
             </div>
           </div>
 
-          <div className="lg:pl-6">
+          <div className="flex min-h-0 flex-col lg:pl-6">
             <SectionTitle
               icon={<UserRoundPen size={18} />}
               title="Profile Information"
               description="Your personal and account details."
             />
 
-            <form onSubmit={handleProfileUpdate} className="space-y-4">
-              <EditableField
-                label="Full Name"
-                name="name"
-                icon={<UserRoundPen size={16} />}
-                value={formData.name}
-                onChange={handleFormChange}
-              />
-
-              <ReadOnlyField
-                label="Email Address"
-                icon={<Mail size={16} />}
-                value={user?.email || ""}
-              />
-
-              <EditableField
-                label="Phone Number"
-                name="phone"
-                icon={<Phone size={16} />}
-                value={formData.phone}
-                onChange={handleFormChange}
-              />
-
-              <ReadOnlyField
-                label="Role"
-                icon={<ShieldCheck size={16} />}
-                value={formatRole[user?.role] || user?.role || ""}
-              />
-
-              {user?.branch_name && (
-                <ReadOnlyField
-                  label="Branch"
-                  icon={<MapPin size={16} />}
-                  value={user.branch_name || "N/A"}
+            <form
+              onSubmit={handleProfileUpdate}
+              className="flex flex-1 flex-col justify-between gap-3"
+            >
+              <div className="space-y-3">
+                <EditableField
+                  label="Full Name"
+                  name="name"
+                  icon={<UserRoundPen size={16} />}
+                  value={formData.name}
+                  onChange={handleFormChange}
                 />
-              )}
+
+                <ReadOnlyField
+                  label="Email Address"
+                  icon={<Mail size={16} />}
+                  value={user?.email || ""}
+                />
+
+                <EditableField
+                  label="Phone Number"
+                  name="phone"
+                  icon={<Phone size={16} />}
+                  value={formData.phone}
+                  onChange={handleFormChange}
+                />
+
+                {user?.branch_name && (
+                  <ReadOnlyField
+                    label="Branch"
+                    icon={<MapPin size={16} />}
+                    value={user.branch_name || "N/A"}
+                  />
+                )}
+              </div>
 
               <button
                 type="submit"
                 disabled={saving}
-                className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-indigo-700 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-fit items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-indigo-700 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Save size={17} />
                 {saving ? "Saving..." : "Save Profile"}
@@ -402,24 +410,19 @@ function Profile() {
           </div>
         </div>
 
-        <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
-                <KeyRound size={21} />
-              </div>
+        {/* Right card */}
+        <div className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <SectionTitle
+            icon={<KeyRound size={20} />}
+            title="Change Password"
+            description="Update your account password securely."
+          />
 
-              <div className="min-w-0">
-                <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-                  Change Password
-                </h2>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                  Update your account password securely.
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handlePasswordChange} className="space-y-4">
+          <form
+            onSubmit={handlePasswordChange}
+            className="flex flex-1 flex-col justify-between gap-3"
+          >
+            <div className="space-y-3">
               <PasswordField
                 label="Current Password"
                 name="currentPassword"
@@ -461,17 +464,17 @@ function Profile() {
                 }
                 onChange={handlePasswordInputChange}
               />
+            </div>
 
-              <button
-                type="submit"
-                disabled={changingPassword}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-slate-800 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-600 dark:hover:bg-indigo-700"
-              >
-                <Lock size={17} />
-                {changingPassword ? "Updating..." : "Update Password"}
-              </button>
-            </form>
-          </div>
+            <button
+              type="submit"
+              disabled={changingPassword}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-slate-800 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-600 dark:hover:bg-indigo-700"
+            >
+              <Lock size={17} />
+              {changingPassword ? "Updating..." : "Update Password"}
+            </button>
+          </form>
         </div>
       </div>
     </div>
@@ -480,9 +483,9 @@ function Profile() {
 
 function SectionTitle({ icon, title, description }) {
   return (
-    <div className="mb-6 flex items-center gap-3">
+    <div className="mb-4 flex shrink-0 items-center gap-3">
       {icon && (
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
           {icon}
         </div>
       )}
@@ -502,13 +505,13 @@ function SectionTitle({ icon, title, description }) {
 function ReadOnlyField({ label, value, icon }) {
   return (
     <div>
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
         <span className="text-slate-500 dark:text-slate-400">{icon}</span>
         {label}
       </label>
 
       <input
-        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 outline-none opacity-90 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+        className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 opacity-90 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
         value={value || ""}
         readOnly
       />
@@ -519,14 +522,14 @@ function ReadOnlyField({ label, value, icon }) {
 function EditableField({ label, name, value, onChange, icon }) {
   return (
     <div>
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
         <span className="text-slate-500 dark:text-slate-400">{icon}</span>
         {label}
       </label>
 
       <input
         name={name}
-        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-950/50"
+        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-950/50"
         value={value || ""}
         onChange={onChange}
       />
@@ -534,17 +537,10 @@ function EditableField({ label, name, value, onChange, icon }) {
   );
 }
 
-function PasswordField({
-  label,
-  name,
-  value,
-  visible,
-  onToggle,
-  onChange,
-}) {
+function PasswordField({ label, name, value, visible, onToggle, onChange }) {
   return (
     <div>
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
         <span className="text-slate-500 dark:text-slate-400">
           <Lock size={16} />
         </span>
@@ -557,7 +553,7 @@ function PasswordField({
           name={name}
           value={value}
           onChange={onChange}
-          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 pr-11 text-sm font-medium text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-950/50"
+          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 pr-11 text-sm font-medium text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-950/50"
           autoComplete="new-password"
         />
 

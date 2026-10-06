@@ -137,7 +137,10 @@ function InactiveCompanies() {
           </div>
 
           <div className="flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            <CalendarDays size={16} className="text-orange-600 dark:text-orange-300" />
+            <CalendarDays
+              size={16}
+              className="text-orange-600 dark:text-orange-300"
+            />
             Total: {total}
           </div>
         </div>
@@ -322,7 +325,10 @@ function InactiveCompaniesTable({ companies, loading, onView }) {
             <tr>
               <td colSpan="7" className="p-10 text-center">
                 <div className="flex items-center justify-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                  <Loader2 size={18} className="animate-spin text-blue-600 dark:text-blue-400" />
+                  <Loader2
+                    size={18}
+                    className="animate-spin text-blue-600 dark:text-blue-400"
+                  />
                   Loading companies...
                 </div>
               </td>
@@ -393,7 +399,10 @@ function InactiveCompaniesTable({ companies, loading, onView }) {
             <tr>
               <td colSpan="7" className="p-10 text-center">
                 <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-800">
-                  <Building2 className="mx-auto text-slate-400 dark:text-slate-500" size={34} />
+                  <Building2
+                    className="mx-auto text-slate-400 dark:text-slate-500"
+                    size={34}
+                  />
                   <p className="mt-3 font-semibold text-slate-700 dark:text-slate-200">
                     No companies found
                   </p>
@@ -489,7 +498,8 @@ function Pagination({
   return (
     <div className="flex flex-col gap-3 border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-        Total Companies: <span className="text-slate-900 dark:text-white">{total}</span>
+        Total Companies:{" "}
+        <span className="text-slate-900 dark:text-white">{total}</span>
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -569,6 +579,15 @@ function CompanyViewModal({ company, onClose }) {
           <ViewField label="Email" value={company.email} />
           <ViewField label="Phone" value={company.phone} />
           <ViewField
+            label="Branch Limit"
+            value={
+              company.branch_limit !== null &&
+              company.branch_limit !== undefined
+                ? company.branch_limit
+                : "Default (2)"
+            }
+          />
+          <ViewField
             label="Last Activity"
             value={
               company.last_activity_at
@@ -636,7 +655,9 @@ function CustomDropdown({ value, onChange, options, icon }) {
         className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
       >
         <span className="flex min-w-0 items-center gap-2">
-          {icon && <span className="text-slate-400 dark:text-slate-500">{icon}</span>}
+          {icon && (
+            <span className="text-slate-400 dark:text-slate-500">{icon}</span>
+          )}
           <span className="truncate">{selected?.label || "Select"}</span>
         </span>
 

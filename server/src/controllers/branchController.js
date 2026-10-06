@@ -5,8 +5,7 @@ const ALLOWED_BRANCH_STATUS = ["active", "inactive"];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
-const GST_REGEX =
-  /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 const ZIP_REGEX = /^\d{5,6}$/;
 const BRANCH_NAME_REGEX = /^[a-zA-Z0-9\s.&'(),-]+$/;
 const BRANCH_CODE_REGEX = /^[a-zA-Z0-9_-]{2,20}$/;
@@ -15,7 +14,9 @@ const getUserAgent = (req) => req.headers["user-agent"] || null;
 
 const normalizeText = (value) => {
   if (value === undefined || value === null) return "";
-  return String(value).replace(/<[^>]*>?/gm, "").trim();
+  return String(value)
+    .replace(/<[^>]*>?/gm, "")
+    .trim();
 };
 
 const normalizeNullable = (value) => {
@@ -106,11 +107,40 @@ const validateBranchPayload = ({
 };
 
 const getBranchLimit = async (companyId) => {
+  // 1. Check company-specific limit assigned by SuperAdmin
+  const [companyRows] = await db.query(
+    `
+    SELECT branch_limit
+    FROM tbl_companies
+    WHERE id = ?
+    LIMIT 1
+    `,
+    [companyId],
+  );
+
+  if (!companyRows.length) {
+    return 2;
+  }
+
+  const companyBranchLimit = companyRows[0].branch_limit;
+
+  // SuperAdmin ne manually limit assign ki hai
+  if (
+    companyBranchLimit !== null &&
+    companyBranchLimit !== undefined &&
+    Number(companyBranchLimit) > 0
+  ) {
+    return Number(companyBranchLimit);
+  }
+
+  // 2. Company self-registered hai:
+  // subscription/trial plan check karo
   const [subscriptionRows] = await db.query(
     `
     SELECT sp.max_branches
     FROM tbl_company_subscriptions cs
-    JOIN tbl_subscription_plans sp ON cs.plan_id = sp.id
+    JOIN tbl_subscription_plans sp
+      ON cs.plan_id = sp.id
     WHERE cs.company_id = ?
     AND cs.status IN ('active', 'trial')
     ORDER BY cs.id DESC
@@ -119,7 +149,9 @@ const getBranchLimit = async (companyId) => {
     [companyId],
   );
 
-  return Number(subscriptionRows[0]?.max_branches || 1);
+  const planBranchLimit = Number(subscriptionRows[0]?.max_branches || 0);
+
+  return Math.max(2, planBranchLimit);
 };
 
 const getActiveBranchCount = async (companyId) => {

@@ -263,12 +263,12 @@ export const createPlan = async (req, res) => {
       billing_cycle = "3_months",
       trial_days = 0,
       features,
-      max_branches = 1,
+      max_branches = 2,
     } = req.body;
 
     const finalPrice = toNumber(price);
     const finalTrialDays = toNumber(trial_days);
-    const finalMaxBranches = toNumber(max_branches, 1);
+    const finalMaxBranches = toNumber(max_branches, 2);
 
     if (!plan_name?.trim()) {
       return res.status(400).json({ message: "Plan name is required" });
@@ -360,12 +360,12 @@ export const updatePlan = async (req, res) => {
       trial_days = 0,
       features,
       status = "active",
-      max_branches = 1,
+      max_branches = 2,
     } = req.body;
 
     const finalPrice = toNumber(price);
     const finalTrialDays = toNumber(trial_days);
-    const finalMaxBranches = toNumber(max_branches, 1);
+    const finalMaxBranches = toNumber(max_branches, 2);
 
     if (!plan_name?.trim()) {
       return res.status(400).json({ message: "Plan name is required" });

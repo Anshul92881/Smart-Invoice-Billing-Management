@@ -469,11 +469,6 @@ function BillingTemplate() {
             </div>
 
             <div>
-              <div className="mb-0.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300">
-                <CheckCircle2 size={13} />
-                SaaS Synced Template
-              </div>
-
               <h1 className="text-xl font-bold text-slate-900 dark:text-white">
                 Billing Template
               </h1>

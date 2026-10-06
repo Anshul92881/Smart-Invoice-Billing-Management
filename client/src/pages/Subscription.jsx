@@ -70,7 +70,7 @@ function Subscriptions() {
     price: "",
     billing_cycle: "1_month",
     trial_days: "",
-    max_branches: "1",
+    max_branches: "2",
     features: "",
   };
 

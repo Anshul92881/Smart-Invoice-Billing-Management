@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+
 import api from "../services/api";
+
 import toast from "react-hot-toast";
 
 import {
@@ -24,33 +25,58 @@ import {
 
 const STATUS_OPTIONS = [
   "all",
+
   "pending",
+
   "submitted",
+
   "approved",
+
   "manual_verified",
+
   "rejected",
+
   "blocked",
 ];
 
 const PAGE_SIZE = 10;
 
 function CompanyKyc() {
-  const navigate = useNavigate();
-
   const [requests, setRequests] = useState([]);
+
   const [status, setStatus] = useState("all");
+
   const [search, setSearch] = useState("");
+
   const [loading, setLoading] = useState(true);
+
   const [page, setPage] = useState(1);
 
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
+
   const [details, setDetails] = useState(null);
+
   const [detailLoading, setDetailLoading] = useState(false);
+
   const [showModal, setShowModal] = useState(false);
+
   const [actionLoading, setActionLoading] = useState("");
+
+  const [showManualKycModal, setShowManualKycModal] = useState(false);
+
+  const [manualKycFiles, setManualKycFiles] = useState({
+    aadhaar_card: null,
+
+    pan_card: null,
+
+    gst_certificate: null,
+
+    tan_document: null,
+  });
 
   const statusOptions = STATUS_OPTIONS.map((item) => ({
     value: item,
+
     label: item === "all" ? "All Status" : formatLabel(item),
   }));
 
@@ -63,6 +89,7 @@ function CompanyKyc() {
       });
 
       setRequests(res.data || []);
+
       setPage(1);
     } catch (error) {
       toast.error(
@@ -76,10 +103,13 @@ function CompanyKyc() {
   const fetchDetails = async (companyId) => {
     try {
       setSelectedCompanyId(companyId);
+
       setShowModal(true);
+
       setDetailLoading(true);
 
       const res = await api.get(`/kyc/requests/${companyId}`);
+
       setDetails(res.data);
     } catch (error) {
       toast.error(
@@ -115,11 +145,13 @@ function CompanyKyc() {
 
   const totalPages = Math.max(
     1,
+
     Math.ceil(filteredRequests.length / PAGE_SIZE),
   );
 
   const paginatedRequests = filteredRequests.slice(
     (page - 1) * PAGE_SIZE,
+
     page * PAGE_SIZE,
   );
 
@@ -133,20 +165,114 @@ function CompanyKyc() {
 
   const closeModal = () => {
     setShowModal(false);
+
     setSelectedCompanyId(null);
+
     setDetails(null);
+
     setActionLoading("");
+  };
+
+  const resetManualKycFiles = () => {
+    setManualKycFiles({
+      aadhaar_card: null,
+
+      pan_card: null,
+
+      gst_certificate: null,
+
+      tan_document: null,
+    });
   };
 
   const openManualKyc = () => {
     if (!selectedCompanyId) return;
 
-    navigate(`/superadmin/kyc/${selectedCompanyId}/manual`, {
-      state: {
-        companyId: selectedCompanyId,
-        manualKyc: true,
-      },
-    });
+    resetManualKycFiles();
+
+    setShowManualKycModal(true);
+  };
+
+  const closeManualKyc = () => {
+    if (actionLoading === "manual_kyc") return;
+
+    setShowManualKycModal(false);
+    resetManualKycFiles();
+  };
+
+  const handleManualKycFileChange = (event) => {
+    const { name, files } = event.target;
+    const file = files?.[0] || null;
+
+    if (!file) {
+      setManualKycFiles((prev) => ({
+        ...prev,
+        [name]: null,
+      }));
+      return;
+    }
+
+    const allowedTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Only PDF, JPG, PNG and WEBP files are allowed");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File size cannot exceed 5 MB");
+      event.target.value = "";
+      return;
+    }
+
+    setManualKycFiles((prev) => ({
+      ...prev,
+      [name]: file,
+    }));
+  };
+
+  const submitManualKyc = async () => {
+    if (!selectedCompanyId) return;
+
+    try {
+      setActionLoading("manual_kyc");
+
+      const formData = new FormData();
+
+      Object.entries(manualKycFiles).forEach(([key, file]) => {
+        if (file) {
+          formData.append(key, file);
+        }
+      });
+
+      const res = await api.post(
+        `/kyc/superadmin/${selectedCompanyId}/upload`,
+        formData,
+      );
+
+      toast.success(
+        res.data?.message || "Company KYC manually verified successfully",
+      );
+
+      setShowManualKycModal(false);
+      resetManualKycFiles();
+
+      await refreshSelected();
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to manually verify company KYC",
+      );
+    } finally {
+      setActionLoading("");
+    }
   };
 
   const unblockCompany = async () => {
@@ -158,6 +284,7 @@ function CompanyKyc() {
       await api.patch(`/kyc/superadmin/${selectedCompanyId}/unblock`);
 
       toast.success("Company unblocked");
+
       await refreshSelected();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to unblock company");
@@ -167,11 +294,18 @@ function CompanyKyc() {
   };
 
   const company = details?.company || null;
+
   const documents = details?.documents || [];
+
   const logs = details?.logs || [];
 
-  const canManualKyc = company?.kyc_status === "blocked";
-  const canUnblock = company?.kyc_status === "blocked";
+  const currentKycStatus = String(company?.kyc_status || "").toLowerCase();
+
+  const canManualKyc =
+    Boolean(company) &&
+    !["approved", "manual_verified"].includes(currentKycStatus);
+
+  const canUnblock = currentKycStatus === "blocked";
 
   return (
     <div className="w-full min-w-0 space-y-5 overflow-x-hidden text-slate-900 dark:text-slate-100">
@@ -202,6 +336,7 @@ function CompanyKyc() {
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                 KYC Requests
               </h2>
+
               <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
                 Review company KYC requests and verification status.
               </p>
@@ -254,10 +389,15 @@ function CompanyKyc() {
             <thead className="bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
               <tr>
                 <TableHead title="Company" />
+
                 <TableHead title="Admin" />
+
                 <TableHead title="Status" />
+
                 <TableHead title="Attempts" />
+
                 <TableHead title="Docs" />
+
                 <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   View
                 </th>
@@ -287,6 +427,7 @@ function CompanyKyc() {
                           <p className="font-semibold text-slate-900 dark:text-white">
                             {item.company_name || "-"}
                           </p>
+
                           <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                             {item.company_email || "-"}
                           </p>
@@ -304,6 +445,7 @@ function CompanyKyc() {
                           <p className="font-semibold text-slate-900 dark:text-white">
                             {item.admin_name || "-"}
                           </p>
+
                           <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                             {item.admin_email || "-"}
                           </p>
@@ -347,9 +489,11 @@ function CompanyKyc() {
                         className="mx-auto text-slate-400 dark:text-slate-500"
                         size={34}
                       />
+
                       <p className="mt-3 font-semibold text-slate-700 dark:text-slate-200">
                         No KYC requests found
                       </p>
+
                       <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
                         Try changing search or status filter.
                       </p>
@@ -413,20 +557,40 @@ function CompanyKyc() {
           closeModal={closeModal}
         />
       )}
+
+      {showManualKycModal && (
+        <ManualKycModal
+          company={company}
+          files={manualKycFiles}
+          loading={actionLoading === "manual_kyc"}
+          onFileChange={handleManualKycFileChange}
+          onClose={closeManualKyc}
+          onSubmit={submitManualKyc}
+        />
+      )}
     </div>
   );
 }
 
 function KycDetailModal({
   company,
+
   documents,
+
   logs,
+
   detailLoading,
+
   actionLoading,
+
   canManualKyc,
+
   canUnblock,
+
   openManualKyc,
+
   unblockCompany,
+
   closeModal,
 }) {
   return (
@@ -442,6 +606,7 @@ function KycDetailModal({
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                 KYC Details
               </h2>
+
               <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
                 Company documents, verification logs and available actions.
               </p>
@@ -470,6 +635,7 @@ function KycDetailModal({
                     <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
                       {company.name || "-"}
                     </h3>
+
                     <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
                       {company.email || "-"}
                     </p>
@@ -484,16 +650,19 @@ function KycDetailModal({
                     label="Company Status"
                     value={company.status}
                   />
+
                   <InfoBox
                     icon={<User size={16} />}
                     label="Admin"
                     value={company.admin_name || "-"}
                   />
+
                   <InfoBox
                     icon={<Clock size={16} />}
                     label="Attempts"
                     value={company.kyc_attempts || 0}
                   />
+
                   <InfoBox
                     icon={<ShieldCheck size={16} />}
                     label="Verified At"
@@ -520,6 +689,7 @@ function KycDetailModal({
                           <p className="truncate text-sm font-semibold text-white">
                             {formatLabel(doc.document_type)}
                           </p>
+
                           <p className="mt-1 text-xs font-semibold text-slate-500">
                             {formatLabel(doc.uploaded_by_role)} ·{" "}
                             {formatDate(doc.created_at)}
@@ -531,7 +701,7 @@ function KycDetailModal({
 
                           {doc.document_path && (
                             <a
-                              href={`http://localhost:5000${doc.document_path}`}
+                              href={`http\://localhost:5000${doc.document_path}`}
                               target="_blank"
                               rel="noreferrer"
                               className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700"
@@ -548,6 +718,7 @@ function KycDetailModal({
                         className="mx-auto text-slate-400 dark:text-slate-500"
                         size={30}
                       />
+
                       <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
                         No documents uploaded
                       </p>
@@ -566,7 +737,7 @@ function KycDetailModal({
                       className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
                     >
                       <Upload size={16} />
-                      Manual KYC
+                      Manual Verify KYC
                     </button>
                   )}
 
@@ -625,11 +796,13 @@ function KycDetailModal({
                             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs font-medium text-slate-500 dark:text-slate-400">
                               <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 dark:bg-slate-900">
                                 <User size={13} />
+
                                 {formatLabel(log.performed_role)}
                               </span>
 
                               <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 dark:bg-slate-900">
                                 <Clock size={13} />
+
                                 {formatDate(log.created_at)}
                               </span>
                             </div>
@@ -670,16 +843,23 @@ function KycDetailModal({
 
 function CustomSelect({
   value,
+
   onChange,
+
   options,
+
   placeholder = "Select",
+
   searchable = false,
 }) {
   const [open, setOpen] = useState(false);
+
   const [selectSearch, setSelectSearch] = useState("");
+
   const [dropdownStyle, setDropdownStyle] = useState(null);
 
   const buttonRef = useRef(null);
+
   const dropdownRef = useRef(null);
 
   const selected = options.find(
@@ -694,29 +874,44 @@ function CustomSelect({
     if (!buttonRef.current) return;
 
     const rect = buttonRef.current.getBoundingClientRect();
+
     const viewportWidth = window.innerWidth;
+
     const viewportHeight = window.innerHeight;
+
     const dropdownHeight = searchable
       ? 300
       : Math.min(options.length * 46 + 20, 260);
+
     const dropdownWidth = Math.max(rect.width, 210);
+
     const left = Math.min(
       Math.max(12, rect.left),
+
       viewportWidth - dropdownWidth - 12,
     );
+
     const spaceBelow = viewportHeight - rect.bottom;
+
     const spaceAbove = rect.top;
+
     const openUp = spaceBelow < dropdownHeight + 12 && spaceAbove > spaceBelow;
+
     const top = openUp
       ? Math.max(12, rect.top - dropdownHeight - 8)
       : Math.min(rect.bottom + 8, viewportHeight - dropdownHeight - 12);
 
     setDropdownStyle({
       position: "fixed",
+
       left: `${left}px`,
+
       top: `${top}px`,
+
       width: `${dropdownWidth}px`,
+
       maxHeight: `${dropdownHeight}px`,
+
       zIndex: 99999,
     });
   };
@@ -735,28 +930,36 @@ function CustomSelect({
       }
 
       setOpen(false);
+
       setSelectSearch("");
     };
 
     const handleWindowMove = (event) => {
       if (dropdownRef.current?.contains(event.target)) return;
+
       updateDropdownPosition();
     };
 
     document.addEventListener("mousedown", handleClickOutside);
+
     window.addEventListener("resize", updateDropdownPosition);
+
     window.addEventListener("scroll", handleWindowMove, true);
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+
       window.removeEventListener("resize", updateDropdownPosition);
+
       window.removeEventListener("scroll", handleWindowMove, true);
     };
   }, [open, options.length, searchable]);
 
   const handleSelect = (selectedValue) => {
     onChange(selectedValue);
+
     setOpen(false);
+
     setSelectSearch("");
   };
 
@@ -767,6 +970,7 @@ function CustomSelect({
         type="button"
         onClick={() => {
           setOpen((prev) => !prev);
+
           window.requestAnimationFrame(updateDropdownPosition);
         }}
         className="flex h-10 w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 text-left text-sm font-semibold text-slate-700 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
@@ -868,8 +1072,10 @@ function InfoBox({ icon, label, value }) {
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
       <div className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         {icon}
+
         {label}
       </div>
+
       <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
         {value || "-"}
       </p>
@@ -887,21 +1093,29 @@ function TableHead({ title }) {
 
 function StatusBadge({ status }) {
   const value = String(status || "").toLowerCase();
+
   const map = {
     approved:
       "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+
     manual_verified:
       "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300",
+
     verified:
       "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+
     pending:
       "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+
     submitted:
       "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300",
+
     rejected:
       "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300",
+
     blocked:
       "border-red-200 bg-red-100 text-red-800 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-300",
+
     inactive:
       "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
   };
@@ -923,10 +1137,15 @@ function formatLabel(value) {
 
   return String(value)
     .toLowerCase()
+
     .replaceAll("_", " ")
+
     .split(" ")
+
     .filter(Boolean)
+
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+
     .join(" ");
 }
 
@@ -935,11 +1154,214 @@ function formatDate(value) {
 
   return new Date(value).toLocaleString("en-IN", {
     day: "2-digit",
+
     month: "short",
+
     year: "numeric",
+
     hour: "2-digit",
+
     minute: "2-digit",
   });
+}
+
+function ManualKycModal({
+  company,
+  files,
+  loading,
+  onFileChange,
+  onClose,
+  onSubmit,
+}) {
+
+  return (
+    <div className="fixed inset-0 z-[70000] flex items-center justify-center bg-slate-950/65 p-3 backdrop-blur-sm sm:p-4">
+      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5 dark:border-slate-800">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+              <ShieldCheck size={21} />
+            </div>
+
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Manual Verify KYC
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Verify this company. Supporting documents are optional.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            aria-label="Close manual KYC modal"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-5">
+          <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                <Building2 size={18} />
+              </div>
+
+              <div className="min-w-0">
+                <p className="font-semibold text-slate-900 dark:text-white">
+                  {company?.name || "-"}
+                </p>
+
+                <p className="mt-1 truncate text-sm text-slate-500 dark:text-slate-400">
+                  {company?.admin_email || company?.email || "-"}
+                </p>
+
+                <div className="mt-2">
+                  <StatusBadge status={company?.kyc_status} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <ManualDocumentInput
+              label="Aadhaar Card"
+              name="aadhaar_card"
+              file={files.aadhaar_card}
+              disabled={loading}
+              onChange={onFileChange}
+            />
+
+            <ManualDocumentInput
+              label="PAN Card"
+              name="pan_card"
+              file={files.pan_card}
+              disabled={loading}
+              onChange={onFileChange}
+            />
+
+            <ManualDocumentInput
+              label="GST Certificate"
+              name="gst_certificate"
+              file={files.gst_certificate}
+              disabled={loading}
+              onChange={onFileChange}
+            />
+
+            <ManualDocumentInput
+              label="TAN Document"
+              name="tan_document"
+              file={files.tan_document}
+              disabled={loading}
+              onChange={onFileChange}
+            />
+          </div>
+
+          <p className="mt-4 text-xs leading-5 text-slate-500 dark:text-slate-400">
+            Supported formats: PDF, JPG, PNG and WEBP. Maximum file size: 5 MB
+            per document.
+          </p>
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={loading}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700"
+          >
+            {loading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Verifying KYC...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={16} />
+                Verify KYC
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ManualDocumentInput({
+  label,
+  name,
+  file,
+  required = false,
+  disabled = false,
+  onChange,
+}) {
+  return (
+    <label className="block min-w-0">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+          {label}
+        </span>
+
+        {required ? (
+          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600 dark:bg-red-950/40 dark:text-red-300">
+            Required
+          </span>
+        ) : (
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            Optional
+          </span>
+        )}
+      </div>
+
+      <div
+        className={`rounded-xl border border-dashed p-4 transition ${
+          file
+            ? "border-emerald-300 bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/20"
+            : "border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50/50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-blue-700 dark:hover:bg-blue-950/20"
+        }`}
+      >
+        <input
+          type="file"
+          name={name}
+          accept=".pdf,.jpg,.jpeg,.png,.webp"
+          disabled={disabled}
+          onChange={onChange}
+          className="block w-full cursor-pointer text-xs font-medium text-slate-500 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700 disabled:cursor-not-allowed dark:text-slate-400 dark:file:bg-slate-900 dark:file:text-slate-200"
+        />
+
+        <div className="mt-3 flex min-w-0 items-center gap-2">
+          {file ? (
+            <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+          ) : (
+            <FileText size={15} className="shrink-0 text-slate-400" />
+          )}
+
+          <p
+            className={`truncate text-xs font-medium ${
+              file ? "text-emerald-700 dark:text-emerald-300" : "text-slate-400"
+            }`}
+          >
+            {file?.name || "Choose document"}
+          </p>
+        </div>
+      </div>
+    </label>
+  );
 }
 
 export default CompanyKyc;
