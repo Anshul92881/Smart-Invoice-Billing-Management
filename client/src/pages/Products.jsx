@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
+  const APP_URL = import.meta.env.APP_URL;
 
 import {
   Package,
@@ -227,11 +228,13 @@ function Products() {
     fetchRolePermissions();
   }, [user?.company_id, user?.role]);
 
+
+
   const getImageUrl = (image) => {
     if (!image) return "";
     if (image.startsWith("http")) return image;
-    if (image.startsWith("/upload")) return `http://localhost:5000${image}`;
-    return `http://localhost:5000/upload/product-images/${image}`;
+    if (image.startsWith("/upload")) return `${APP_URL}/${image}`;
+    return `${APP_URL}/upload/product-images/${image}`;
   };
 
   const fetchData = async () => {
