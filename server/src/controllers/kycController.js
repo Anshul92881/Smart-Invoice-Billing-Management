@@ -12,12 +12,6 @@ const OPTIONAL_DOCUMENTS = ["gst_certificate", "tan_document"];
 
 const ALL_DOCUMENTS = [...REQUIRED_DOCUMENTS, ...OPTIONAL_DOCUMENTS];
 
-/*
-|--------------------------------------------------------------------------
-| HELPERS
-|--------------------------------------------------------------------------
-*/
-
 const getFilePath = (file) => {
   if (!file?.filename) return null;
 
@@ -119,12 +113,6 @@ const createTrialSubscription = async (connection, companyId) => {
   );
 };
 
-/*
-|--------------------------------------------------------------------------
-| COMPANY ADMIN - GET KYC STATUS
-|--------------------------------------------------------------------------
-*/
-
 export const getMyKycStatus = async (req, res) => {
   try {
     const companyId = req.user.company_id;
@@ -191,12 +179,6 @@ export const getMyKycStatus = async (req, res) => {
     });
   }
 };
-
-/*
-|--------------------------------------------------------------------------
-| COMPANY ADMIN - SKIP KYC
-|--------------------------------------------------------------------------
-*/
 
 export const skipKyc = async (req, res) => {
   try {
@@ -348,7 +330,6 @@ export const skipKyc = async (req, res) => {
     return res.json({
       success: true,
       token,
-
       user: {
         id: user.id,
         name: user.name,
@@ -371,12 +352,6 @@ export const skipKyc = async (req, res) => {
     });
   }
 };
-
-/*
-|--------------------------------------------------------------------------
-| COMPANY ADMIN - UPLOAD KYC DOCUMENTS
-|--------------------------------------------------------------------------
-*/
 
 export const uploadCompanyKycDocuments = async (req, res) => {
   const connection = await db.getConnection();
@@ -514,15 +489,6 @@ export const uploadCompanyKycDocuments = async (req, res) => {
       user_agent: req.headers["user-agent"] || null,
     });
 
-    /*
-    |--------------------------------------------------------------------------
-    | NORMAL KYC APPROVAL CHECK
-    |--------------------------------------------------------------------------
-    |
-    | Company Admin flow still requires actual Aadhaar + PAN verification.
-    |
-    */
-
     const [readyRows] = await connection.query(
       `
       SELECT
@@ -615,12 +581,6 @@ export const uploadCompanyKycDocuments = async (req, res) => {
   }
 };
 
-/*
-|--------------------------------------------------------------------------
-| SUPER ADMIN - GET ALL KYC REQUESTS
-|--------------------------------------------------------------------------
-*/
-
 export const getAllKycRequests = async (req, res) => {
   try {
     const { status = "all" } = req.query;
@@ -675,12 +635,6 @@ export const getAllKycRequests = async (req, res) => {
     });
   }
 };
-
-/*
-|--------------------------------------------------------------------------
-| SUPER ADMIN - GET SINGLE COMPANY KYC
-|--------------------------------------------------------------------------
-*/
 
 export const getKycRequestByCompany = async (req, res) => {
   try {
@@ -743,28 +697,6 @@ export const getKycRequestByCompany = async (req, res) => {
   }
 };
 
-/*
-|--------------------------------------------------------------------------
-| SUPER ADMIN - DIRECT MANUAL KYC
-|--------------------------------------------------------------------------
-|
-| FLOW:
-|
-| SuperAdmin uploads:
-| - Aadhaar Card (required)
-| - PAN Card     (required)
-| - GST          (optional)
-| - TAN          (optional)
-|
-| No Aadhaar OTP
-| No PAN API verification
-| No GST/TAN API verification
-|
-| Documents are trusted by SuperAdmin and KYC becomes manual_verified.
-|
-|--------------------------------------------------------------------------
-*/
-
 export const uploadSuperAdminKycDocuments = async (req, res) => {
   const connection = await db.getConnection();
 
@@ -785,29 +717,9 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | OPTIONAL DOCUMENTS
-    |--------------------------------------------------------------------------
-    |
-    | SuperAdmin manual KYC does not require any document.
-    |
-    | Aadhaar - optional
-    | PAN     - optional
-    | GST     - optional
-    | TAN     - optional
-    |
-    */
-
     const uploadedDocs = ALL_DOCUMENTS.filter((docType) => files[docType]?.[0]);
 
     await connection.beginTransaction();
-
-    /*
-    |--------------------------------------------------------------------------
-    | COMPANY CHECK
-    |--------------------------------------------------------------------------
-    */
 
     const [companyRows] = await connection.query(
       `
@@ -846,15 +758,6 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
       });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | SAVE OPTIONAL DOCUMENTS
-    |--------------------------------------------------------------------------
-    |
-    | If no document is uploaded this loop simply does nothing.
-    |
-    */
-
     for (const docType of uploadedDocs) {
       const file = files[docType]?.[0];
 
@@ -887,18 +790,6 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
       );
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | MANUALLY VERIFY + ACTIVATE COMPANY
-    |--------------------------------------------------------------------------
-    |
-    | No Aadhaar OTP
-    | No Aadhaar API
-    | No PAN API
-    | No document requirement
-    |
-    */
-
     const [companyUpdateResult] = await connection.query(
       `
       UPDATE tbl_companies
@@ -917,12 +808,6 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
     if (companyUpdateResult.affectedRows === 0) {
       throw new Error("Company status could not be updated");
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | FIND COMPANY ADMIN
-    |--------------------------------------------------------------------------
-    */
 
     const [companyAdminRows] = await connection.query(
       `
@@ -948,12 +833,6 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
 
     const companyAdmin = companyAdminRows[0];
 
-    /*
-    |--------------------------------------------------------------------------
-    | ACTIVATE COMPANY ADMIN
-    |--------------------------------------------------------------------------
-    */
-
     await connection.query(
       `
       UPDATE tbl_users
@@ -963,25 +842,19 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
       [companyAdmin.id],
     );
 
-    /*
-    |--------------------------------------------------------------------------
-    | VERIFY COMPANY ADMIN
-    |--------------------------------------------------------------------------
-    */
-
     const [updatedCompanyAdminRows] = await connection.query(
       `
-        SELECT
-          id,
-          name,
-          email,
-          role,
-          company_id,
-          status
-        FROM tbl_users
-        WHERE id = ?
-        LIMIT 1
-        `,
+      SELECT
+        id,
+        name,
+        email,
+        role,
+        company_id,
+        status
+      FROM tbl_users
+      WHERE id = ?
+      LIMIT 1
+      `,
       [companyAdmin.id],
     );
 
@@ -991,19 +864,7 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
       throw new Error("Company Admin status was not updated to active");
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | CREATE TRIAL IF NEEDED
-    |--------------------------------------------------------------------------
-    */
-
     await createTrialSubscription(connection, companyId);
-
-    /*
-    |--------------------------------------------------------------------------
-    | KYC LOG
-    |--------------------------------------------------------------------------
-    */
 
     const uploadedDocumentNames = uploadedDocs
       .map((item) => item.replaceAll("_", " "))
@@ -1036,24 +897,18 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
       [companyId, remarks, userId],
     );
 
-    /*
-    |--------------------------------------------------------------------------
-    | VERIFY COMPANY STATUS
-    |--------------------------------------------------------------------------
-    */
-
     const [updatedCompanyRows] = await connection.query(
       `
-        SELECT
-          id,
-          status,
-          kyc_status,
-          kyc_verified_at,
-          kyc_verified_by
-        FROM tbl_companies
-        WHERE id = ?
-        LIMIT 1
-        `,
+      SELECT
+        id,
+        status,
+        kyc_status,
+        kyc_verified_at,
+        kyc_verified_by
+      FROM tbl_companies
+      WHERE id = ?
+      LIMIT 1
+      `,
       [companyId],
     );
 
@@ -1067,12 +922,6 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
     }
 
     await connection.commit();
-
-    /*
-    |--------------------------------------------------------------------------
-    | AUDIT LOG
-    |--------------------------------------------------------------------------
-    */
 
     try {
       await createAuditLog({
@@ -1093,12 +942,6 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
       console.error("SUPERADMIN MANUAL KYC AUDIT ERROR:", auditError);
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | APPROVAL EMAIL
-    |--------------------------------------------------------------------------
-    */
-
     try {
       const admin = await getCompanyAdmin(companyId);
 
@@ -1107,17 +950,10 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
       console.error("SUPERADMIN MANUAL KYC EMAIL ERROR:", emailError);
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | RESPONSE
-    |--------------------------------------------------------------------------
-    */
-
     return res.json({
       success: true,
       approved: true,
       message: "Company KYC manually verified successfully",
-
       uploaded_documents: uploadedDocs,
 
       company: {
@@ -1153,18 +989,459 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
   }
 };
 
-/*
-|--------------------------------------------------------------------------
-| SUPER ADMIN - REJECT KYC
-|--------------------------------------------------------------------------
-*/
+export const saveSuperAdminKycDetails = async (req, res) => {
+  const connection = await db.getConnection();
+
+  try {
+    const companyId = Number(req.params.companyId);
+    const userId = req.user?.id;
+    const files = req.files || {};
+
+    if (!Number.isInteger(companyId) || companyId <= 0) {
+      return res.status(400).json({
+        message: "Invalid company id",
+      });
+    }
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "Unauthorized",
+      });
+    }
+
+    const panNumber = String(req.body?.pan_number || "")
+      .trim()
+      .toUpperCase();
+
+    const gstNumber = String(req.body?.gst_number || "")
+      .trim()
+      .toUpperCase();
+
+    const tanNumber = String(req.body?.tan_number || "")
+      .trim()
+      .toUpperCase();
+
+    const uploadedDocs = ALL_DOCUMENTS.filter((docType) => files[docType]?.[0]);
+
+    if (panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber)) {
+      return res.status(400).json({
+        message: "Invalid PAN number format",
+      });
+    }
+
+    if (
+      gstNumber &&
+      !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstNumber)
+    ) {
+      return res.status(400).json({
+        message: "Invalid GST number format",
+      });
+    }
+
+    if (tanNumber && !/^[A-Z]{4}[0-9]{5}[A-Z]$/.test(tanNumber)) {
+      return res.status(400).json({
+        message: "Invalid TAN number format",
+      });
+    }
+
+    await connection.beginTransaction();
+
+    const [companyRows] = await connection.query(
+      `
+      SELECT
+        id,
+        name,
+        email,
+        status,
+        kyc_status,
+        kyc_attempts,
+        pan_number,
+        gst_number,
+        tan_number,
+        aadhaar_verified,
+        pan_verified,
+        gst_verified,
+        kyc_verified_at,
+        kyc_verified_by
+      FROM tbl_companies
+      WHERE id = ?
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [companyId],
+    );
+
+    if (!companyRows.length) {
+      await connection.rollback();
+
+      return res.status(404).json({
+        message: "Company not found",
+      });
+    }
+
+    const company = companyRows[0];
+
+    const currentKycStatus = String(company.kyc_status || "").toLowerCase();
+
+    const unverifiedStatuses = ["pending", "submitted", "rejected", "blocked"];
+
+    const verifiedStatuses = ["approved", "manual_verified"];
+
+    const isUnverified = unverifiedStatuses.includes(currentKycStatus);
+
+    const isAlreadyVerified = verifiedStatuses.includes(currentKycStatus);
+
+    if (!isUnverified && !isAlreadyVerified) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        message: `Unsupported KYC status: ${company.kyc_status || "unknown"}`,
+      });
+    }
+
+    const currentPan = String(company.pan_number || "")
+      .trim()
+      .toUpperCase();
+
+    const currentGst = String(company.gst_number || "")
+      .trim()
+      .toUpperCase();
+
+    const currentTan = String(company.tan_number || "")
+      .trim()
+      .toUpperCase();
+
+    const panChanged = Boolean(panNumber) && panNumber !== currentPan;
+
+    const gstChanged = Boolean(gstNumber) && gstNumber !== currentGst;
+
+    const tanChanged = Boolean(tanNumber) && tanNumber !== currentTan;
+
+    if (
+      isAlreadyVerified &&
+      !panChanged &&
+      !gstChanged &&
+      !tanChanged &&
+      uploadedDocs.length === 0
+    ) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        message: "Please change a KYC detail or upload a document",
+      });
+    }
+
+    if (panNumber || gstNumber || tanNumber) {
+      const [duplicateRows] = await connection.query(
+        `
+        SELECT
+          id,
+          pan_number,
+          gst_number,
+          tan_number
+        FROM tbl_companies
+        WHERE id != ?
+        AND (
+          (? IS NOT NULL AND pan_number = ?)
+          OR
+          (? IS NOT NULL AND gst_number = ?)
+          OR
+          (? IS NOT NULL AND tan_number = ?)
+        )
+        LIMIT 1
+        `,
+        [
+          companyId,
+
+          panNumber || null,
+          panNumber || null,
+
+          gstNumber || null,
+          gstNumber || null,
+
+          tanNumber || null,
+          tanNumber || null,
+        ],
+      );
+
+      if (duplicateRows.length > 0) {
+        const duplicate = duplicateRows[0];
+
+        await connection.rollback();
+
+        if (panNumber && duplicate.pan_number === panNumber) {
+          return res.status(400).json({
+            message: "PAN number already belongs to another company",
+          });
+        }
+
+        if (gstNumber && duplicate.gst_number === gstNumber) {
+          return res.status(400).json({
+            message: "GST number already belongs to another company",
+          });
+        }
+
+        if (tanNumber && duplicate.tan_number === tanNumber) {
+          return res.status(400).json({
+            message: "TAN number already belongs to another company",
+          });
+        }
+      }
+    }
+
+    await connection.query(
+      `
+      UPDATE tbl_companies
+      SET
+        pan_number =
+          CASE
+            WHEN ? IS NOT NULL THEN ?
+            ELSE pan_number
+          END,
+
+        gst_number =
+          CASE
+            WHEN ? IS NOT NULL THEN ?
+            ELSE gst_number
+          END,
+
+        tan_number =
+          CASE
+            WHEN ? IS NOT NULL THEN ?
+            ELSE tan_number
+          END
+      WHERE id = ?
+      `,
+      [
+        panNumber || null,
+        panNumber || null,
+
+        gstNumber || null,
+        gstNumber || null,
+
+        tanNumber || null,
+        tanNumber || null,
+
+        companyId,
+      ],
+    );
+
+    for (const docType of uploadedDocs) {
+      const file = files[docType]?.[0];
+
+      if (!file) continue;
+
+      await connection.query(
+        `
+        INSERT INTO tbl_company_kyc_documents
+        (
+          company_id,
+          document_type,
+          document_path,
+          verification_status,
+          uploaded_by_user_id,
+          uploaded_by_role,
+          is_manual_upload
+        )
+        VALUES
+        (
+          ?,
+          ?,
+          ?,
+          'verified',
+          ?,
+          'superadmin',
+          1
+        )
+        `,
+        [companyId, docType, getFilePath(file), userId],
+      );
+    }
+
+    let companyAdmin = null;
+
+    if (isUnverified) {
+      const [companyAdminRows] = await connection.query(
+        `
+          SELECT
+            id,
+            name,
+            email,
+            status
+          FROM tbl_users
+          WHERE company_id = ?
+          AND role = 'company_admin'
+          LIMIT 1
+          FOR UPDATE
+          `,
+        [companyId],
+      );
+
+      if (!companyAdminRows.length) {
+        throw new Error(`No Company Admin found for company id ${companyId}`);
+      }
+
+      companyAdmin = companyAdminRows[0];
+
+      await connection.query(
+        `
+        UPDATE tbl_companies
+        SET
+          status = 'active',
+          kyc_status = 'manual_verified',
+          kyc_attempts = 0,
+          kyc_verified_at = NOW(),
+          kyc_verified_by = ?,
+          kyc_rejection_reason = NULL
+        WHERE id = ?
+        `,
+        [userId, companyId],
+      );
+
+      await connection.query(
+        `
+        UPDATE tbl_users
+        SET status = 'active'
+        WHERE id = ?
+        `,
+        [companyAdmin.id],
+      );
+
+      await createTrialSubscription(connection, companyId);
+    }
+
+    const changedItems = [];
+
+    if (panChanged) changedItems.push("PAN");
+
+    if (gstChanged) changedItems.push("GST");
+
+    if (tanChanged) changedItems.push("TAN");
+
+    for (const docType of uploadedDocs) {
+      changedItems.push(docType.replaceAll("_", " "));
+    }
+
+    const logAction = isUnverified
+      ? "KYC_MANUALLY_VERIFIED"
+      : "KYC_DETAILS_UPDATED";
+
+    const remarks = isUnverified
+      ? changedItems.length > 0
+        ? `SuperAdmin manually verified KYC and saved: ${changedItems.join(
+            ", ",
+          )}`
+        : "SuperAdmin manually verified KYC"
+      : `SuperAdmin updated verified KYC details: ${changedItems.join(", ")}`;
+
+    await connection.query(
+      `
+      INSERT INTO tbl_kyc_verification_logs
+      (
+        company_id,
+        action,
+        remarks,
+        performed_by,
+        performed_role
+      )
+      VALUES (?, ?, ?, ?, 'superadmin')
+      `,
+      [companyId, logAction, remarks, userId],
+    );
+
+    const [updatedCompanyRows] = await connection.query(
+      `
+        SELECT
+          id,
+          name,
+          email,
+          status,
+          kyc_status,
+          kyc_attempts,
+          pan_number,
+          gst_number,
+          tan_number,
+          aadhaar_verified,
+          pan_verified,
+          gst_verified,
+          kyc_verified_at,
+          kyc_verified_by,
+          kyc_rejection_reason
+        FROM tbl_companies
+        WHERE id = ?
+        LIMIT 1
+        `,
+      [companyId],
+    );
+
+    await connection.commit();
+
+    try {
+      await createAuditLog({
+        company_id: companyId,
+        user_id: userId,
+        role: "superadmin",
+        action: logAction,
+        module_name: "KYC",
+        record_id: companyId,
+        description: isUnverified
+          ? `SuperAdmin manually verified KYC for ${company.name}`
+          : `SuperAdmin updated KYC details for ${company.name}`,
+        ip_address: req.ip,
+        user_agent: req.headers["user-agent"] || null,
+      });
+    } catch (auditError) {
+      console.error("SUPERADMIN KYC AUDIT ERROR:", auditError);
+    }
+
+    if (isUnverified) {
+      try {
+        await sendKycApprovedEmail(companyAdmin?.email, companyAdmin?.name);
+      } catch (emailError) {
+        console.error("SUPERADMIN KYC APPROVAL EMAIL ERROR:", emailError);
+      }
+    }
+
+    return res.json({
+      success: true,
+      manually_verified: isUnverified,
+
+      message: isUnverified
+        ? "Company KYC manually verified successfully"
+        : "KYC details updated successfully",
+
+      uploaded_documents: uploadedDocs,
+
+      company: updatedCompanyRows[0],
+    });
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // Ignore rollback error
+    }
+
+    console.error("SUPERADMIN SAVE KYC DETAILS ERROR:", error);
+
+    return res.status(500).json({
+      message: "Failed to save KYC details",
+      error: error.message,
+    });
+  } finally {
+    connection.release();
+  }
+};
+
+export const addOrUpdateVerifiedKycDetails = saveSuperAdminKycDetails;
 
 export const rejectKyc = async (req, res) => {
   const connection = await db.getConnection();
 
   try {
     const { companyId } = req.params;
+
     const userId = req.user.id;
+
     const { reason } = req.body;
 
     if (!reason?.trim()) {
@@ -1282,17 +1559,12 @@ export const rejectKyc = async (req, res) => {
   }
 };
 
-/*
-|--------------------------------------------------------------------------
-| SUPER ADMIN - UNBLOCK COMPANY
-|--------------------------------------------------------------------------
-*/
-
 export const unblockCompany = async (req, res) => {
   const connection = await db.getConnection();
 
   try {
     const companyId = Number(req.params.companyId);
+
     const userId = req.user?.id;
 
     if (!Number.isInteger(companyId) || companyId <= 0) {
@@ -1311,12 +1583,12 @@ export const unblockCompany = async (req, res) => {
 
     const [companyRows] = await connection.query(
       `
-      SELECT id, kyc_status
-      FROM tbl_companies
-      WHERE id = ?
-      LIMIT 1
-      FOR UPDATE
-      `,
+        SELECT id, kyc_status
+        FROM tbl_companies
+        WHERE id = ?
+        LIMIT 1
+        FOR UPDATE
+        `,
       [companyId],
     );
 

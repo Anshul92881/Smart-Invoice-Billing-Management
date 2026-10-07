@@ -470,7 +470,7 @@ const createQuotationNumber = async (connection, companyId) => {
       nextNumber = parsedNumber + 1;
     }
   }
-
+  console.log(`${quotationPrefix}-${String(nextNumber).padStart(4, "0")}`);
   return `${quotationPrefix}-${String(nextNumber).padStart(4, "0")}`;
 };
 
@@ -1900,7 +1900,7 @@ export const pushQuotationToCrm = async (req, res) => {
       .trim()
       .replace(/\/api+$/, "");
 
-      console.log("VITE_API_BASE_URL:", backendPublicUrl);
+    console.log("VITE_API_BASE_URL:", backendPublicUrl);
 
     if (!backendPublicUrl) {
       return res.status(500).json({
@@ -1996,11 +1996,7 @@ export const updateQuotation = async (req, res) => {
     transactionStarted = true;
 
     // Existing quotation
-    const existingQuotation = await getQuotationCore(
-      connection,
-      id,
-      companyId,
-    );
+    const existingQuotation = await getQuotationCore(connection, id, companyId);
 
     if (!existingQuotation) {
       await connection.rollback();
@@ -2057,10 +2053,7 @@ export const updateQuotation = async (req, res) => {
     let finalBranchId = branch_id ? Number(branch_id) : null;
 
     if (!finalBranchId) {
-      finalBranchId = await getMainBranchId(
-        connection,
-        companyId,
-      );
+      finalBranchId = await getMainBranchId(connection, companyId);
     }
 
     if (!finalBranchId) {
@@ -2072,11 +2065,7 @@ export const updateQuotation = async (req, res) => {
       });
     }
 
-    const branch = await validateBranch(
-      connection,
-      finalBranchId,
-      companyId,
-    );
+    const branch = await validateBranch(connection, finalBranchId, companyId);
 
     if (!branch) {
       await connection.rollback();
@@ -2105,17 +2094,12 @@ export const updateQuotation = async (req, res) => {
       transactionStarted = false;
 
       return res.status(400).json({
-        message:
-          "Customer must be active and belong to the same company",
+        message: "Customer must be active and belong to the same company",
       });
     }
 
     // Recalculate items from backend
-    const calculated = await buildCalculatedItems(
-      connection,
-      items,
-      companyId,
-    );
+    const calculated = await buildCalculatedItems(connection, items, companyId);
 
     if (calculated.error) {
       await connection.rollback();
@@ -2126,11 +2110,7 @@ export const updateQuotation = async (req, res) => {
       });
     }
 
-    const {
-      calculatedItems,
-      subtotal,
-      taxAmount,
-    } = calculated;
+    const { calculatedItems, subtotal, taxAmount } = calculated;
 
     const discount = toNumber(discount_amount);
 
@@ -2139,13 +2119,11 @@ export const updateQuotation = async (req, res) => {
       transactionStarted = false;
 
       return res.status(400).json({
-        message:
-          "Discount cannot be greater than quotation amount",
+        message: "Discount cannot be greater than quotation amount",
       });
     }
 
-    const totalAmount =
-      subtotal + taxAmount - discount;
+    const totalAmount = subtotal + taxAmount - discount;
 
     // Updated snapshot
     const snapshot = await buildDocumentSnapshot(
@@ -2154,8 +2132,7 @@ export const updateQuotation = async (req, res) => {
       finalBranchId,
     );
 
-    const billingTemplateSnapshot =
-      JSON.stringify(snapshot);
+    const billingTemplateSnapshot = JSON.stringify(snapshot);
 
     // IMPORTANT:
     // quotation_number change nahi hoga
@@ -2181,8 +2158,7 @@ export const updateQuotation = async (req, res) => {
       [
         customer_id,
         finalBranchId,
-        quotation_date ||
-          existingQuotation.quotation_date,
+        quotation_date || existingQuotation.quotation_date,
         expiry_date || null,
         subtotal,
         taxAmount,
@@ -2263,8 +2239,7 @@ export const updateQuotation = async (req, res) => {
 
         document: {
           id: Number(id),
-          quotation_number:
-            existingQuotation.quotation_number,
+          quotation_number: existingQuotation.quotation_number,
         },
 
         companyId,
@@ -2278,22 +2253,12 @@ export const updateQuotation = async (req, res) => {
         WHERE id = ?
         AND company_id = ?
         `,
-        [
-          savedPdf.publicPath,
-          id,
-          companyId,
-        ],
+        [savedPdf.publicPath, id, companyId],
       );
 
-      console.log(
-        "Updated quotation PDF saved:",
-        savedPdf.publicPath,
-      );
+      console.log("Updated quotation PDF saved:", savedPdf.publicPath);
     } catch (pdfError) {
-      console.error(
-        "UPDATED QUOTATION PDF SAVE ERROR:",
-        pdfError.message,
-      );
+      console.error("UPDATED QUOTATION PDF SAVE ERROR:", pdfError.message);
     }
 
     emitDashboardUpdate({
@@ -2303,8 +2268,7 @@ export const updateQuotation = async (req, res) => {
     return res.json({
       message: "Quotation updated successfully",
       quotation_id: Number(id),
-      quotation_number:
-        existingQuotation.quotation_number,
+      quotation_number: existingQuotation.quotation_number,
       status: existingQuotation.status,
       pdf_saved: Boolean(savedPdf),
       pdf_path: savedPdf?.publicPath || null,
@@ -2314,10 +2278,7 @@ export const updateQuotation = async (req, res) => {
       await connection.rollback();
     }
 
-    console.error(
-      "UPDATE QUOTATION ERROR:",
-      error,
-    );
+    console.error("UPDATE QUOTATION ERROR:", error);
 
     return res.status(500).json({
       message: "Failed to update quotation",

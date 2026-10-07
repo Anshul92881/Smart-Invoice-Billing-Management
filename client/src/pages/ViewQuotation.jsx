@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+
 import api from "../services/api";
 import toast from "react-hot-toast";
 import DocumentRenderer from "./DocumentRenderer";
@@ -117,9 +118,7 @@ function ViewQuotation() {
       setQuotation(res.data?.quotation || null);
       setItems(safeArray(res.data?.items));
     } catch (error) {
-      toast.error(
-        error.response?.data?.message || "Failed to fetch quotation",
-      );
+      toast.error(error.response?.data?.message || "Failed to fetch quotation");
 
       setQuotation(null);
       setItems([]);
@@ -130,6 +129,7 @@ function ViewQuotation() {
 
   useEffect(() => {
     fetchQuotation();
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -162,20 +162,13 @@ function ViewQuotation() {
 
       await fetchQuotation();
     } catch (error) {
-      toast.error(
-        error.response?.data?.message || "Failed to update status",
-      );
+      toast.error(error.response?.data?.message || "Failed to update status");
     } finally {
       setStatusUpdating(false);
     }
   };
 
-  const confirmAction = ({
-    title,
-    description,
-    confirmText,
-    onConfirm,
-  }) => {
+  const confirmAction = ({ title, description, confirmText, onConfirm }) => {
     toast(
       (t) => (
         <div className="flex w-full min-w-0 max-w-[340px] flex-col gap-3 sm:min-w-[320px]">
@@ -232,17 +225,14 @@ function ViewQuotation() {
       description:
         "This quotation will be converted into an invoice using the same saved template.",
       confirmText: "Convert",
+
       onConfirm: async () => {
         try {
           setConverting(true);
 
-          const res = await api.post(
-            `/quotations/${id}/convert-to-invoice`,
-          );
+          const res = await api.post(`/quotations/${id}/convert-to-invoice`);
 
-          toast.success(
-            res.data?.message || "Converted to invoice",
-          );
+          toast.success(res.data?.message || "Converted to invoice");
 
           if (res.data?.invoice_id) {
             navigate("/dashboard/invoices");
@@ -251,8 +241,7 @@ function ViewQuotation() {
           }
         } catch (error) {
           toast.error(
-            error.response?.data?.message ||
-              "Failed to convert quotation",
+            error.response?.data?.message || "Failed to convert quotation",
           );
         } finally {
           setConverting(false);
@@ -272,20 +261,14 @@ function ViewQuotation() {
     try {
       setSendingEmail(true);
 
-      const res = await api.post(
-        `/quotations/send-email/${id}`,
-      );
+      const res = await api.post(`/quotations/send-email/${id}`);
 
-      toast.success(
-        res.data?.message ||
-          "Quotation email sent successfully",
-      );
+      toast.success(res.data?.message || "Quotation email sent successfully");
 
       await fetchQuotation();
     } catch (error) {
       toast.error(
-        error.response?.data?.message ||
-          "Failed to send quotation email",
+        error.response?.data?.message || "Failed to send quotation email",
       );
     } finally {
       setSendingEmail(false);
@@ -298,12 +281,9 @@ function ViewQuotation() {
     try {
       setDownloading(true);
 
-      const res = await api.get(
-        `/quotations/${id}/download`,
-        {
-          responseType: "blob",
-        },
-      );
+      const res = await api.get(`/quotations/${id}/download`, {
+        responseType: "blob",
+      });
 
       const blob = new Blob([res.data], {
         type: "application/pdf",
@@ -314,10 +294,7 @@ function ViewQuotation() {
 
       link.href = fileUrl;
 
-      link.download = `${
-        quotation.quotation_number ||
-        `quotation-${id}`
-      }.pdf`;
+      link.download = `${quotation.quotation_number || `quotation-${id}`}.pdf`;
 
       document.body.appendChild(link);
 
@@ -327,8 +304,7 @@ function ViewQuotation() {
       window.URL.revokeObjectURL(fileUrl);
     } catch (error) {
       toast.error(
-        error.response?.data?.message ||
-          "Failed to download quotation PDF",
+        error.response?.data?.message || "Failed to download quotation PDF",
       );
     } finally {
       setDownloading(false);
@@ -341,23 +317,16 @@ function ViewQuotation() {
     try {
       setPushingToCrm(true);
 
-      const response = await api.post(
-        `/quotations/${id}/push-to-crm`,
-      );
+      const response = await api.post(`/quotations/${id}/push-to-crm`);
 
       toast.success(
-        response.data?.message ||
-          "Quotation pushed to CRM successfully",
+        response.data?.message || "Quotation pushed to CRM successfully",
       );
     } catch (error) {
-      console.error(
-        "PUSH QUOTATION TO CRM ERROR:",
-        error,
-      );
+      console.error("PUSH QUOTATION TO CRM ERROR:", error);
 
       toast.error(
-        error.response?.data?.message ||
-          "Failed to push quotation to CRM",
+        error.response?.data?.message || "Failed to push quotation to CRM",
       );
     } finally {
       setPushingToCrm(false);
@@ -365,18 +334,12 @@ function ViewQuotation() {
   };
 
   const snapshot = useMemo(
-    () =>
-      safeJson(
-        quotation?.billing_template_snapshot,
-      ),
+    () => safeJson(quotation?.billing_template_snapshot),
     [quotation],
   );
 
   const template = useMemo(
-    () =>
-      safeTemplate(
-        quotation?.billing_template_snapshot,
-      ),
+    () => safeTemplate(quotation?.billing_template_snapshot),
     [quotation],
   );
 
@@ -385,40 +348,20 @@ function ViewQuotation() {
 
     return {
       ...company,
-      name:
-        company.name ||
-        quotation?.business_name ||
-        "Your Company",
 
-      address:
-        company.address ||
-        quotation?.business_address ||
-        "",
+      name: company.name || quotation?.business_name || "Your Company",
 
-      email:
-        company.email ||
-        quotation?.business_email ||
-        "",
+      address: company.address || quotation?.business_address || "",
 
-      phone:
-        company.phone ||
-        quotation?.business_phone ||
-        "",
+      email: company.email || quotation?.business_email || "",
 
-      gst_number:
-        company.gst_number ||
-        quotation?.business_gst_number ||
-        "",
+      phone: company.phone || quotation?.business_phone || "",
 
-      pan_number:
-        company.pan_number ||
-        quotation?.business_pan_number ||
-        "",
+      gst_number: company.gst_number || quotation?.business_gst_number || "",
 
-      logo:
-        company.logo ||
-        quotation?.business_logo ||
-        "",
+      pan_number: company.pan_number || quotation?.business_pan_number || "",
+
+      logo: company.logo || quotation?.business_logo || "",
     };
   }, [snapshot, quotation]);
 
@@ -428,45 +371,29 @@ function ViewQuotation() {
     return {
       ...branch,
 
-      branch_name:
-        branch.branch_name ||
-        quotation?.branch_name ||
-        "",
+      branch_name: branch.branch_name || quotation?.branch_name || "",
 
-      branch_code:
-        branch.branch_code ||
-        quotation?.branch_code ||
-        "",
+      branch_code: branch.branch_code || quotation?.branch_code || "",
     };
   }, [snapshot, quotation]);
 
-  const rendererBank = useMemo(
-    () => snapshot.bank || {},
-    [snapshot],
-  );
+  const rendererBank = useMemo(() => snapshot.bank || {}, [snapshot]);
 
   const rendererCustomer = useMemo(
     () => ({
-      customer_name:
-        quotation?.customer_name || "",
+      customer_name: quotation?.customer_name || "",
 
-      company_name:
-        quotation?.company_name || "",
+      company_name: quotation?.company_name || "",
 
-      billing_address:
-        quotation?.billing_address || "",
+      billing_address: quotation?.billing_address || "",
 
-      shipping_address:
-        quotation?.shipping_address || "",
+      shipping_address: quotation?.shipping_address || "",
 
-      gstin:
-        quotation?.gstin || "",
+      gstin: quotation?.gstin || "",
 
-      email:
-        quotation?.email || "",
+      email: quotation?.email || "",
 
-      phone:
-        quotation?.phone || "",
+      phone: quotation?.phone || "",
     }),
     [quotation],
   );
@@ -505,15 +432,12 @@ function ViewQuotation() {
         </h2>
 
         <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-slate-500 dark:text-slate-400 sm:text-sm">
-          This quotation may have been deleted or is no longer
-          available.
+          This quotation may have been deleted or is no longer available.
         </p>
 
         <button
           type="button"
-          onClick={() =>
-            navigate("/dashboard/quotations")
-          }
+          onClick={() => navigate("/dashboard/quotations")}
           className="mt-5 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 sm:w-auto"
         >
           Back to Quotations
@@ -522,104 +446,50 @@ function ViewQuotation() {
     );
   }
 
-  const canEdit = ["draft", "sent"].includes(
+  const canEdit = ["draft", "sent"].includes(quotation.status);
+
+  const canConvert = !BLOCKED_CONVERT_STATUSES.includes(quotation.status);
+
+  const canEmail = !BLOCKED_EMAIL_STATUSES.includes(quotation.status);
+
+  const canChangeStatus = !["converted", "cancelled"].includes(
     quotation.status,
   );
-
-  const canConvert =
-    !BLOCKED_CONVERT_STATUSES.includes(
-      quotation.status,
-    );
-
-  const canEmail =
-    !BLOCKED_EMAIL_STATUSES.includes(
-      quotation.status,
-    );
-
-  const canChangeStatus = ![
-    "converted",
-    "cancelled",
-  ].includes(quotation.status);
 
   return (
     <div
       className={`w-full min-w-0 max-w-full ${
-        isPrint
-          ? "bg-white p-0"
-          : "space-y-3 sm:space-y-4 lg:space-y-5"
+        isPrint ? "bg-white p-0" : "space-y-3 sm:space-y-4 lg:space-y-5"
       }`}
     >
       {!isPrint && (
-        <div className="no-print w-full rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-4 lg:p-5">
-          <div className="flex min-w-0 flex-col gap-4">
-            {/* Header */}
-            <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-blue-700 dark:text-blue-300 sm:text-sm">
-                  <FileText
-                    size={16}
-                    className="shrink-0"
-                  />
-
-                  <span>
-                    Quotation Details
-                  </span>
-                </div>
-
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <h1 className="min-w-0 max-w-full truncate text-xl font-semibold text-slate-900 dark:text-white sm:text-2xl">
-                    {quotation.quotation_number ||
-                      `Quotation #${id}`}
-                  </h1>
-
-                  <StatusBadge
-                    status={quotation.status}
-                  />
-                </div>
+        <div className="no-print rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
+                <FileText size={17} />
+                Quotation Preview
               </div>
 
-              {/* Desktop primary navigation */}
-              <div className="hidden shrink-0 lg:flex lg:items-center lg:gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate(
-                      "/dashboard/quotations",
-                    )
-                  }
-                  className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                >
-                  <ArrowLeft size={16} />
-                  Back
-                </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="truncate text-2xl font-bold text-slate-900 dark:text-white">
+                  {quotation.quotation_number || `Quotation #${id}`}
+                </h1>
 
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate(
-                        `/dashboard/quotations/${id}/edit`,
-                      )
-                    }
-                    className="flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700"
-                  >
-                    <Pencil size={16} />
-                    Edit
-                  </button>
-                )}
+                <StatusBadge status={quotation.status} />
               </div>
+
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                Review quotation, update status, download PDF, send email or
+                convert to invoice.
+              </p>
             </div>
 
-            {/* Mobile / tablet Back + Edit */}
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:hidden">
+            <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap xl:justify-end">
               <button
                 type="button"
-                onClick={() =>
-                  navigate(
-                    "/dashboard/quotations",
-                  )
-                }
-                className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                onClick={() => navigate("/dashboard/quotations")}
+                className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <ArrowLeft size={16} />
                 Back
@@ -628,146 +498,80 @@ function ViewQuotation() {
               {canEdit && (
                 <button
                   type="button"
-                  onClick={() =>
-                    navigate(
-                      `/dashboard/quotations/${id}/edit`,
-                    )
-                  }
-                  className="flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700"
+                  onClick={() => navigate(`/dashboard/quotations/${id}/edit`)}
+                  title="Edit Quotation"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600"
                 >
-                  <Pencil size={16} />
-                  Edit Quotation
+                  <Pencil size={18} />
                 </button>
               )}
-            </div>
 
-            {/* Actions */}
-            <div className="border-t border-slate-100 pt-3 dark:border-slate-800">
-              <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-                {/* Icon Actions */}
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                  <ActionButton
-                    label={
-                      downloading
-                        ? "Downloading"
-                        : "Download PDF"
-                    }
-                    icon={
-                      <Download
-                        size={17}
-                        className={
-                          downloading
-                            ? "animate-bounce"
-                            : ""
-                        }
-                      />
-                    }
-                    onClick={
-                      downloadQuotationPdf
-                    }
-                    disabled={downloading}
-                    className="bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600"
+              <button
+                type="button"
+                onClick={downloadQuotationPdf}
+                disabled={downloading}
+                title={downloading ? "Downloading..." : "Download PDF"}
+                className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Download
+                  size={18}
+                  className={downloading ? "animate-bounce" : ""}
+                />
+              </button>
+
+              {canEmail && (
+                <button
+                  type="button"
+                  onClick={sendQuotationEmail}
+                  disabled={sendingEmail}
+                  title={sendingEmail ? "Sending..." : "Send Email"}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Mail
+                    size={18}
+                    className={sendingEmail ? "animate-pulse" : ""}
+                  />
+                </button>
+              )}
+
+              {canPushToCrm && (
+                <button
+                  type="button"
+                  onClick={handlePushToCrm}
+                  disabled={pushingToCrm}
+                  title={pushingToCrm ? "Pushing..." : "Push to CRM"}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Send
+                    size={18}
+                    className={pushingToCrm ? "animate-pulse" : ""}
+                  />
+                </button>
+              )}
+
+              <div className="w-[132px] shrink-0">
+                <StatusDropdown
+                  value={quotation.status}
+                  disabled={statusUpdating || !canChangeStatus}
+                  onChange={updateStatus}
+                />
+              </div>
+
+              {canConvert && (
+                <button
+                  type="button"
+                  onClick={convertToInvoice}
+                  disabled={converting}
+                  className="flex h-11 min-w-[158px] shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Repeat
+                    size={16}
+                    className={converting ? "animate-spin" : ""}
                   />
 
-                  {canEmail && (
-                    <ActionButton
-                      label={
-                        sendingEmail
-                          ? "Sending..."
-                          : "Send Email"
-                      }
-                      icon={
-                        <Mail
-                          size={17}
-                          className={
-                            sendingEmail
-                              ? "animate-pulse"
-                              : ""
-                          }
-                        />
-                      }
-                      onClick={
-                        sendQuotationEmail
-                      }
-                      disabled={sendingEmail}
-                      className="bg-emerald-600 text-white hover:bg-emerald-700"
-                    />
-                  )}
-
-                  {canPushToCrm && (
-                    <ActionButton
-                      label={
-                        pushingToCrm
-                          ? "Pushing..."
-                          : "Push to CRM"
-                      }
-                      icon={
-                        <Send
-                          size={17}
-                          className={
-                            pushingToCrm
-                              ? "animate-pulse"
-                              : ""
-                          }
-                        />
-                      }
-                      onClick={
-                        handlePushToCrm
-                      }
-                      disabled={pushingToCrm}
-                      className="bg-violet-600 text-white hover:bg-violet-700"
-                    />
-                  )}
-                </div>
-
-                {/* Status + Convert */}
-                <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:flex xl:items-end">
-                  <div className="min-w-0 md:min-w-[190px]">
-                    <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Change Status
-                    </label>
-
-                    <StatusDropdown
-                      value={
-                        quotation.status
-                      }
-                      disabled={
-                        statusUpdating ||
-                        !canChangeStatus
-                      }
-                      onChange={
-                        updateStatus
-                      }
-                    />
-                  </div>
-
-                  {canConvert && (
-                    <button
-                      type="button"
-                      onClick={
-                        convertToInvoice
-                      }
-                      disabled={converting}
-                      className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 md:self-end xl:w-auto xl:min-w-[180px]"
-                    >
-                      <Repeat
-                        size={16}
-                        className={
-                          converting
-                            ? "animate-spin"
-                            : ""
-                        }
-                      />
-
-                      <span className="truncate">
-                        {converting
-                          ? "Converting..."
-                          : "Convert to Invoice"}
-                      </span>
-                    </button>
-                  )}
-                </div>
-              </div>
+                  {converting ? "Converting..." : "Convert to Invoice"}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -779,23 +583,17 @@ function ViewQuotation() {
         className={`print-area w-full min-w-0 ${
           isPrint
             ? "overflow-visible border-0 bg-white p-0 shadow-none"
-            : "rounded-2xl border border-slate-200 bg-slate-100 p-2 shadow-inner dark:border-slate-800 dark:bg-slate-950 sm:p-3 md:p-4 lg:rounded-3xl lg:p-5"
+            : "overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 p-1.5 shadow-inner dark:border-slate-800 dark:bg-slate-950 sm:p-3 md:p-4 lg:rounded-3xl lg:p-5"
         }`}
       >
         <div
           className={
             isPrint
               ? "w-full"
-              : "mx-auto w-full min-w-0 overflow-x-auto rounded-xl"
+              : "quotation-preview-viewport mx-auto w-full min-w-0 overflow-hidden rounded-xl"
           }
         >
-          <div
-            className={
-              isPrint
-                ? "w-full"
-                : "mx-auto w-full min-w-0"
-            }
-          >
+          <div className={isPrint ? "w-full" : "mx-auto w-full min-w-0"}>
             <DocumentRenderer
               type="quotation"
               template={template}
@@ -806,9 +604,7 @@ function ViewQuotation() {
               document={quotation}
               items={items}
               className={
-                isPrint
-                  ? "print-document"
-                  : "quotation-document-preview"
+                isPrint ? "print-document" : "quotation-document-preview"
               }
             />
           </div>
@@ -819,42 +615,90 @@ function ViewQuotation() {
         ${
           !isPrint
             ? `
-              .quotation-document-preview {
+              .quotation-preview-viewport {
                 width: 100%;
                 max-width: 100%;
-                margin-left: auto;
-                margin-right: auto;
+                overflow: hidden;
               }
 
-              .quotation-document-preview img {
-                max-width: 100%;
+              .quotation-document-preview {
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                margin-left: auto;
+                margin-right: auto;
+                box-sizing: border-box;
+              }
+
+              .quotation-document-preview > * {
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                box-sizing: border-box;
+              }
+
+              .quotation-document-preview img,
+              .quotation-document-preview svg {
+                max-width: 100% !important;
                 height: auto;
               }
 
               .quotation-document-preview table {
-                width: 100%;
-                max-width: 100%;
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                table-layout: fixed;
+              }
+
+              .quotation-document-preview th,
+              .quotation-document-preview td {
+                overflow-wrap: anywhere;
+                word-break: break-word;
               }
 
               @media (max-width: 639px) {
                 .quotation-document-preview {
-                  font-size: 11px;
+                  font-size: 10px !important;
+                }
+
+                .quotation-document-preview > *,
+                .quotation-document-preview > * > * {
+                  min-width: 0 !important;
+                  max-width: 100% !important;
                 }
 
                 .quotation-document-preview table {
-                  font-size: 10px;
+                  width: 100% !important;
+                  min-width: 0 !important;
+                  font-size: 9px !important;
+                  table-layout: fixed;
                 }
 
                 .quotation-document-preview th,
                 .quotation-document-preview td {
-                  padding-left: 4px !important;
-                  padding-right: 4px !important;
+                  padding: 4px 3px !important;
+                  font-size: 9px !important;
+                  line-height: 1.3 !important;
+                  white-space: normal !important;
+                  overflow-wrap: anywhere !important;
+                  word-break: break-word !important;
+                }
+
+                .quotation-document-preview p,
+                .quotation-document-preview span,
+                .quotation-document-preview div {
+                  max-width: 100%;
+                  overflow-wrap: anywhere;
                 }
               }
 
               @media (min-width: 640px) and (max-width: 1023px) {
                 .quotation-document-preview {
                   font-size: 12px;
+                }
+
+                .quotation-document-preview table {
+                  font-size: 11px;
                 }
               }
             `
@@ -987,22 +831,14 @@ function ActionButton({
       title={label}
       className={`flex h-10 min-w-0 items-center justify-center gap-2 rounded-xl px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:text-sm ${className}`}
     >
-      <span className="shrink-0">
-        {icon}
-      </span>
+      <span className="shrink-0">{icon}</span>
 
-      <span className="truncate">
-        {label}
-      </span>
+      <span className="truncate">{label}</span>
     </button>
   );
 }
 
-function StatusDropdown({
-  value,
-  onChange,
-  disabled = false,
-}) {
+function StatusDropdown({ value, onChange, disabled = false }) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -1019,55 +855,34 @@ function StatusDropdown({
       : []),
   ];
 
-  const selected =
-    options.find(
-      (option) => option.value === value,
-    ) || {
-      value,
-      label: value || "Draft",
-    };
+  const selected = options.find((option) => option.value === value) || {
+    value,
+    label: value || "Draft",
+  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(
-          event.target,
-        )
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setOpen(false);
       }
     };
 
-    document.addEventListener(
-      "mousedown",
-      handleClickOutside,
-    );
+    document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
-      document.removeEventListener(
-        "mousedown",
-        handleClickOutside,
-      );
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
 
   return (
-    <div
-      ref={dropdownRef}
-      className="relative w-full min-w-0"
-    >
+    <div ref={dropdownRef} className="relative w-full min-w-0">
       <button
         type="button"
         disabled={disabled}
-        onClick={() =>
-          setOpen((prev) => !prev)
-        }
-        className="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
       >
-        <span className="min-w-0 truncate capitalize">
-          {selected.label}
-        </span>
+        <span className="min-w-0 truncate capitalize">{selected.label}</span>
 
         <ChevronDown
           size={17}
@@ -1079,42 +894,30 @@ function StatusDropdown({
 
       {open && !disabled && (
         <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-[100] max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          {ALLOWED_STATUS_OPTIONS.map(
-            (option) => {
-              const active =
-                option.value === value;
+          {ALLOWED_STATUS_OPTIONS.map((option) => {
+            const active = option.value === value;
 
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => {
-                    onChange(
-                      option.value,
-                    );
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  onChange(option.value);
 
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${
-                    active
-                      ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-                      : "text-slate-700 hover:bg-slate-50 hover:text-blue-700 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-blue-300"
-                  }`}
-                >
-                  <span>
-                    {option.label}
-                  </span>
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition ${
+                  active
+                    ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                    : "text-slate-700 hover:bg-slate-50 hover:text-blue-700 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-blue-300"
+                }`}
+              >
+                <span>{option.label}</span>
 
-                  {active && (
-                    <CheckCircle2
-                      size={16}
-                      className="shrink-0"
-                    />
-                  )}
-                </button>
-              );
-            },
-          )}
+                {active && <CheckCircle2 size={16} className="shrink-0" />}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -1123,17 +926,14 @@ function StatusDropdown({
 
 function StatusBadge({ status }) {
   const styles = {
-    draft:
-      "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+    draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
 
-    sent:
-      "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
+    sent: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
 
     accepted:
       "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
 
-    rejected:
-      "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300",
+    rejected: "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300",
 
     expired:
       "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",

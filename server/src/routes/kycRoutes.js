@@ -3,7 +3,9 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 
-import authMiddleware, { authorizeRoles } from "../middlewares/authMiddleware.js";
+import authMiddleware, {
+  authorizeRoles,
+} from "../middlewares/authMiddleware.js";
 
 import {
   getMyKycStatus,
@@ -11,10 +13,12 @@ import {
   getAllKycRequests,
   getKycRequestByCompany,
   uploadSuperAdminKycDocuments,
+  saveSuperAdminKycDetails,
+  addOrUpdateVerifiedKycDetails,
   rejectKyc,
   unblockCompany,
   skipKyc,
-  } from "../controllers/kycController.js";
+} from "../controllers/kycController.js";
 
 import {
   sendAadhaarOtp,
@@ -26,10 +30,16 @@ import {
 
 const router = express.Router();
 
-const kycUploadDir = path.join(process.cwd(), "upload", "kyc-documents");
+const kycUploadDir = path.join(
+  process.cwd(),
+  "upload",
+  "kyc-documents",
+);
 
 if (!fs.existsSync(kycUploadDir)) {
-  fs.mkdirSync(kycUploadDir, { recursive: true });
+  fs.mkdirSync(kycUploadDir, {
+    recursive: true,
+  });
 }
 
 const storage = multer.diskStorage({
@@ -38,7 +48,9 @@ const storage = multer.diskStorage({
   },
 
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
+    const ext = path
+      .extname(file.originalname)
+      .toLowerCase();
 
     const fileName = `${Date.now()}-${Math.floor(
       100000 + Math.random() * 900000,
@@ -60,36 +72,67 @@ const fileFilter = (req, file, cb) => {
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error("Only PDF, JPG, PNG and WEBP files are allowed"), false);
+    cb(
+      new Error(
+        "Only PDF, JPG, PNG and WEBP files are allowed",
+      ),
+      false,
+    );
   }
 };
 
 const upload = multer({
   storage,
+
   fileFilter,
+
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
 });
 
 const kycFiles = upload.fields([
-  { name: "aadhaar_card", maxCount: 1 },
-  { name: "pan_card", maxCount: 1 },
-  { name: "gst_certificate", maxCount: 1 },
-  { name: "tan_document", maxCount: 1 },
+  {
+    name: "aadhaar_card",
+    maxCount: 1,
+  },
+  {
+    name: "pan_card",
+    maxCount: 1,
+  },
+  {
+    name: "gst_certificate",
+    maxCount: 1,
+  },
+  {
+    name: "tan_document",
+    maxCount: 1,
+  },
 ]);
 
-const handleKycFiles = (req, res, next) => {
+const handleKycFiles = (
+  req,
+  res,
+  next,
+) => {
   kycFiles(req, res, (error) => {
     if (error) {
       return res.status(400).json({
-        message: error.message || "KYC file upload failed",
+        message:
+          error.message ||
+          "KYC file upload failed",
       });
     }
 
     next();
   });
 };
+
+/*
+|--------------------------------------------------------------------------
+| AUTHENTICATION
+|--------------------------------------------------------------------------
+*/
 
 router.use(authMiddleware);
 
@@ -99,9 +142,17 @@ router.use(authMiddleware);
 |--------------------------------------------------------------------------
 */
 
-router.get("/my-status", authorizeRoles("company_admin"), getMyKycStatus);
+router.get(
+  "/my-status",
+  authorizeRoles("company_admin"),
+  getMyKycStatus,
+);
 
-router.post("/skip", authMiddleware, skipKyc);
+router.post(
+  "/skip",
+  authorizeRoles("company_admin"),
+  skipKyc,
+);
 
 router.post(
   "/upload",
@@ -122,9 +173,23 @@ router.post(
   verifyAadhaarOtp,
 );
 
-router.post("/pan/verify", authorizeRoles("company_admin"), verifyPan);
-router.post("/gst/verify", authorizeRoles("company_admin"), verifyGst);
-router.post("/tan/verify", authorizeRoles("company_admin"), verifyTan);
+router.post(
+  "/pan/verify",
+  authorizeRoles("company_admin"),
+  verifyPan,
+);
+
+router.post(
+  "/gst/verify",
+  authorizeRoles("company_admin"),
+  verifyGst,
+);
+
+router.post(
+  "/tan/verify",
+  authorizeRoles("company_admin"),
+  verifyTan,
+);
 
 /*
 |--------------------------------------------------------------------------
@@ -132,13 +197,57 @@ router.post("/tan/verify", authorizeRoles("company_admin"), verifyTan);
 |--------------------------------------------------------------------------
 */
 
-router.get("/requests", authorizeRoles("superadmin"), getAllKycRequests);
+router.get(
+  "/requests",
+  authorizeRoles("superadmin"),
+  getAllKycRequests,
+);
 
 router.get(
   "/requests/:companyId",
   authorizeRoles("superadmin"),
   getKycRequestByCompany,
 );
+
+/*
+|--------------------------------------------------------------------------
+| SUPER ADMIN - UNIFIED KYC DETAILS
+|--------------------------------------------------------------------------
+|
+| This is the main SuperAdmin KYC endpoint.
+|
+| Used for:
+|
+| pending / submitted / rejected / blocked
+| -> manual verification + activation
+|
+| approved / manual_verified
+| -> only update KYC details/documents
+|
+|--------------------------------------------------------------------------
+*/
+
+router.patch(
+  "/superadmin/:companyId/kyc-details",
+  authorizeRoles("superadmin"),
+  handleKycFiles,
+  saveSuperAdminKycDetails,
+);
+
+/*
+|--------------------------------------------------------------------------
+| LEGACY SUPER ADMIN KYC ROUTES
+|--------------------------------------------------------------------------
+|
+| Keep temporarily during migration/testing.
+|
+| Frontend should NOT use these anymore.
+|
+| Remove only after the new /kyc-details flow
+| has been fully tested.
+|
+|--------------------------------------------------------------------------
+*/
 
 router.post(
   "/superadmin/:companyId/upload",
@@ -147,12 +256,21 @@ router.post(
   uploadSuperAdminKycDocuments,
 );
 
+router.patch(
+  "/superadmin/:companyId/verified-details",
+  authorizeRoles("superadmin"),
+  handleKycFiles,
+  addOrUpdateVerifiedKycDetails,
+);
+
 /*
 |--------------------------------------------------------------------------
-| SUPER ADMIN MANUAL KYC VERIFICATION
+| SUPER ADMIN KYC VERIFICATION APIs
 |--------------------------------------------------------------------------
-| Used by:
-| /superadmin/kyc/:companyId/manual
+|
+| Existing API verification routes.
+| Do not change during unified KYC migration.
+|
 |--------------------------------------------------------------------------
 */
 

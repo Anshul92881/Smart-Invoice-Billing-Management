@@ -17,7 +17,6 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Upload,
   FileText,
   ChevronDown,
   CheckCircle2,
@@ -62,9 +61,17 @@ function CompanyKyc() {
 
   const [actionLoading, setActionLoading] = useState("");
 
-  const [showManualKycModal, setShowManualKycModal] = useState(false);
+  const [showKycDetailsModal, setShowKycDetailsModal] = useState(false);
 
-  const [manualKycFiles, setManualKycFiles] = useState({
+  const [kycForm, setKycForm] = useState({
+    pan_number: "",
+
+    gst_number: "",
+
+    tan_number: "",
+  });
+
+  const [kycFiles, setKycFiles] = useState({
     aadhaar_card: null,
 
     pan_card: null,
@@ -173,8 +180,8 @@ function CompanyKyc() {
     setActionLoading("");
   };
 
-  const resetManualKycFiles = () => {
-    setManualKycFiles({
+  const resetKycFiles = () => {
+    setKycFiles({
       aadhaar_card: null,
 
       pan_card: null,
@@ -185,90 +192,188 @@ function CompanyKyc() {
     });
   };
 
-  const openManualKyc = () => {
-    if (!selectedCompanyId) return;
+  const openKycDetails = () => {
+    if (!company || !selectedCompanyId) return;
 
-    resetManualKycFiles();
+    setKycForm({
+      pan_number: company.pan_number || "",
 
-    setShowManualKycModal(true);
+      gst_number: company.gst_number || "",
+
+      tan_number: company.tan_number || "",
+    });
+
+    resetKycFiles();
+
+    setShowKycDetailsModal(true);
   };
 
-  const closeManualKyc = () => {
-    if (actionLoading === "manual_kyc") return;
+  const closeKycDetails = () => {
+    if (actionLoading === "kyc_details") return;
 
-    setShowManualKycModal(false);
-    resetManualKycFiles();
+    setShowKycDetailsModal(false);
+
+    resetKycFiles();
   };
 
-  const handleManualKycFileChange = (event) => {
+  const handleKycInputChange = (event) => {
+    const { name, value } = event.target;
+
+    setKycForm((prev) => ({
+      ...prev,
+
+      [name]: value.toUpperCase(),
+    }));
+  };
+
+  const handleKycFileChange = (event) => {
     const { name, files } = event.target;
+
     const file = files?.[0] || null;
 
     if (!file) {
-      setManualKycFiles((prev) => ({
+      setKycFiles((prev) => ({
         ...prev,
+
         [name]: null,
       }));
+
       return;
     }
 
     const allowedTypes = [
       "application/pdf",
+
       "image/jpeg",
+
       "image/jpg",
+
       "image/png",
+
       "image/webp",
     ];
 
     if (!allowedTypes.includes(file.type)) {
       toast.error("Only PDF, JPG, PNG and WEBP files are allowed");
+
       event.target.value = "";
+
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
       toast.error("File size cannot exceed 5 MB");
+
       event.target.value = "";
+
       return;
     }
 
-    setManualKycFiles((prev) => ({
+    setKycFiles((prev) => ({
       ...prev,
+
       [name]: file,
     }));
   };
 
-  const submitManualKyc = async () => {
-    if (!selectedCompanyId) return;
+  const submitKycDetails = async () => {
+    if (!selectedCompanyId || !company) return;
+
+    const panNumber = kycForm.pan_number.trim().toUpperCase();
+
+    const gstNumber = kycForm.gst_number.trim().toUpperCase();
+
+    const tanNumber = kycForm.tan_number.trim().toUpperCase();
+
+    if (panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber)) {
+      toast.error("Invalid PAN number format");
+
+      return;
+    }
+
+    if (
+      gstNumber &&
+      !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstNumber)
+    ) {
+      toast.error("Invalid GST number format");
+
+      return;
+    }
+
+    if (tanNumber && !/^[A-Z]{4}[0-9]{5}[A-Z]$/.test(tanNumber)) {
+      toast.error("Invalid TAN number format");
+
+      return;
+    }
+
+    const currentPan = String(company.pan_number || "")
+      .trim()
+
+      .toUpperCase();
+
+    const currentGst = String(company.gst_number || "")
+      .trim()
+
+      .toUpperCase();
+
+    const currentTan = String(company.tan_number || "")
+      .trim()
+
+      .toUpperCase();
+
+    const panChanged = panNumber !== currentPan;
+
+    const gstChanged = gstNumber !== currentGst;
+
+    const tanChanged = tanNumber !== currentTan;
+
+    const hasFile = Object.values(kycFiles).some(Boolean);
+
+    if (!panChanged && !gstChanged && !tanChanged && !hasFile) {
+      toast.error("Please change a KYC detail or upload a document");
+
+      return;
+    }
 
     try {
-      setActionLoading("manual_kyc");
+      setActionLoading("kyc_details");
 
       const formData = new FormData();
 
-      Object.entries(manualKycFiles).forEach(([key, file]) => {
+      if (panChanged && panNumber) {
+        formData.append("pan_number", panNumber);
+      }
+
+      if (gstChanged && gstNumber) {
+        formData.append("gst_number", gstNumber);
+      }
+
+      if (tanChanged && tanNumber) {
+        formData.append("tan_number", tanNumber);
+      }
+
+      Object.entries(kycFiles).forEach(([key, file]) => {
         if (file) {
           formData.append(key, file);
         }
       });
 
-      const res = await api.post(
-        `/kyc/superadmin/${selectedCompanyId}/upload`,
+      const res = await api.patch(
+        `/kyc/superadmin/${selectedCompanyId}/kyc-details`,
+
         formData,
       );
 
-      toast.success(
-        res.data?.message || "Company KYC manually verified successfully",
-      );
+      toast.success(res.data?.message || "KYC details saved successfully");
 
-      setShowManualKycModal(false);
-      resetManualKycFiles();
+      setShowKycDetailsModal(false);
+
+      resetKycFiles();
 
       await refreshSelected();
     } catch (error) {
       toast.error(
-        error.response?.data?.message ||
-          "Failed to manually verify company KYC",
+        error.response?.data?.message || "Failed to save KYC details",
       );
     } finally {
       setActionLoading("");
@@ -301,9 +406,7 @@ function CompanyKyc() {
 
   const currentKycStatus = String(company?.kyc_status || "").toLowerCase();
 
-  const canManualKyc =
-    Boolean(company) &&
-    !["approved", "manual_verified"].includes(currentKycStatus);
+  const canManageKyc = Boolean(company);
 
   const canUnblock = currentKycStatus === "blocked";
 
@@ -322,8 +425,8 @@ function CompanyKyc() {
             </h1>
 
             <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
-              Review KYC requests, documents, failed attempts and manual
-              verification flow.
+              Review KYC requests, documents, failed attempts and company KYC
+              details.
             </p>
           </div>
         </div>
@@ -550,22 +653,24 @@ function CompanyKyc() {
           logs={logs}
           detailLoading={detailLoading}
           actionLoading={actionLoading}
-          canManualKyc={canManualKyc}
+          canManageKyc={canManageKyc}
           canUnblock={canUnblock}
-          openManualKyc={openManualKyc}
+          openKycDetails={openKycDetails}
           unblockCompany={unblockCompany}
           closeModal={closeModal}
         />
       )}
 
-      {showManualKycModal && (
-        <ManualKycModal
+      {showKycDetailsModal && (
+        <KycDetailsModal
           company={company}
-          files={manualKycFiles}
-          loading={actionLoading === "manual_kyc"}
-          onFileChange={handleManualKycFileChange}
-          onClose={closeManualKyc}
-          onSubmit={submitManualKyc}
+          form={kycForm}
+          files={kycFiles}
+          loading={actionLoading === "kyc_details"}
+          onInputChange={handleKycInputChange}
+          onFileChange={handleKycFileChange}
+          onClose={closeKycDetails}
+          onSubmit={submitKycDetails}
         />
       )}
     </div>
@@ -583,11 +688,11 @@ function KycDetailModal({
 
   actionLoading,
 
-  canManualKyc,
+  canManageKyc,
 
   canUnblock,
 
-  openManualKyc,
+  openKycDetails,
 
   unblockCompany,
 
@@ -677,6 +782,38 @@ function KycDetailModal({
                 )}
               </div>
 
+              <SectionCard title="KYC Profile Details">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <InfoBox
+                    icon={<FileText size={16} />}
+                    label="PAN Number"
+                    value={company.pan_number || "-"}
+                  />
+
+                  <InfoBox
+                    icon={<FileText size={16} />}
+                    label="GST Number"
+                    value={company.gst_number || "-"}
+                  />
+
+                  <InfoBox
+                    icon={<FileText size={16} />}
+                    label="TAN Number"
+                    value={company.tan_number || "-"}
+                  />
+
+                  <InfoBox
+                    icon={<ShieldCheck size={16} />}
+                    label="Aadhaar"
+                    value={
+                      Number(company.aadhaar_verified || 0) === 1
+                        ? "Verified"
+                        : "Not verified"
+                    }
+                  />
+                </div>
+              </SectionCard>
+
               <SectionCard title="Documents">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   {documents.length > 0 ? (
@@ -686,7 +823,7 @@ function KycDetailModal({
                         className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-white">
+                          <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                             {formatLabel(doc.document_type)}
                           </p>
 
@@ -701,7 +838,7 @@ function KycDetailModal({
 
                           {doc.document_path && (
                             <a
-                              href={`http\://localhost:5000${doc.document_path}`}
+                              href={`http://localhost:5000${doc.document_path}`}
                               target="_blank"
                               rel="noreferrer"
                               className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700"
@@ -729,15 +866,15 @@ function KycDetailModal({
 
               <SectionCard title="Actions">
                 <div className="flex flex-wrap gap-2">
-                  {canManualKyc && (
+                  {canManageKyc && (
                     <button
                       type="button"
-                      onClick={openManualKyc}
+                      onClick={openKycDetails}
                       disabled={Boolean(actionLoading)}
-                      className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      <Upload size={16} />
-                      Manual Verify KYC
+                      <FileText size={16} />
+                      Add / Update KYC Details
                     </button>
                   )}
 
@@ -757,7 +894,7 @@ function KycDetailModal({
                     </button>
                   )}
 
-                  {!canManualKyc && !canUnblock && (
+                  {!canManageKyc && !canUnblock && (
                     <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
                       No actions available for this KYC status.
                     </p>
@@ -1165,31 +1302,40 @@ function formatDate(value) {
   });
 }
 
-function ManualKycModal({
+function KycDetailsModal({
   company,
+
+  form,
+
   files,
+
   loading,
+
+  onInputChange,
+
   onFileChange,
+
   onClose,
+
   onSubmit,
 }) {
-
   return (
     <div className="fixed inset-0 z-[70000] flex items-center justify-center bg-slate-950/65 p-3 backdrop-blur-sm sm:p-4">
-      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5 dark:border-slate-800">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-              <ShieldCheck size={21} />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <FileText size={21} />
             </div>
 
             <div className="min-w-0">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                Manual Verify KYC
+                Add / Update KYC Details
               </h2>
 
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Verify this company. Supporting documents are optional.
+                Add or update KYC numbers and upload supporting documents for
+                this company.
               </p>
             </div>
           </div>
@@ -1198,7 +1344,7 @@ function ManualKycModal({
             type="button"
             onClick={onClose}
             disabled={loading}
-            aria-label="Close manual KYC modal"
+            aria-label="Close KYC details modal"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={18} />
@@ -1206,30 +1352,73 @@ function ManualKycModal({
         </div>
 
         <div className="overflow-y-auto p-5">
-          <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                <Building2 size={18} />
-              </div>
-
+          <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <p className="font-semibold text-slate-900 dark:text-white">
                   {company?.name || "-"}
                 </p>
 
-                <p className="mt-1 truncate text-sm text-slate-500 dark:text-slate-400">
-                  {company?.admin_email || company?.email || "-"}
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  {["approved", "manual_verified"].includes(
+                    String(company?.kyc_status || "").toLowerCase(),
+                  )
+                    ? "Existing KYC status will remain unchanged after this update."
+                    : "Saving these details will complete SuperAdmin KYC verification."}
                 </p>
-
-                <div className="mt-2">
-                  <StatusBadge status={company?.kyc_status} />
-                </div>
               </div>
+
+              <StatusBadge status={company?.kyc_status} />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <ManualDocumentInput
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <KycTextInput
+              label="PAN Number"
+              name="pan_number"
+              value={form.pan_number}
+              placeholder="ABCDE1234F"
+              maxLength={10}
+              disabled={loading}
+              onChange={onInputChange}
+            />
+
+            <KycTextInput
+              label="GST Number"
+              name="gst_number"
+              value={form.gst_number}
+              placeholder="09ABCDE1234F1Z5"
+              maxLength={15}
+              disabled={loading}
+              onChange={onInputChange}
+            />
+
+            <KycTextInput
+              label="TAN Number"
+              name="tan_number"
+              value={form.tan_number}
+              placeholder="DELA12345B"
+              maxLength={10}
+              disabled={loading}
+              onChange={onInputChange}
+            />
+          </div>
+
+          <div className="my-5 border-t border-slate-200 dark:border-slate-800" />
+
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+              Supporting Documents
+            </h3>
+
+            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              Upload the supporting documents available for this company.
+              Existing documents are kept in KYC history.
+            </p>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <KycDocumentInput
               label="Aadhaar Card"
               name="aadhaar_card"
               file={files.aadhaar_card}
@@ -1237,7 +1426,7 @@ function ManualKycModal({
               onChange={onFileChange}
             />
 
-            <ManualDocumentInput
+            <KycDocumentInput
               label="PAN Card"
               name="pan_card"
               file={files.pan_card}
@@ -1245,7 +1434,7 @@ function ManualKycModal({
               onChange={onFileChange}
             />
 
-            <ManualDocumentInput
+            <KycDocumentInput
               label="GST Certificate"
               name="gst_certificate"
               file={files.gst_certificate}
@@ -1253,7 +1442,7 @@ function ManualKycModal({
               onChange={onFileChange}
             />
 
-            <ManualDocumentInput
+            <KycDocumentInput
               label="TAN Document"
               name="tan_document"
               file={files.tan_document}
@@ -1282,17 +1471,17 @@ function ManualKycModal({
             type="button"
             onClick={onSubmit}
             disabled={loading}
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700"
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                Verifying KYC...
+                Saving...
               </>
             ) : (
               <>
                 <CheckCircle2 size={16} />
-                Verify KYC
+                Save KYC Details
               </>
             )}
           </button>
@@ -1302,12 +1491,53 @@ function ManualKycModal({
   );
 }
 
-function ManualDocumentInput({
+function KycTextInput({
   label,
+
   name,
+
+  value,
+
+  placeholder,
+
+  maxLength,
+
+  disabled,
+
+  onChange,
+}) {
+  return (
+    <label className="block min-w-0">
+      <span className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+        {label}
+      </span>
+
+      <input
+        type="text"
+        name={name}
+        value={value}
+        placeholder={placeholder}
+        maxLength={maxLength}
+        disabled={disabled}
+        onChange={onChange}
+        autoComplete="off"
+        className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold uppercase text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-blue-950/50"
+      />
+    </label>
+  );
+}
+
+function KycDocumentInput({
+  label,
+
+  name,
+
   file,
+
   required = false,
+
   disabled = false,
+
   onChange,
 }) {
   return (
