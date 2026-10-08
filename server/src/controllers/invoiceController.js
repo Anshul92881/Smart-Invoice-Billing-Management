@@ -15,6 +15,8 @@ import {
   getSavedDocumentPDFBuffer,
 } from "../utils/documentEngine.js";
 
+import { randomInt } from "node:crypto";
+
 const HSN_SAC_REGEX = /^[0-9]{4,8}$/;
 
 const normalizeText = (value) => {
@@ -110,12 +112,10 @@ const getMainBranchId = async (connection, companyId) => {
 const getCompanyInvoiceConfig = async (connection, companyId) => {
   const [rows] = await connection.query(
     `
-    SELECT
-      invoice_prefix,
-      invoice_start_number
-    FROM tbl_companies
-    WHERE id = ?
-    LIMIT 1
+      SELECT invoice_prefix
+      FROM tbl_companies
+      WHERE id = ?
+      LIMIT 1
     `,
     [companyId],
   );
@@ -123,37 +123,17 @@ const getCompanyInvoiceConfig = async (connection, companyId) => {
   return rows[0] || null;
 };
 
-const generateInvoiceNumber = async (connection, companyId, company) => {
+const generateInvoiceNumber = (company) => {
   const prefix = company.invoice_prefix || "INV";
-  const startNumber = Number(company.invoice_start_number || 1);
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-  const [lastRows] = await connection.query(
-    `
-    SELECT invoice_number
-    FROM tbl_invoices
-    WHERE company_id = ?
-    AND invoice_number LIKE ?
-    ORDER BY id DESC
-    LIMIT 1
-    `,
-    [companyId, `${prefix}-%`],
-  );
+  let randomCode = "";
 
-  let nextNumber = startNumber;
-
-  if (lastRows.length > 0) {
-    const lastNumber = String(lastRows[0].invoice_number || "")
-      .split("-")
-      .pop();
-
-    const parsedNumber = Number(lastNumber);
-
-    if (Number.isInteger(parsedNumber) && parsedNumber >= startNumber) {
-      nextNumber = parsedNumber + 1;
-    }
+  for (let i = 0; i < 6; i++) {
+    randomCode += chars[randomInt(chars.length)];
   }
 
-  return `${prefix}-${String(nextNumber).padStart(4, "0")}`;
+  return `${prefix}-${randomCode}`;
 };
 
 const validateInvoicePayload = ({
@@ -447,11 +427,7 @@ export const createInvoice = async (req, res) => {
     );
 
     const billingTemplateSnapshot = JSON.stringify(snapshot);
-    const invoice_number = await generateInvoiceNumber(
-      connection,
-      company_id,
-      company,
-    );
+    const invoice_number = generateInvoiceNumber(company);
 
     const [duplicateRows] = await connection.query(
       `

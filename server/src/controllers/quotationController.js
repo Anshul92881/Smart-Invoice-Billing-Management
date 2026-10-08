@@ -14,6 +14,8 @@ import {
   getSavedDocumentPDFBuffer,
 } from "../utils/documentEngine.js";
 
+import { randomInt } from "node:crypto";
+
 const ALLOWED_QUOTATION_STATUS = [
   "draft",
   "sent",
@@ -126,10 +128,10 @@ const getQuotationPrefix = async (connection, companyId) => {
 const getInvoiceNumberConfig = async (connection, companyId) => {
   const [rows] = await connection.query(
     `
-    SELECT invoice_prefix, invoice_start_number
-    FROM tbl_companies
-    WHERE id = ?
-    LIMIT 1
+      SELECT invoice_prefix
+      FROM tbl_companies
+      WHERE id = ?
+      LIMIT 1
     `,
     [companyId],
   );
@@ -445,33 +447,15 @@ const buildCalculatedItems = async (connection, items, companyId) => {
 const createQuotationNumber = async (connection, companyId) => {
   const quotationPrefix = await getQuotationPrefix(connection, companyId);
 
-  const [lastRows] = await connection.query(
-    `
-    SELECT quotation_number
-    FROM tbl_quotations
-    WHERE company_id = ?
-    AND quotation_number LIKE ?
-    ORDER BY id DESC
-    LIMIT 1
-    `,
-    [companyId, `${quotationPrefix}-%`],
-  );
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-  let nextNumber = 1;
+  let randomCode = "";
 
-  if (lastRows.length > 0) {
-    const lastNumber = String(lastRows[0].quotation_number || "")
-      .split("-")
-      .pop();
-
-    const parsedNumber = Number(lastNumber);
-
-    if (Number.isInteger(parsedNumber) && parsedNumber > 0) {
-      nextNumber = parsedNumber + 1;
-    }
+  for (let i = 0; i < 6; i++) {
+    randomCode += chars[randomInt(chars.length)];
   }
-  console.log(`${quotationPrefix}-${String(nextNumber).padStart(4, "0")}`);
-  return `${quotationPrefix}-${String(nextNumber).padStart(4, "0")}`;
+
+  return `${quotationPrefix}-${randomCode}`;
 };
 
 const getQuotationCore = async (connection, quotationId, companyId) => {
@@ -1296,36 +1280,15 @@ export const convertQuotationToInvoice = async (req, res) => {
 
     const company = await getInvoiceNumberConfig(connection, companyId);
 
-    const [lastInvoiceRows] = await connection.query(
-      `
-      SELECT invoice_number
-      FROM tbl_invoices
-      WHERE company_id = ?
-      AND invoice_number LIKE ?
-      ORDER BY id DESC
-      LIMIT 1
-      `,
-      [companyId, `${company.invoice_prefix || "INV"}-%`],
-    );
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-    let nextInvoiceNumber = Number(company.invoice_start_number || 1);
+    let randomCode = "";
 
-    if (lastInvoiceRows.length > 0) {
-      const lastNumber = String(lastInvoiceRows[0].invoice_number || "")
-        .split("-")
-        .pop();
-
-      const parsedNumber = Number(lastNumber);
-
-      if (Number.isInteger(parsedNumber) && parsedNumber >= nextInvoiceNumber) {
-        nextInvoiceNumber = parsedNumber + 1;
-      }
+    for (let i = 0; i < 6; i++) {
+      randomCode += chars[randomInt(chars.length)];
     }
 
-    const invoiceNumber = `${company.invoice_prefix || "INV"}-${String(
-      nextInvoiceNumber,
-    ).padStart(4, "0")}`;
-
+    const invoiceNumber = `${company.invoice_prefix || "INV"}-${randomCode}`;
     const invoiceDate = new Date().toISOString().slice(0, 10);
 
     const safeBillingTemplateSnapshot =
