@@ -949,10 +949,7 @@ export const downloadInvoice = async (req, res) => {
       user_agent: getUserAgent(req),
     });
 
-    const pdfFileName = `${quotation.quotation_number.replace(
-      /[\\/]/g,
-      "_",
-    )}.pdf`;
+    const pdfFileName = `${invoice.invoice_number.replace(/[\\/]/g, "_")}.pdf`;
 
     res.setHeader(
       "Content-Disposition",
