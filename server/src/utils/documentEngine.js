@@ -1,5 +1,5 @@
 import puppeteer from "puppeteer";
-
+import { randomBytes } from "node:crypto";
 import fs from "fs/promises";
 import path from "path";
 
@@ -201,11 +201,41 @@ export const generateDocumentPDFBuffer = async ({
   }
 };
 
-const sanitizePdfFileName = (value = "document") => {
-  return String(value)
-    .trim()
-    .replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+const getPdfFolderName = (type) =>
+  type === "quotation" ? "quotations" : "invoices";
+
+const getPdfPrefix = (type) => (type === "quotation" ? "QUO" : "INV");
+
+// Validate saved paths before accessing server files.
+const getExistingPdfFileName = (type, companyId, pdfPath) => {
+  if (!pdfPath) return null;
+
+  const folderName = getPdfFolderName(type);
+
+  const normalizedPath = String(pdfPath).replace(/\\/g, "/");
+
+  const expectedFolder = `/uploads/${folderName}/${companyId}/`;
+
+  if (
+    !normalizedPath.startsWith(expectedFolder) ||
+    !normalizedPath.endsWith(".pdf")
+  ) {
+    throw new Error("Invalid saved document PDF path");
+  }
+
+  const fileName = normalizedPath.slice(expectedFolder.length);
+
+  if (!/^[a-zA-Z0-9_-]+\.pdf$/.test(fileName)) {
+    throw new Error("Invalid PDF filename");
+  }
+
+  return fileName;
+};
+
+const createRandomPdfFileName = (type) => {
+  const randomCode = randomBytes(8).toString("hex").toUpperCase();
+
+  return `${getPdfPrefix(type)}-${randomCode}.pdf`;
 };
 
 export const saveDocumentPDFToServer = async ({
@@ -228,14 +258,7 @@ export const saveDocumentPDFToServer = async ({
     authToken,
   });
 
-  const folderName = type === "quotation" ? "quotations" : "invoices";
-
-  const documentNumber =
-    type === "quotation" ? document.quotation_number : document.invoice_number;
-
-  const safeFileName = sanitizePdfFileName(
-    documentNumber || `${type}-${document.id}`,
-  );
+  const folderName = getPdfFolderName(type);
 
   const companyFolder = path.join(
     process.cwd(),
@@ -248,11 +271,52 @@ export const saveDocumentPDFToServer = async ({
     recursive: true,
   });
 
-  const fileName = `${safeFileName}.pdf`;
+  const existingFileName = getExistingPdfFileName(
+    type,
+    companyId,
+    document.pdf_path,
+  );
 
-  const absolutePath = path.join(companyFolder, fileName);
+  let fileName;
+  let absolutePath;
 
-  await fs.writeFile(absolutePath, pdfBuffer);
+  if (existingFileName) {
+    // Editing or regenerating a document:
+    // preserve the existing PDF filename and URL.
+    fileName = existingFileName;
+    absolutePath = path.join(companyFolder, fileName);
+
+    await fs.writeFile(absolutePath, pdfBuffer);
+  } else {
+    // Newly created document:
+    // generate a random filename, independently of its number.
+    let saved = false;
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const candidateName = createRandomPdfFileName(type);
+      const candidatePath = path.join(companyFolder, candidateName);
+
+      try {
+        // "wx" prevents overwriting an existing file.
+        await fs.writeFile(candidatePath, pdfBuffer, {
+          flag: "wx",
+        });
+
+        fileName = candidateName;
+        absolutePath = candidatePath;
+        saved = true;
+        break;
+      } catch (error) {
+        if (error.code !== "EEXIST") {
+          throw error;
+        }
+      }
+    }
+
+    if (!saved) {
+      throw new Error("Unable to generate a unique PDF filename");
+    }
+  }
 
   const publicPath = `/uploads/${folderName}/${companyId}/${fileName}`;
 
@@ -277,62 +341,59 @@ export const getSavedDocumentPDFBuffer = async ({
     throw new Error("Document id is required");
   }
 
-  const folderName = type === "quotation" ? "quotations" : "invoices";
+  const folderName = getPdfFolderName(type);
 
-  const documentNumber =
-    type === "quotation" ? document.quotation_number : document.invoice_number;
-
-  const safeFileName = sanitizePdfFileName(
-    documentNumber || `${type}-${document.id}`,
-  );
-
-  const fileName = `${safeFileName}.pdf`;
-
-  const absolutePath = path.join(
+  const companyFolder = path.join(
     process.cwd(),
     "uploads",
     folderName,
     String(companyId),
-    fileName,
   );
 
-  const publicPath = `/uploads/${folderName}/${companyId}/${fileName}`;
+  const existingFileName = getExistingPdfFileName(
+    type,
+    companyId,
+    document.pdf_path,
+  );
 
-  try {
-    // Pehle check/read existing PDF
-    const pdfBuffer = await fs.readFile(absolutePath);
+  if (existingFileName) {
+    const absolutePath = path.join(companyFolder, existingFileName);
 
-    return {
-      pdfBuffer,
-      fileName,
-      absolutePath,
-      publicPath,
-      generated: false,
-    };
-  } catch (error) {
-    // Agar error file missing wala nahi hai,
-    // to actual error forward karo.
-    if (error.code !== "ENOENT") {
-      throw error;
+    const publicPath = `/uploads/${folderName}/${companyId}/${existingFileName}`;
+
+    try {
+      const pdfBuffer = await fs.readFile(absolutePath);
+
+      return {
+        pdfBuffer,
+        fileName: existingFileName,
+        absolutePath,
+        publicPath,
+        generated: false,
+      };
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
     }
-
-    // Old document hai aur PDF server par nahi hai.
-    // Ek baar generate + save kar do.
-    const savedPdf = await saveDocumentPDFToServer({
-      type,
-      document,
-      companyId,
-      authToken,
-    });
-
-    const pdfBuffer = await fs.readFile(savedPdf.absolutePath);
-
-    return {
-      ...savedPdf,
-      pdfBuffer,
-      generated: true,
-    };
   }
+
+  // PDF is missing or was never saved.
+  // Generate it using the current document details.
+  const savedPdf = await saveDocumentPDFToServer({
+    type,
+    document,
+    companyId,
+    authToken,
+  });
+
+  const pdfBuffer = await fs.readFile(savedPdf.absolutePath);
+
+  return {
+    ...savedPdf,
+    pdfBuffer,
+    generated: true,
+  };
 };
 
 export const generateDocumentPDF = async ({

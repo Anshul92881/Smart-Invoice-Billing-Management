@@ -24,8 +24,7 @@ import {
 
 const INITIAL_FORM = {
   invoice_prefix: "INV",
-  invoice_start_number: 1,
-  quotation_prefix: "QT",
+  quotation_prefix: "QUO",
   currency: "INR",
   timezone: "Asia/Kolkata",
   fiscal_year_start: "April",
@@ -50,41 +49,16 @@ const INITIAL_EMAIL_FORM = {
   reply_to: "",
 };
 
-const CURRENCY_OPTIONS = [
-  { value: "INR", label: "INR - Indian Rupee" },
-  { value: "USD", label: "USD - US Dollar" },
-  { value: "AED", label: "AED - UAE Dirham" },
-  { value: "EUR", label: "EUR - Euro" },
-  { value: "GBP", label: "GBP - British Pound" },
-];
-
-const TIMEZONE_OPTIONS = [
-  { value: "Asia/Kolkata", label: "Asia/Kolkata" },
-  { value: "Asia/Dubai", label: "Asia/Dubai" },
-  { value: "Europe/London", label: "Europe/London" },
-  { value: "America/New_York", label: "America/New_York" },
-];
-
-const FISCAL_YEAR_OPTIONS = [
-  { value: "January", label: "January" },
-  { value: "April", label: "April" },
-  { value: "July", label: "July" },
-  { value: "October", label: "October" },
-];
-
 const normalizeSettings = (data = {}) => ({
   invoice_prefix: String(data.invoice_prefix || "INV")
     .trim()
     .toUpperCase(),
-  invoice_start_number: Math.max(Number(data.invoice_start_number || 1), 1),
-  quotation_prefix: String(data.quotation_prefix || "QT")
+  quotation_prefix: String(data.quotation_prefix || "QUO")
     .trim()
     .toUpperCase(),
-  currency: String(data.currency || "INR")
-    .trim()
-    .toUpperCase(),
-  timezone: data.timezone || "Asia/Kolkata",
-  fiscal_year_start: data.fiscal_year_start || "April",
+  currency: "INR",
+  timezone: "Asia/Kolkata",
+  fiscal_year_start: "April",
   bank_name: data.bank_name || "",
   account_holder_name: data.account_holder_name || "",
   account_number: data.account_number || "",
@@ -190,10 +164,6 @@ function CompanySettings() {
       nextValue = value.toUpperCase();
     }
 
-    if (name === "invoice_start_number") {
-      nextValue = value === "" ? "" : Math.max(Number(value), 1);
-    }
-
     setFormData((prev) => ({ ...prev, [name]: nextValue }));
   };
 
@@ -230,14 +200,6 @@ function CompanySettings() {
 
     if (!payload.quotation_prefix) {
       toast.error("Quotation prefix is required");
-      return false;
-    }
-
-    if (
-      !Number.isFinite(Number(payload.invoice_start_number)) ||
-      Number(payload.invoice_start_number) < 1
-    ) {
-      toast.error("Invoice start number must be greater than 0");
       return false;
     }
 
@@ -435,17 +397,10 @@ function CompanySettings() {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Info label="Invoice Prefix" value={savedData.invoice_prefix} />
-            <Info
-              label="Invoice Start No."
-              value={savedData.invoice_start_number}
-            />
             <Info label="Quotation Prefix" value={savedData.quotation_prefix} />
             <Info label="Currency" value={savedData.currency} />
             <Info label="Timezone" value={savedData.timezone} />
-            <Info
-              label="Fiscal Year Start"
-              value={savedData.fiscal_year_start}
-            />
+            <Info label="Financial Year" value="April – March" />
             <Info label="Bank Name" value={savedData.bank_name} />
             <Info
               label="Account Holder"
@@ -493,18 +448,6 @@ function CompanySettings() {
               />
             </Field>
 
-            <Field icon={<FileText size={16} />} label="Invoice Start Number">
-              <input
-                type="number"
-                name="invoice_start_number"
-                value={formData.invoice_start_number}
-                onChange={handleChange}
-                className="input"
-                min="1"
-                step="1"
-              />
-            </Field>
-
             <Field icon={<ReceiptText size={16} />} label="Quotation Prefix">
               <input
                 name="quotation_prefix"
@@ -517,11 +460,9 @@ function CompanySettings() {
             </Field>
 
             <Field icon={<BadgeIndianRupee size={16} />} label="Currency">
-              <CustomSelect
-                value={formData.currency}
-                onChange={(value) => updateField("currency", value)}
-                options={CURRENCY_OPTIONS}
-              />
+              <div className="flex min-h-[43px] items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                INR – Indian Rupee (₹)
+              </div>
             </Field>
           </div>
 
@@ -535,19 +476,15 @@ function CompanySettings() {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Field icon={<CalendarDays size={16} />} label="Timezone">
-              <CustomSelect
-                value={formData.timezone}
-                onChange={(value) => updateField("timezone", value)}
-                options={TIMEZONE_OPTIONS}
-              />
+              <div className="flex min-h-[43px] items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                Asia/Kolkata (IST)
+              </div>
             </Field>
 
-            <Field icon={<CalendarDays size={16} />} label="Fiscal Year Start">
-              <CustomSelect
-                value={formData.fiscal_year_start}
-                onChange={(value) => updateField("fiscal_year_start", value)}
-                options={FISCAL_YEAR_OPTIONS}
-              />
+            <Field icon={<CalendarDays size={16} />} label="Financial Year">
+              <div className="flex min-h-[43px] items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                April – March
+              </div>
             </Field>
           </div>
 
@@ -1000,7 +937,7 @@ function Info({ label, value }) {
       <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {label}
       </p>
-      <p className="mt-1 break-words text-sm font-semibold text-slate-900 dark:text-white">
+      <p className="mt-1 break-words text-sm font-normal text-slate-900 dark:text-white">
         {value || "-"}
       </p>
     </div>

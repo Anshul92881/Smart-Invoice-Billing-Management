@@ -108,7 +108,9 @@ function ViewInvoice() {
       const link = document.createElement("a");
 
       link.href = fileUrl;
-      link.download = `${invoice.invoice_number || `invoice-${id}`}.pdf`;
+      link.download = `${
+        invoice.invoice_number?.replace(/[\\/]/g, "_") || `invoice-${id}`
+      }.pdf`;
       document.body.appendChild(link);
       link.click();
 

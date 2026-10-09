@@ -106,6 +106,9 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
   const [productItemIndex, setProductItemIndex] = useState(null);
   const [productImageFile, setProductImageFile] = useState(null);
   const productImageInputRef = useRef(null);
+  const [saving, setSaving] = useState(false);
+  const submittingRef = useRef(false);
+  const submittedRef = useRef(false);
 
   const initialBranchForm = {
     branch_name: "",
@@ -395,7 +398,9 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
   };
 
   const handleClose = () => {
+    if (submittingRef.current) return;
     resetForm();
+    submittedRef.current = false;
     onClose?.();
   };
 
@@ -1156,15 +1161,28 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Ref blocks rapid repeated clicks before React re-renders.
+    if (submittingRef.current || submittedRef.current) return;
     if (!validateInvoiceForm()) return;
+
+    submittingRef.current = true;
+    setSaving(true);
 
     try {
       await api.post("/invoices", buildInvoicePayload());
+      submittedRef.current = true;
       toast.success("Invoice created successfully");
       resetForm();
       onCreated?.();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Invoice create failed");
+      if (!submittedRef.current) {
+        toast.error(error.response?.data?.message || "Invoice create failed");
+      } else {
+        console.error("Invoice created, but post-save action failed:", error);
+      }
+    } finally {
+      submittingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -1197,6 +1215,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
           <button
             type="button"
             onClick={handleClose}
+            disabled={saving}
             className="flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             title={modalMode ? "Close" : "Cancel"}
           >
@@ -1450,10 +1469,16 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
 
             <button
               type="submit"
+              disabled={saving || submittedRef.current}
+              aria-busy={saving}
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Save size={17} />
-              Save Invoice
+              {saving
+                ? "Saving..."
+                : submittedRef.current
+                  ? "Invoice Saved"
+                  : "Save Invoice"}
             </button>
           </div>
         </div>

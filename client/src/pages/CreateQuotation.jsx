@@ -218,6 +218,8 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
   const [branches, setBranches] = useState([]);
 
   const [saving, setSaving] = useState(false);
+  const [submissionComplete, setSubmissionComplete] = useState(false);
+  const submittingRef = useRef(false);
   const [productImageFile, setProductImageFile] = useState(null);
   const productImageInputRef = useRef(null);
 
@@ -1251,16 +1253,24 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Block repeated clicks immediately, without waiting for React state updates.
+    if (submittingRef.current || submissionComplete) return;
     if (!validateForm()) return;
 
-    try {
-      setSaving(true);
+    submittingRef.current = true;
+    setSaving(true);
+    let succeeded = false;
 
+    try {
       const payload = buildQuotationPayload();
 
       const res = isEditMode
         ? await api.put(`/quotations/${id}`, payload)
         : await api.post("/quotations", payload);
+
+      // Do not allow this completed form to submit again during navigation/modal close.
+      succeeded = true;
+      setSubmissionComplete(true);
 
       toast.success(
         res.data?.message ||
@@ -1280,14 +1290,20 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
         navigate("/dashboard/quotations", { replace: true });
       }
     } catch (error) {
-      toast.error(
-        error.response?.data?.message ||
-          error.response?.data?.error ||
-          (isEditMode
-            ? "Failed to update quotation"
-            : "Failed to create quotation"),
-      );
+      if (!succeeded) {
+        toast.error(
+          error.response?.data?.message ||
+            error.response?.data?.error ||
+            (isEditMode
+              ? "Failed to update quotation"
+              : "Failed to create quotation"),
+        );
+      } else {
+        console.error("Quotation saved, but navigation/close failed:", error);
+      }
     } finally {
+      // Only release the lock on a failed request so the user may retry.
+      if (!succeeded) submittingRef.current = false;
       setSaving(false);
     }
   };
@@ -1571,7 +1587,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || submissionComplete || loadingQuotation}
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Save size={17} />
@@ -1579,9 +1595,13 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
                 ? isEditMode
                   ? "Updating..."
                   : "Saving..."
-                : isEditMode
-                  ? "Update Quotation"
-                  : "Save Quotation"}
+                : submissionComplete
+                  ? isEditMode
+                    ? "Updated"
+                    : "Saved"
+                  : isEditMode
+                    ? "Update Quotation"
+                    : "Save Quotation"}
             </button>
           </div>
         </div>

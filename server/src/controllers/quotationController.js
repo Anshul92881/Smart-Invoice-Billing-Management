@@ -14,7 +14,7 @@ import {
   getSavedDocumentPDFBuffer,
 } from "../utils/documentEngine.js";
 
-import { randomInt } from "node:crypto";
+import path from "node:path";
 
 const ALLOWED_QUOTATION_STATUS = [
   "draft",
@@ -125,18 +125,64 @@ const getQuotationPrefix = async (connection, companyId) => {
   return rows[0]?.quotation_prefix || "QT";
 };
 
-const getInvoiceNumberConfig = async (connection, companyId) => {
+const generateInvoiceNumber = async (connection, companyId) => {
   const [rows] = await connection.query(
     `
-      SELECT invoice_prefix
+      SELECT invoice_prefix, invoice_sequence
       FROM tbl_companies
       WHERE id = ?
       LIMIT 1
+      FOR UPDATE
     `,
     [companyId],
   );
 
-  return rows[0] || {};
+  if (rows.length === 0) {
+    throw new Error("Company not found");
+  }
+
+  const prefix = rows[0].invoice_prefix || "INV";
+  const currentSequence = Number(rows[0].invoice_sequence || 0);
+
+  if (
+    !Number.isSafeInteger(currentSequence) ||
+    currentSequence < 0 ||
+    currentSequence >= 2147483647
+  ) {
+    throw new Error("Invalid or exhausted invoice sequence");
+  }
+
+  const nextSequence = currentSequence + 1;
+
+  const indiaDateParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = Number(
+    indiaDateParts.find((part) => part.type === "year").value,
+  );
+
+  const month = Number(
+    indiaDateParts.find((part) => part.type === "month").value,
+  );
+
+  const startYear = month >= 4 ? year : year - 1;
+  const financialYear = `${startYear}-${startYear + 1}`;
+
+  await connection.query(
+    `
+      UPDATE tbl_companies
+      SET invoice_sequence = ?
+      WHERE id = ?
+    `,
+    [nextSequence, companyId],
+  );
+
+  const paddedSequence = String(nextSequence).padStart(6, "0");
+
+  return `${prefix}/${financialYear}/${paddedSequence}`;
 };
 
 const getBranchCondition = () => {
@@ -445,17 +491,67 @@ const buildCalculatedItems = async (connection, items, companyId) => {
 };
 
 const createQuotationNumber = async (connection, companyId) => {
-  const quotationPrefix = await getQuotationPrefix(connection, companyId);
+  // Lock the company row to prevent concurrent sequence allocation.
+  const [rows] = await connection.query(
+    `
+      SELECT quotation_prefix, quotation_sequence
+      FROM tbl_companies
+      WHERE id = ?
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [companyId],
+  );
 
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-  let randomCode = "";
-
-  for (let i = 0; i < 6; i++) {
-    randomCode += chars[randomInt(chars.length)];
+  if (rows.length === 0) {
+    throw new Error("Company not found");
   }
 
-  return `${quotationPrefix}-${randomCode}`;
+  const prefix = rows[0].quotation_prefix || "QUO";
+
+  const currentSequence = Number(rows[0].quotation_sequence || 0);
+
+  if (
+    !Number.isSafeInteger(currentSequence) ||
+    currentSequence < 0 ||
+    currentSequence >= 2147483647
+  ) {
+    throw new Error("Invalid or exhausted quotation sequence");
+  }
+
+  const nextSequence = currentSequence + 1;
+
+  // Calculate the Indian financial year (April to March).
+  const indiaDateParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = Number(
+    indiaDateParts.find((part) => part.type === "year").value,
+  );
+
+  const month = Number(
+    indiaDateParts.find((part) => part.type === "month").value,
+  );
+
+  const startYear = month >= 4 ? year : year - 1;
+  const financialYear = `${startYear}-${startYear + 1}`;
+
+  // Update sequence within the existing quotation transaction.
+  await connection.query(
+    `
+      UPDATE tbl_companies
+      SET quotation_sequence = ?
+      WHERE id = ?
+    `,
+    [nextSequence, companyId],
+  );
+
+  const paddedSequence = String(nextSequence).padStart(6, "0");
+
+  return `${prefix}/${financialYear}/${paddedSequence}`;
 };
 
 const getQuotationCore = async (connection, quotationId, companyId) => {
@@ -613,26 +709,26 @@ export const createQuotation = async (req, res) => {
 
     const [quotationResult] = await connection.query(
       `
-      INSERT INTO tbl_quotations
-      (
-        company_id,
-        customer_id,
-        branch_id,
-        quotation_number,
-        quotation_date,
-        expiry_date,
-        subtotal,
-        tax_amount,
-        discount_amount,
-        total_amount,
-        status,
-        billing_template_snapshot,
-        notes,
-        terms_conditions,
-        created_by
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
+    INSERT INTO tbl_quotations
+    (
+      company_id,
+      customer_id,
+      branch_id,
+      quotation_number,
+      quotation_date,
+      expiry_date,
+      subtotal,
+      tax_amount,
+      discount_amount,
+      total_amount,
+      status,
+      billing_template_snapshot,
+      notes,
+      terms_conditions,
+      created_by
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `,
       [
         companyId,
         customer_id,
@@ -726,9 +822,9 @@ export const createQuotation = async (req, res) => {
         [savedPdf.publicPath, quotationId, companyId],
       );
 
-      console.log("Quotation PDF saved:", savedPdf.publicPath);
+      // console.log("Quotation PDF saved:", savedPdf.publicPath);
     } catch (pdfError) {
-      console.error("QUOTATION PDF SAVE ERROR:", pdfError.message);
+      // console.error("QUOTATION PDF SAVE ERROR:", pdfError.message);
     }
 
     emitDashboardUpdate({ company_id: companyId });
@@ -1140,12 +1236,13 @@ export const convertQuotationToInvoice = async (req, res) => {
 
     const [quotationRows] = await connection.query(
       `
-      SELECT q.*
-      FROM tbl_quotations q
-      WHERE q.id = ?
-      AND q.company_id = ?
-      LIMIT 1
-      `,
+    SELECT q.*
+    FROM tbl_quotations q
+    WHERE q.id = ?
+    AND q.company_id = ?
+    LIMIT 1
+    FOR UPDATE
+  `,
       [id, companyId],
     );
 
@@ -1278,17 +1375,27 @@ export const convertQuotationToInvoice = async (req, res) => {
       }
     }
 
-    const company = await getInvoiceNumberConfig(connection, companyId);
+    const invoiceNumber = await generateInvoiceNumber(connection, companyId);
 
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const [duplicateInvoiceRows] = await connection.query(
+      `
+        SELECT id
+        FROM tbl_invoices
+        WHERE company_id = ?
+        AND invoice_number = ?
+        LIMIT 1
+      `,
+      [companyId, invoiceNumber],
+    );
 
-    let randomCode = "";
+    if (duplicateInvoiceRows.length > 0) {
+      await connection.rollback();
 
-    for (let i = 0; i < 6; i++) {
-      randomCode += chars[randomInt(chars.length)];
+      return res.status(409).json({
+        message: "Invoice number already exists. Please try again.",
+      });
     }
 
-    const invoiceNumber = `${company.invoice_prefix || "INV"}-${randomCode}`;
     const invoiceDate = new Date().toISOString().slice(0, 10);
 
     const safeBillingTemplateSnapshot =
@@ -1298,31 +1405,33 @@ export const convertQuotationToInvoice = async (req, res) => {
 
     const [invoiceResult] = await connection.query(
       `
-      INSERT INTO tbl_invoices
-      (
-        company_id,
-        customer_id,
-        branch_id,
-        invoice_number,
-        invoice_date,
-        due_date,
-        subtotal,
-        total_tax,
-        total_amount,
-        discount,
-        paid_amount,
-        balance_due,
-        status,
-        notes,
-        terms_conditions,
-        billing_template_snapshot
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
+    INSERT INTO tbl_invoices
+    (
+      company_id,
+      customer_id,
+      branch_id,
+      quotation_id,
+      invoice_number,
+      invoice_date,
+      due_date,
+      subtotal,
+      total_tax,
+      total_amount,
+      discount,
+      paid_amount,
+      balance_due,
+      status,
+      notes,
+      terms_conditions,
+      billing_template_snapshot
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `,
       [
         companyId,
         quotation.customer_id,
         quotationBranchId,
+        Number(id),
         invoiceNumber,
         invoiceDate,
         quotation.expiry_date || null,
@@ -1458,10 +1567,8 @@ export const convertQuotationToInvoice = async (req, res) => {
     `,
         [savedPdf.publicPath, invoiceId, companyId],
       );
-
-      console.log("Converted invoice PDF saved:", savedPdf.publicPath);
     } catch (pdfError) {
-      console.error("CONVERTED INVOICE PDF SAVE ERROR:", pdfError.message);
+      // console.error("CONVERTED INVOICE PDF SAVE ERROR:", pdfError.message);
     }
 
     emitDashboardUpdate({ company_id: companyId });
@@ -1529,9 +1636,13 @@ export const downloadQuotation = async (req, res) => {
     });
 
     res.setHeader("Content-Type", "application/pdf");
+    const pdfFileName = quotation.pdf_path
+      ? path.posix.basename(quotation.pdf_path)
+      : `QUO-${quotation.id}.pdf`;
+
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=${quotation.quotation_number}.pdf`,
+      `attachment; filename="${pdfFileName}"`,
     );
 
     return res.end(pdfBuffer);
@@ -1712,7 +1823,7 @@ Regards,
 ${company.name || quotation.business_name || "Company"}`,
       attachments: [
         {
-          filename: `${quotation.quotation_number}.pdf`,
+          filename: `${quotation.quotation_number.replace(/\//g, "_")}.pdf`,
           content: pdfBuffer,
           contentType: "application/pdf",
         },
@@ -2097,26 +2208,28 @@ export const updateQuotation = async (req, res) => {
 
     const billingTemplateSnapshot = JSON.stringify(snapshot);
 
-    // IMPORTANT:
-    // quotation_number change nahi hoga
-    // status change nahi hoga
+    // Quotation number will remain unchanged.
+    // Editing a draft or sent quotation will set its status to draft.
+    // The updated quotation can then be sent again.
+
     await connection.query(
       `
-      UPDATE tbl_quotations
-      SET
-        customer_id = ?,
-        branch_id = ?,
-        quotation_date = ?,
-        expiry_date = ?,
-        subtotal = ?,
-        tax_amount = ?,
-        discount_amount = ?,
-        total_amount = ?,
-        billing_template_snapshot = ?,
-        notes = ?,
-        terms_conditions = ?
-      WHERE id = ?
-      AND company_id = ?
+        UPDATE tbl_quotations
+        SET
+          customer_id = ?,
+          branch_id = ?,
+          quotation_date = ?,
+          expiry_date = ?,
+          subtotal = ?,
+          tax_amount = ?,
+          discount_amount = ?,
+          total_amount = ?,
+          billing_template_snapshot = ?,
+          notes = ?,
+          terms_conditions = ?,
+          status = 'draft'
+        WHERE id = ?
+        AND company_id = ?
       `,
       [
         customer_id,
@@ -2203,6 +2316,7 @@ export const updateQuotation = async (req, res) => {
         document: {
           id: Number(id),
           quotation_number: existingQuotation.quotation_number,
+          pdf_path: existingQuotation.pdf_path,
         },
 
         companyId,
@@ -2219,9 +2333,9 @@ export const updateQuotation = async (req, res) => {
         [savedPdf.publicPath, id, companyId],
       );
 
-      console.log("Updated quotation PDF saved:", savedPdf.publicPath);
+      // console.log("Updated quotation PDF saved:", savedPdf.publicPath);
     } catch (pdfError) {
-      console.error("UPDATED QUOTATION PDF SAVE ERROR:", pdfError.message);
+      // console.error("UPDATED QUOTATION PDF SAVE ERROR:", pdfError.message);
     }
 
     emitDashboardUpdate({
@@ -2232,9 +2346,9 @@ export const updateQuotation = async (req, res) => {
       message: "Quotation updated successfully",
       quotation_id: Number(id),
       quotation_number: existingQuotation.quotation_number,
-      status: existingQuotation.status,
+      status: "draft",
       pdf_saved: Boolean(savedPdf),
-      pdf_path: savedPdf?.publicPath || null,
+      pdf_path: savedPdf?.publicPath || existingQuotation.pdf_path || null,
     });
   } catch (error) {
     if (transactionStarted) {

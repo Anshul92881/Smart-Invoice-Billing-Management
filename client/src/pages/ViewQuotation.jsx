@@ -294,7 +294,7 @@ function ViewQuotation() {
 
       link.href = fileUrl;
 
-      link.download = `${quotation.quotation_number || `quotation-${id}`}.pdf`;
+      link.download = `${quotation.quotation_number?.replace(/[\\/]/g, "_")  || `quotation-${id}`}.pdf`;
 
       document.body.appendChild(link);
 

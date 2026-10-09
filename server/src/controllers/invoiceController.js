@@ -3,6 +3,7 @@ import { sendCompanyEmail } from "../utils/companyEmailServices.js";
 import { createAuditLog } from "../utils/auditLogger.js";
 import { emitDashboardUpdate } from "../utils/socketEvents.js";
 import { notifyBusinessUsers } from "../utils/notificationLoggers.js";
+import path from "node:path";
 import {
   syncCustomerToCrm,
   syncDocumentToCrm,
@@ -14,8 +15,6 @@ import {
   saveDocumentPDFToServer,
   getSavedDocumentPDFBuffer,
 } from "../utils/documentEngine.js";
-
-import { randomInt } from "node:crypto";
 
 const HSN_SAC_REGEX = /^[0-9]{4,8}$/;
 
@@ -109,31 +108,64 @@ const getMainBranchId = async (connection, companyId) => {
   return rows[0]?.id || null;
 };
 
-const getCompanyInvoiceConfig = async (connection, companyId) => {
+const generateInvoiceNumber = async (connection, companyId) => {
   const [rows] = await connection.query(
     `
-      SELECT invoice_prefix
+      SELECT invoice_prefix, invoice_sequence
       FROM tbl_companies
       WHERE id = ?
       LIMIT 1
+      FOR UPDATE
     `,
     [companyId],
   );
 
-  return rows[0] || null;
-};
-
-const generateInvoiceNumber = (company) => {
-  const prefix = company.invoice_prefix || "INV";
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-  let randomCode = "";
-
-  for (let i = 0; i < 6; i++) {
-    randomCode += chars[randomInt(chars.length)];
+  if (rows.length === 0) {
+    throw new Error("Company not found");
   }
 
-  return `${prefix}-${randomCode}`;
+  const prefix = rows[0].invoice_prefix || "INV";
+  const currentSequence = Number(rows[0].invoice_sequence || 0);
+
+  if (
+    !Number.isSafeInteger(currentSequence) ||
+    currentSequence < 0 ||
+    currentSequence >= 2147483647
+  ) {
+    throw new Error("Invalid or exhausted invoice sequence");
+  }
+
+  const nextSequence = currentSequence + 1;
+
+  const indiaDateParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = Number(
+    indiaDateParts.find((part) => part.type === "year").value,
+  );
+
+  const month = Number(
+    indiaDateParts.find((part) => part.type === "month").value,
+  );
+
+  const startYear = month >= 4 ? year : year - 1;
+  const financialYear = `${startYear}-${startYear + 1}`;
+
+  await connection.query(
+    `
+      UPDATE tbl_companies
+      SET invoice_sequence = ?
+      WHERE id = ?
+    `,
+    [nextSequence, companyId],
+  );
+
+  const paddedSequence = String(nextSequence).padStart(6, "0");
+
+  return `${prefix}/${financialYear}/${paddedSequence}`;
 };
 
 const validateInvoicePayload = ({
@@ -277,7 +309,7 @@ const getInvoiceDocumentData = async (invoiceId, companyId) => {
     `
     SELECT
       i.*,
-
+      q.quotation_number AS quotation_reference,
       c.customer_name,
       c.company_name,
       c.email,
@@ -306,6 +338,9 @@ const getInvoiceDocumentData = async (invoiceId, companyId) => {
       b.branch_code
 
     FROM tbl_invoices i
+    LEFT JOIN tbl_quotations q
+    ON q.id = i.quotation_id
+    AND q.company_id = i.company_id
     LEFT JOIN tbl_customers c
       ON i.customer_id = c.id
       AND c.company_id = i.company_id
@@ -413,13 +448,6 @@ export const createInvoice = async (req, res) => {
       });
     }
 
-    const company = await getCompanyInvoiceConfig(connection, company_id);
-
-    if (!company) {
-      await connection.rollback();
-      return res.status(404).json({ message: "Company not found" });
-    }
-
     const snapshot = await buildDocumentSnapshot(
       connection,
       company_id,
@@ -427,25 +455,6 @@ export const createInvoice = async (req, res) => {
     );
 
     const billingTemplateSnapshot = JSON.stringify(snapshot);
-    const invoice_number = generateInvoiceNumber(company);
-
-    const [duplicateRows] = await connection.query(
-      `
-      SELECT id
-      FROM tbl_invoices
-      WHERE company_id = ?
-      AND invoice_number = ?
-      LIMIT 1
-      `,
-      [company_id, invoice_number],
-    );
-
-    if (duplicateRows.length > 0) {
-      await connection.rollback();
-      return res.status(409).json({
-        message: "Invoice number already exists. Please try again.",
-      });
-    }
 
     let subtotal = 0;
     let total_tax = 0;
@@ -559,6 +568,28 @@ export const createInvoice = async (req, res) => {
         sgst_amount: sgstAmount,
         igst_amount: igstAmount,
         total: itemTotal,
+      });
+    }
+
+    // Generate sequential invoice number after item validation.
+    const invoice_number = await generateInvoiceNumber(connection, company_id);
+
+    const [duplicateRows] = await connection.query(
+      `
+        SELECT id
+        FROM tbl_invoices
+        WHERE company_id = ?
+        AND invoice_number = ?
+        LIMIT 1
+      `,
+      [company_id, invoice_number],
+    );
+
+    if (duplicateRows.length > 0) {
+      await connection.rollback();
+
+      return res.status(409).json({
+        message: "Invoice number already exists. Please try again.",
       });
     }
 
@@ -918,10 +949,14 @@ export const downloadInvoice = async (req, res) => {
       user_agent: getUserAgent(req),
     });
 
-    res.setHeader("Content-Type", "application/pdf");
+    const pdfFileName = `${quotation.quotation_number.replace(
+      /[\\/]/g,
+      "_",
+    )}.pdf`;
+
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=${invoice.invoice_number}.pdf`,
+      `attachment; filename="${pdfFileName}"`,
     );
 
     return res.end(pdfBuffer);
@@ -1160,7 +1195,6 @@ ${company.name || invoice.business_name || "Company"}`,
       attachments: [
         {
           filename: `${invoice.invoice_number}.pdf`,
-          content: pdfBuffer,
           contentType: "application/pdf",
         },
       ],

@@ -28,9 +28,6 @@ const app = express();
 const uploadPath = path.join(process.cwd(), "upload");
 const uploadsPath = path.join(process.cwd(), "uploads");
 
-console.log("Upload path:", uploadPath);
-console.log("Uploads path:", uploadsPath);
-
 app.use("/upload", express.static(uploadPath));
 app.use("/uploads", express.static(uploadsPath));
 

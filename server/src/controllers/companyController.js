@@ -199,20 +199,14 @@ const validateCompanyPayload = ({
 
 const validateCompanySettingsPayload = ({
   invoice_prefix,
-  invoice_start_number,
   quotation_prefix,
-  currency,
   timezone,
-  fiscal_year_start,
   bank_name,
   account_holder_name,
   account_number,
   ifsc_code,
   upi_id,
 }) => {
-  const normalizedCurrency = normalizeUpper(currency) || "INR";
-  const normalizedFiscalYearStart = normalizeText(fiscal_year_start) || "April";
-  const normalizedTimezone = normalizeText(timezone) || "Asia/Kolkata";
 
   if (invoice_prefix && !isValidPrefix(invoice_prefix)) {
     return "Invoice prefix must be 1-10 characters and contain only letters, numbers or hyphen";
@@ -222,32 +216,14 @@ const validateCompanySettingsPayload = ({
     return "Quotation prefix must be 1-10 characters and contain only letters, numbers or hyphen";
   }
 
-  if (
-    invoice_start_number !== undefined &&
-    invoice_start_number !== null &&
-    invoice_start_number !== "" &&
-    !isPositiveInteger(invoice_start_number)
-  ) {
-    return "Invoice start number must be a positive integer";
-  }
-
-  if (!ALLOWED_CURRENCIES.includes(normalizedCurrency)) {
-    return `Currency must be one of: ${ALLOWED_CURRENCIES.join(", ")}`;
-  }
-
-  if (!TIMEZONE_REGEX.test(normalizedTimezone)) {
-    return "Invalid timezone format";
-  }
-
-  if (!ALLOWED_FISCAL_MONTHS.includes(normalizedFiscalYearStart)) {
-    return "Invalid fiscal year start month";
-  }
-
   if (bank_name && normalizeText(bank_name).length > 100) {
     return "Bank name must be less than 100 characters";
   }
 
-  if (account_holder_name && normalizeText(account_holder_name).length > 100) {
+  if (
+    account_holder_name &&
+    normalizeText(account_holder_name).length > 100
+  ) {
     return "Account holder name must be less than 100 characters";
   }
 
@@ -268,6 +244,7 @@ const validateCompanySettingsPayload = ({
 
   return null;
 };
+
 
 const normalizeRolePermissions = (permissions) => {
   const cleanedPermissions = {};
@@ -944,7 +921,6 @@ export const getCompanySettings = async (req, res) => {
         invoice_start_number,
         quotation_prefix,
         timezone,
-        fiscal_year_start,
         bank_name,
         account_holder_name,
         account_number,
@@ -988,9 +964,7 @@ export const updateCompanySettings = async (req, res) => {
 
     const {
       invoice_prefix,
-      invoice_start_number,
       quotation_prefix,
-      currency,
       timezone,
       fiscal_year_start,
       bank_name,
@@ -1006,7 +980,9 @@ export const updateCompanySettings = async (req, res) => {
     const validationError = validateCompanySettingsPayload(req.body);
 
     if (validationError) {
-      return res.status(400).json({ message: validationError });
+      return res.status(400).json({
+        message: validationError,
+      });
     }
 
     const [result] = await db.query(
@@ -1014,7 +990,6 @@ export const updateCompanySettings = async (req, res) => {
       UPDATE tbl_companies
       SET
         invoice_prefix = ?,
-        invoice_start_number = ?,
         quotation_prefix = ?,
         currency = ?,
         timezone = ?,
@@ -1031,11 +1006,10 @@ export const updateCompanySettings = async (req, res) => {
       `,
       [
         normalizeUpper(invoice_prefix) || "INV",
-        Number(invoice_start_number || 1),
         normalizeUpper(quotation_prefix) || "QT",
-        normalizeUpper(currency) || "INR",
-        normalizeText(timezone) || "Asia/Kolkata",
-        normalizeText(fiscal_year_start) || "April",
+        "INR",
+        "Asia/Kolkata",
+        "April",
         normalizeNullable(bank_name),
         normalizeNullable(account_holder_name),
         normalizeNullable(account_number),

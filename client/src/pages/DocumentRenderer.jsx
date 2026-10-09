@@ -166,6 +166,11 @@ const normalizeDocument = (document = {}, type = "invoice") => {
       document.expiry_date,
       "",
     ),
+    quotationReference: firstValue(
+      document.quotation_reference,
+      document.quotationReference,
+      "",
+    ),
     status: firstValue(document.status, "draft"),
     notes: firstValue(document.notes, ""),
     terms: firstValue(document.terms, document.terms_conditions, ""),
@@ -335,9 +340,6 @@ function DocumentRenderer({
 
           <div className="rounded-lg border border-slate-200 bg-slate-50">
             <div className="border-b border-slate-200 px-4 py-3 text-right">
-              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-600">
-                {isInvoice ? "Invoice" : "Quotation"}
-              </p>
               <h1 className="mt-1 text-[24px] font-black uppercase leading-none text-slate-950 print:text-[22px]">
                 {title}
               </h1>
@@ -345,8 +347,18 @@ function DocumentRenderer({
 
             <div className="px-4 py-2.5">
               <DocMeta label={numberLabel} value={docView.number} />
+
+              {isInvoice && docView.quotationReference && (
+                <DocMeta
+                  label="Quotation Ref."
+                  value={docView.quotationReference}
+                />
+              )}
+
               <DocMeta label="Date" value={formatDate(docView.date)} />
+
               <DocMeta label={dueLabel} value={formatDate(docView.dueDate)} />
+
               <DocMeta label="Status" value={docView.status} capitalize />
             </div>
           </div>
