@@ -1192,6 +1192,7 @@ ${company.name || invoice.business_name || "Company"}`,
       attachments: [
         {
           filename: `${invoice.invoice_number}.pdf`,
+          content: pdfBuffer,
           contentType: "application/pdf",
         },
       ],

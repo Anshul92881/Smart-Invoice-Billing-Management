@@ -111,20 +111,6 @@ const getMainBranchId = async (connection, companyId) => {
   return rows[0]?.id || null;
 };
 
-const getQuotationPrefix = async (connection, companyId) => {
-  const [rows] = await connection.query(
-    `
-    SELECT quotation_prefix
-    FROM tbl_companies
-    WHERE id = ?
-    LIMIT 1
-    `,
-    [companyId],
-  );
-
-  return rows[0]?.quotation_prefix || "QT";
-};
-
 const generateInvoiceNumber = async (connection, companyId) => {
   const [rows] = await connection.query(
     `
