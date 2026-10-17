@@ -497,11 +497,6 @@ async function run() {
     );
     console.log("New records without GST:", plan.newWithoutRate);
 
-    if (!apply) {
-      console.log("\nDRY RUN COMPLETED");
-      console.log("No database changes made.");
-      return;
-    }
 
     const result = await applyImport(connection, plan);
 
