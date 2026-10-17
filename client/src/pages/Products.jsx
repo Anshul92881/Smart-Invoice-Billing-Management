@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
-
-
-const APP_URL = import.meta.env.VITE_API_BASE_URL;
+const APP_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '');   
 console.log(APP_URL);
 
 import {

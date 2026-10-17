@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
-
-const APP_URL = import.meta.env.VITE_API_BASE_URL;
+const APP_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '');   
 console.log(APP_URL);
 
 import {
@@ -77,8 +76,8 @@ function Company() {
   const getLogoUrl = (logo) => {
     if (!logo) return "";
     if (logo.startsWith("http")) return logo;
-    if (logo.startsWith("/upload")) return `${APP_URL}${logo}`;
-    return `http://localhost:5000/upload/company-logos/${logo}`;
+    
+    return `${APP_URL}/upload/company-logos/${logo}`;
   };
 
   const fillForm = (company) => {
