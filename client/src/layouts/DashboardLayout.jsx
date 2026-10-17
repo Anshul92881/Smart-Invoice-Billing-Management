@@ -604,7 +604,8 @@ function DashboardLayout() {
       // Logout should still clear local session even if server logout fails.
     }
 
-    localStorage.clear();
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
 
     navigate("/", {
       replace: true,
@@ -863,13 +864,12 @@ function DashboardLayout() {
                 </button>
 
                 {notificationOpen && (
-                  <div className="fixed left-3 right-3 top-[78px] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96">
+                  <div className="fixed left-3 right-3 top-[78px] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-87">
                     <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
                       <div className="min-w-0">
                         <h3 className="truncate text-sm font-bold text-slate-900 dark:text-white">
                           Notifications
                         </h3>
-
                         <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                           {unreadCount} unread alerts
                         </p>

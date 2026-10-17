@@ -22,8 +22,8 @@ import {
   FileText,
 } from "lucide-react";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL 
-  ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') 
+const BASE_URL = import.meta.env.VITE_API_BASE_URL
+  ? import.meta.env.VITE_API_BASE_URL.replace("/api", "")
   : "http://localhost:5000";
 
 function SuperAdminLayout() {
@@ -252,7 +252,8 @@ function SuperAdminLayout() {
     } catch (error) {
       console.log(error);
     } finally {
-      localStorage.clear();
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
       window.location.href = "/";
     }
   };
@@ -378,7 +379,8 @@ function SuperAdminLayout() {
                   Welcome back, {user?.name || "SuperAdmin"}
                 </h2>
                 <p className="mt-1 hidden truncate text-sm font-medium leading-5 text-slate-500 dark:text-slate-400 sm:block">
-                  Manage companies, admins, subscriptions, audit logs and platform settings
+                  Manage companies, admins, subscriptions, audit logs and
+                  platform settings
                 </p>
               </div>
             </div>

@@ -171,9 +171,7 @@ export const login = async (req, res) => {
         [user.id],
       );
 
-      const failedAttempts = Number(
-        attemptRows[0]?.failed_login_attempts || 0,
-      );
+      const failedAttempts = Number(attemptRows[0]?.failed_login_attempts || 0);
 
       if (failedAttempts >= 4) {
         await sendCompanySecurityNotification({
@@ -191,11 +189,8 @@ export const login = async (req, res) => {
       });
     }
 
-
     if (user.role === "company_admin" && user.company_id) {
-      const isKycBlocked = ["blocked", "rejected"].includes(
-        user.kyc_status,
-      );
+      const isKycBlocked = ["blocked", "rejected"].includes(user.kyc_status);
 
       if (isKycBlocked) {
         const kycToken = jwt.sign(
@@ -310,9 +305,7 @@ export const login = async (req, res) => {
       user.role !== "company_admin" ||
       ["approved", "manual_verified"].includes(user.kyc_status);
 
-    const featureAccess = hasFullKycAccess
-      ? "full"
-      : "view_only";
+    const featureAccess = hasFullKycAccess ? "full" : "view_only";
 
     const token = jwt.sign(
       {
@@ -450,9 +443,7 @@ export const getMe = async (req, res) => {
     const user = users[0];
 
     const userPermissions = parsePermissions(user.permissions);
-    const companyRolePermissions = parsePermissions(
-      user.role_permissions,
-    );
+    const companyRolePermissions = parsePermissions(user.role_permissions);
 
     const finalPermissions = {
       ...userPermissions,
@@ -463,9 +454,7 @@ export const getMe = async (req, res) => {
       user.role !== "company_admin" ||
       ["approved", "manual_verified"].includes(user.kyc_status);
 
-    const featureAccess = hasFullKycAccess
-      ? "full"
-      : "view_only";
+    const featureAccess = hasFullKycAccess ? "full" : "view_only";
 
     delete user.role_permissions;
 
@@ -698,17 +687,27 @@ export const registerCompany = async (req, res) => {
 
     const [hqBranchResult] = await connection.query(
       `
-      INSERT INTO tbl_company_branches
-      (
-        company_id,
-        branch_name,
-        branch_code,
-        status,
-        is_main
-      )
-      VALUES (?, ?, ?, 'active', 1)
-      `,
-      [companyId, normalizedHqBranchName, normalizedHqBranchCode],
+  INSERT INTO tbl_company_branches
+  (
+    company_id,
+    branch_name,
+    branch_code,
+    email,
+    phone,
+    gst_number,
+    status,
+    is_main
+  )
+  VALUES (?, ?, ?, ?, ?, ?, 'active', 1)
+  `,
+      [
+        companyId,
+        normalizedHqBranchName,
+        normalizedHqBranchCode,
+        normalizedCompanyEmail,
+        normalizedCompanyPhone || null,
+        normalizedGstNumber || null,
+      ],
     );
 
     const hqBranchId = hqBranchResult.insertId;

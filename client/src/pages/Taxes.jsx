@@ -452,19 +452,29 @@ function Taxes() {
   const buildPayload = () => ({
     tax_name: cleanString(formData.tax_name),
     tax_type: cleanString(formData.tax_type) || "GST",
+
+    // Preserve the existing HSN on old tax records.
+    // New tax rules will have an empty HSN.
     hsn_sac_code: normalizeUpper(formData.hsn_sac_code),
+
     tax_percentage:
       formData.tax_percentage === "" ? "" : Number(formData.tax_percentage),
+
     cgst_percentage:
       formData.cgst_percentage === "" ? 0 : Number(formData.cgst_percentage),
+
     sgst_percentage:
       formData.sgst_percentage === "" ? 0 : Number(formData.sgst_percentage),
+
     igst_percentage:
       formData.igst_percentage === "" ? 0 : Number(formData.igst_percentage),
+
     tds_percentage:
       formData.tds_percentage === "" ? 0 : Number(formData.tds_percentage),
+
     tcs_percentage:
       formData.tcs_percentage === "" ? 0 : Number(formData.tcs_percentage),
+
     reverse_charge: Boolean(formData.reverse_charge),
     is_active: Boolean(formData.is_active),
     description: cleanString(formData.description),
@@ -790,7 +800,10 @@ function Taxes() {
           </div>
 
           <div className="text-sm text-slate-500 dark:text-slate-400">
-            Showing {sortedTaxes.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}
+            Showing{" "}
+            {sortedTaxes.length === 0
+              ? 0
+              : (currentPage - 1) * itemsPerPage + 1}
             {" - "}
             {Math.min(currentPage * itemsPerPage, sortedTaxes.length)}
             {" of "}
@@ -1107,15 +1120,6 @@ function TaxForm({
         </Field>
 
         <Input
-          label="HSN / SAC Code"
-          name="hsn_sac_code"
-          value={formData.hsn_sac_code}
-          onChange={handleChange}
-          error={errors.hsn_sac_code}
-          placeholder="Example: 998314"
-        />
-
-        <Input
           label="Total Tax %"
           type="number"
           step="0.01"
@@ -1188,18 +1192,25 @@ function TaxForm({
       </Section>
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-        <h3 className="mb-4 text-base font-bold text-slate-900 dark:text-white">
+        <h3 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
           Live Tax Calculation Preview
         </h3>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <PreviewBox title="Base Amount" value={preview.base} />
+
           <PreviewBox title="CGST" value={preview.cgst} />
+
           <PreviewBox title="SGST" value={preview.sgst} />
+
           <PreviewBox title="IGST" value={preview.igst} />
+
           <PreviewBox title="TDS Deduction" value={preview.tds} />
+
           <PreviewBox title="TCS Amount" value={preview.tcs} />
+
           <PreviewBox title="Output Tax" value={preview.outputTax} />
+
           <PreviewBox
             title="Final Amount"
             value={preview.finalAmount}

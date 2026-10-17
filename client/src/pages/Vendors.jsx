@@ -670,7 +670,7 @@ function VendorTable({
             ].map((head) => (
               <th
                 key={head}
-                className="p-4 text-left text-xs font-bold uppercase tracking-wide"
+                className="p-4 text-center text-xs font-semibold uppercase tracking-wide"
               >
                 {head}
               </th>
@@ -684,7 +684,7 @@ function VendorTable({
               key={vendor.id}
               className="border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
             >
-              <td className="p-4">
+              <td className="p-4 text-center">
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
                     <Truck size={19} />
@@ -701,27 +701,27 @@ function VendorTable({
                 </div>
               </td>
 
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td className="p-4 text-center text-slate-600 dark:text-slate-300">
                 <p>GSTIN: {vendor.gstin || "-"}</p>
                 <p className="font-semibold text-slate-900 dark:text-white">
                   Opening: ₹ {Number(vendor.opening_balance || 0).toFixed(2)}
                 </p>
               </td>
 
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td className="p-4 text-center text-slate-600 dark:text-slate-300">
                 <p>{vendor.email || "-"}</p>
                 <p>{vendor.phone || "-"}</p>
               </td>
 
-              <td className="max-w-xs p-4 text-slate-600 dark:text-slate-300">
+              <td className="max-w-xs p-4 text-center text-slate-600 dark:text-slate-300">
                 <p className="truncate">{vendor.billing_address || "-"}</p>
               </td>
 
-              <td className="p-4">
+              <td className="p-4 text-center">
                 <StatusBadge status={vendor.status} />
               </td>
 
-              <td className="p-4">
+              <td className="p-4 text-center">
                 <div className="flex gap-2">
                   <IconButton
                     icon={<Eye size={16} />}

@@ -35,8 +35,7 @@ import {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
-const GST_REGEX =
-  /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 const NAME_REGEX = /^[a-zA-Z0-9\s.&'(),-]+$/;
 const BRANCH_NAME_REGEX = /^[a-zA-Z0-9\s.&'(),-]+$/;
 const BRANCH_CODE_REGEX = /^[a-zA-Z0-9_-]{2,20}$/;
@@ -148,7 +147,9 @@ function Customers() {
         },
       });
 
-      const list = Array.isArray(res.data) ? res.data : res.data?.customers || [];
+      const list = Array.isArray(res.data)
+        ? res.data
+        : res.data?.customers || [];
       setCustomers(list);
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to fetch customers");
@@ -164,7 +165,9 @@ function Customers() {
         },
       });
 
-      const list = Array.isArray(res.data) ? res.data : res.data?.branches || [];
+      const list = Array.isArray(res.data)
+        ? res.data
+        : res.data?.branches || [];
       setBranches(list.filter((branch) => branch.status === "active"));
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to fetch branches");
@@ -305,11 +308,13 @@ function Customers() {
     }
 
     if (paymentTerms.length > 100) {
-      nextErrors.payment_terms = "Payment terms must be less than 100 characters";
+      nextErrors.payment_terms =
+        "Payment terms must be less than 100 characters";
     }
 
     if (customerGroup.length > 100) {
-      nextErrors.customer_group = "Customer group must be less than 100 characters";
+      nextErrors.customer_group =
+        "Customer group must be less than 100 characters";
     }
 
     if (!["active", "inactive"].includes(status)) {
@@ -335,7 +340,8 @@ function Customers() {
     if (!branchName) {
       nextErrors.branch_name = "Branch name is required";
     } else if (branchName.length < 2 || branchName.length > 100) {
-      nextErrors.branch_name = "Branch name must be between 2 and 100 characters";
+      nextErrors.branch_name =
+        "Branch name must be between 2 and 100 characters";
     } else if (!BRANCH_NAME_REGEX.test(branchName)) {
       nextErrors.branch_name = "Branch name contains invalid characters";
     }
@@ -375,7 +381,7 @@ function Customers() {
     return Object.keys(nextErrors).length === 0;
   };
 
-    const handleExportCSV = () => {
+  const handleExportCSV = () => {
     if (!filteredCustomers.length) {
       toast.error("No customers available to export");
       return;
@@ -558,7 +564,8 @@ function Customers() {
       payment_terms: customer.payment_terms || "Due on Receipt",
       currency: customer.currency || "INR",
       opening_balance:
-        customer.opening_balance === null || customer.opening_balance === undefined
+        customer.opening_balance === null ||
+        customer.opening_balance === undefined
           ? ""
           : String(customer.opening_balance),
       customer_group: customer.customer_group || "",
@@ -584,14 +591,17 @@ function Customers() {
     email: normalizeEmail(formData.email),
     phone: cleanString(formData.phone),
     gstin: normalizeUpper(formData.gstin),
-    customer_type: cleanString(formData.customer_type).toLowerCase() || "business",
+    customer_type:
+      cleanString(formData.customer_type).toLowerCase() || "business",
     billing_address: cleanString(formData.billing_address),
     shipping_address: cleanString(formData.shipping_address),
     payment_terms: cleanString(formData.payment_terms) || "Due on Receipt",
     currency: normalizeUpper(formData.currency) || "INR",
-    opening_balance: formData.opening_balance === "" ? 0 : Number(formData.opening_balance),
+    opening_balance:
+      formData.opening_balance === "" ? 0 : Number(formData.opening_balance),
     customer_group: cleanString(formData.customer_group),
-    credit_limit: formData.credit_limit === "" ? 0 : Number(formData.credit_limit),
+    credit_limit:
+      formData.credit_limit === "" ? 0 : Number(formData.credit_limit),
     notes: cleanString(formData.notes),
     status: cleanString(formData.status).toLowerCase() || "active",
   });
@@ -637,7 +647,8 @@ function Customers() {
           </p>
 
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {customer.customer_name || "Selected customer"} will become inactive.
+            {customer.customer_name || "Selected customer"} will become
+            inactive.
           </p>
 
           <div className="flex justify-end gap-2">
@@ -706,7 +717,7 @@ function Customers() {
         </div>
       </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <StatsCard
           title="Total Customers"
           value={stats.total}
@@ -748,8 +759,8 @@ function Customers() {
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              <div className="relative min-w-[220px]">
+            <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
+              <div className="relative min-w-[180px] flex-1 xl:w-[210px] xl:flex-none">
                 <Search
                   size={16}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -762,17 +773,6 @@ function Customers() {
                   className="input !pl-10"
                 />
               </div>
-
-              <CustomDropdown
-                value={statusFilter}
-                onChange={setStatusFilter}
-                icon={<Filter size={16} />}
-                options={[
-                  { value: "all", label: "All Status" },
-                  { value: "active", label: "Active" },
-                  { value: "inactive", label: "Inactive" },
-                ]}
-              />
 
               <CustomDropdown
                 value={branchFilter}
@@ -803,7 +803,7 @@ function Customers() {
               <button
                 type="button"
                 onClick={handleExportCSV}
-                className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                className="inline-flex h-[42px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
               >
                 <Download size={16} />
                 Export CSV
@@ -1009,7 +1009,7 @@ function CustomerTable({
             ].map((head) => (
               <th
                 key={head}
-                className="p-4 text-left text-xs font-bold uppercase tracking-wide"
+                className="p-4 text-center text-xs font-semibold uppercase tracking-wide"
               >
                 {head}
               </th>
@@ -1023,7 +1023,7 @@ function CustomerTable({
               key={customer.id}
               className="border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
             >
-              <td className="p-4">
+              <td className="p-4 text-center">
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
                     <User size={19} />
@@ -1043,28 +1043,30 @@ function CustomerTable({
               <TableCell>{customer.branch_name || "-"}</TableCell>
               <TableCell>{customer.company_name || "-"}</TableCell>
 
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td className="p-4 text-center text-slate-600 dark:text-slate-300">
                 <p className="truncate">{customer.email || "-"}</p>
                 <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                   {customer.phone || "-"}
                 </p>
               </td>
 
-              <TableCell>{customer.payment_terms || "Due on Receipt"}</TableCell>
+              <TableCell>
+                {customer.payment_terms || "Due on Receipt"}
+              </TableCell>
 
-              <td className="p-4 capitalize text-slate-600 dark:text-slate-300">
+              <td className="p-4 text-center capitalize text-slate-600 dark:text-slate-300">
                 {customer.customer_type || "-"}
               </td>
 
-              <td className="p-4">
+              <td className="p-4 text-center">
                 <StatusBadge status={customer.status} />
               </td>
 
-              <td className="p-4 font-semibold text-red-600 dark:text-red-400">
+              <td className="p-4 text-center font-semibold text-red-600 dark:text-red-400">
                 ₹ {Number(customer.opening_balance || 0).toFixed(2)}
               </td>
 
-              <td className="p-4">
+              <td className="p-4 text-center">
                 <div className="flex gap-2">
                   <IconButton
                     icon={<Eye size={16} />}
@@ -1206,7 +1208,11 @@ function BranchMiniForm({
           error={branchErrors.zip_code}
         />
 
-        <Field icon={<CheckCircle2 size={16} />} label="Status" error={branchErrors.status}>
+        <Field
+          icon={<CheckCircle2 size={16} />}
+          label="Status"
+          error={branchErrors.status}
+        >
           <CustomDropdown
             value={branchForm.status}
             onChange={(value) =>
@@ -1313,7 +1319,7 @@ function CustomerForm({
           />
         </Field>
 
-                <Field label="Customer Type" error={errors.customer_type}>
+        <Field label="Customer Type" error={errors.customer_type}>
           <CustomDropdown
             value={formData.customer_type}
             onChange={(value) =>
@@ -1745,7 +1751,11 @@ function ViewField({ label, value, full }) {
 }
 
 function TableCell({ children }) {
-  return <td className="p-4 text-slate-600 dark:text-slate-300">{children}</td>;
+  return (
+    <td className="p-4 text-center text-slate-600 dark:text-slate-300">
+      {children}
+    </td>
+  );
 }
 
 function IconButton({ icon, className, onClick }) {

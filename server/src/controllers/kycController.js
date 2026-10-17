@@ -1226,6 +1226,23 @@ export const saveSuperAdminKycDetails = async (req, res) => {
       ],
     );
 
+    // Sync verified GST details with the existing Head Office branch
+    if (gstChanged) {
+      const [hqUpdateResult] = await connection.query(
+        `
+    UPDATE tbl_company_branches
+    SET gst_number = ?
+    WHERE company_id = ?
+      AND is_main = 1
+    `,
+        [gstNumber, companyId],
+      );
+
+      if (hqUpdateResult.affectedRows === 0) {
+        throw new Error("Head Office branch not found for GST sync");
+      }
+    }
+
     for (const docType of uploadedDocs) {
       const file = files[docType]?.[0];
 

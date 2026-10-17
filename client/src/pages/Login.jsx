@@ -178,11 +178,7 @@ function Login() {
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
 
-      toast.success(
-        user.branch_name
-          ? `Login successful - ${user.branch_name}`
-          : "Login successful",
-      );
+      toast.success("Login Successful");
 
       if (user.role === "superadmin") {
         navigate("/superadmin/dashboard", { replace: true });

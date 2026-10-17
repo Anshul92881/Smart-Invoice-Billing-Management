@@ -21,6 +21,7 @@ import {
   MapPin,
   Globe,
   Eye,
+  EyeOff,
   Plus,
   Search,
   Filter,
@@ -63,6 +64,16 @@ function SalesUsers() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
+
+  const [cardFilter, setCardFilter] = useState("all");
+
+  const stats = {
+    total: salesUsers.length,
+    active: salesUsers.filter((u) => (u.status || "active") === "active")
+      .length,
+    inactive: salesUsers.filter((u) => (u.status || "active") !== "active")
+      .length,
+  };
 
   const isActiveBranch = (branch) =>
     branch.status === "active" || branch.status === 1 || branch.status === true;
@@ -142,19 +153,10 @@ function SalesUsers() {
     fetchData();
   }, []);
 
-  const stats = useMemo(() => {
-    const active = salesUsers.filter(
-      (u) => (u.status || "active") === "active",
-    ).length;
-    const assigned = salesUsers.filter((u) => u.branch_id).length;
-
-    return {
-      total: salesUsers.length,
-      active,
-      inactive: salesUsers.length - active,
-      assigned,
-    };
-  }, [salesUsers]);
+  const matchesCard =
+    cardFilter === "all" ||
+    (cardFilter === "active" && status === "active") ||
+    (cardFilter === "inactive" && status !== "active");
 
   const filteredSalesUsers = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -176,9 +178,15 @@ function SalesUsers() {
         branchFilter === "all" ||
         String(item.branch_id || "") === String(branchFilter);
 
-      return matchesSearch && matchesStatus && matchesBranch;
+      const matchesCard =
+        cardFilter === "all" ||
+        (cardFilter === "active" && status === "active") ||
+        (cardFilter === "inactive" && status !== "active") ||
+        (cardFilter === "assigned" && Boolean(item.branch_id));
+
+      return matchesSearch && matchesStatus && matchesBranch && matchesCard;
     });
-  }, [salesUsers, search, statusFilter, branchFilter]);
+  }, [salesUsers, search, statusFilter, branchFilter, cardFilter]);
 
   const confirmToast = (message, onConfirm) => {
     toast(
@@ -396,30 +404,41 @@ function SalesUsers() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatsCard
           title="Total Users"
           value={stats.total}
           icon={<Users size={20} />}
           color="bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+          onClick={() => {
+            setCardFilter("all");
+            setStatusFilter("all");
+            setBranchFilter("all");
+          }}
         />
+
         <StatsCard
           title="Active Users"
           value={stats.active}
           icon={<CheckCircle2 size={20} />}
           color="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+          onClick={() => {
+            setCardFilter("active");
+            setStatusFilter("all");
+            setBranchFilter("all");
+          }}
         />
+
         <StatsCard
           title="Inactive Users"
           value={stats.inactive}
           icon={<XCircle size={20} />}
           color="bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
-        />
-        <StatsCard
-          title="Branch Assigned"
-          value={stats.assigned}
-          icon={<Building2 size={20} />}
-          color="bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300"
+          onClick={() => {
+            setCardFilter("inactive");
+            setStatusFilter("all");
+            setBranchFilter("all");
+          }}
         />
       </div>
 
@@ -597,7 +616,7 @@ function SalesUserTable({
               (head) => (
                 <th
                   key={head}
-                  className="p-4 text-left text-xs font-bold uppercase tracking-wide"
+                  className="p-4 text-center text-xs font-bold uppercase tracking-wide"
                 >
                   {head}
                 </th>
@@ -617,7 +636,7 @@ function SalesUserTable({
                 className="border-t border-slate-100 transition dark:border-slate-800 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
               >
                 <td className="p-4">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center gap-3">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
                       <ShieldCheck size={19} />
                     </div>
@@ -633,24 +652,24 @@ function SalesUserTable({
                   </div>
                 </td>
 
-                <td className="p-4 text-slate-600 dark:text-slate-300">
+                <td className="p-4 text-center text-slate-600 dark:text-slate-300">
                   {formatBranchLabel(item)}
                 </td>
 
-                <td className="p-4 text-slate-600 dark:text-slate-300">
+                <td className="p-4 text-center text-slate-600 dark:text-slate-300">
                   {item.email || "-"}
                 </td>
 
-                <td className="p-4 capitalize text-slate-600 dark:text-slate-300">
+                <td className="p-4 text-center capitalize text-slate-600 dark:text-slate-300">
                   {item.role?.replace("_", " ") || "sales user"}
                 </td>
 
-                <td className="p-4">
+                <td className="p-4 text-center">
                   <StatusBadge status={item.status} />
                 </td>
 
-                <td className="p-4">
-                  <div className="flex items-center gap-2">
+                <td className="p-4 text-center">
+                  <div className="flex items-center justify-center gap-2">
                     <IconButton
                       icon={<Eye size={16} />}
                       className="bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
@@ -715,6 +734,8 @@ function SalesUserForm({
   handleSubmit,
   onCancel,
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -756,17 +777,35 @@ function SalesUserForm({
           onChange={handleChange}
         />
 
-        <Input
+        <Field
           icon={<Lock size={16} />}
           label={editId ? "New Password Optional" : "Password"}
-          type="password"
-          name="password"
-          placeholder={
-            editId ? "Leave blank to keep old password" : "Create password"
-          }
-          value={formData.password}
-          onChange={handleChange}
-        />
+        >
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              placeholder={
+                editId ? "Leave blank to keep old password" : "Create password"
+              }
+              value={formData.password || ""}
+              onChange={handleChange}
+              autoComplete="new-password"
+              className="input !pr-12"
+            />
+
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
+              title={showPassword ? "Hide Password" : "Show Password"}
+              aria-label={showPassword ? "Hide Password" : "Show Password"}
+              aria-pressed={showPassword}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+        </Field>
       </div>
 
       <div className="mt-6 flex flex-col-reverse gap-2 border-t border-slate-200 pt-5 dark:border-slate-800 sm:flex-row sm:justify-end">
@@ -1010,21 +1049,27 @@ function FormModal({ title, description, icon, onClose, children }) {
   );
 }
 
-function StatsCard({ title, value, icon, color }) {
+function StatsCard({ title, value, icon, color, onClick }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <button
+      type="button"
+      onClick={onClick}
+      className="group min-w-0 w-full cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-white hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-white"
+    >
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
             {title}
           </p>
+
           <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
             {value}
           </h2>
         </div>
-        <div className={`rounded-xl p-3 ${color}`}>{icon}</div>
+
+        <div className={`shrink-0 rounded-xl p-3 ${color}`}>{icon}</div>
       </div>
-    </div>
+    </button>
   );
 }
 

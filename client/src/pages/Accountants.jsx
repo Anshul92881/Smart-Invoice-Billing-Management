@@ -25,6 +25,7 @@ import {
   Eye,
   Plus,
   ChevronDown,
+  EyeOff,
 } from "lucide-react";
 
 function Accountants() {
@@ -182,7 +183,7 @@ function Accountants() {
             <button
               type="button"
               onClick={() => toast.dismiss(t.id)}
-              className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200"
+              className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-700 hover:bg-slate-700"
             >
               No
             </button>
@@ -427,7 +428,7 @@ function Accountants() {
                 Accountant List
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Search, view, update and manage finance team status.
+                Search, view and manage finance team status.
               </p>
             </div>
 
@@ -589,7 +590,7 @@ function AccountantTable({
               (head) => (
                 <th
                   key={head}
-                  className="p-4 text-left text-xs font-bold uppercase tracking-wide"
+                  className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300"
                 >
                   {head}
                 </th>
@@ -617,30 +618,32 @@ function AccountantTable({
                       <p className="font-bold text-slate-900 dark:text-white">
                         {item.name || "-"}
                       </p>
-                      <p className="text-xs text-slate-500">
-                        Finance team member
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Finance team leader
                       </p>
                     </div>
                   </div>
                 </td>
 
-                <td className="p-4 text-slate-600 dark:text-slate-300">
+                <td className="p-4 text-center text-slate-600 dark:text-slate-300">
                   {formatBranchLabel(item)}
                 </td>
 
-                <td className="p-4 text-slate-600 dark:text-slate-300">
+                <td className="p-4 text-center text-slate-600 dark:text-slate-300">
                   {item.email || "-"}
                 </td>
 
-                <td className="p-4 text-slate-600 dark:text-slate-300">
-                  {item.role || "accountant"}
+                <td className="p-4 text-center text-slate-600 dark:text-slate-300">
+                  <span className="capitalize">
+                    {(item.role || "accountant").replaceAll("_", " ")}
+                  </span>
                 </td>
 
-                <td className="p-4">
+                <td className="p-4 text-center">
                   <StatusBadge status={item.status} />
                 </td>
 
-                <td className="p-4">
+                <td className="p-4 text-center">
                   <div className="flex items-center gap-2">
                     <IconButton
                       icon={<Eye size={16} />}
@@ -707,6 +710,7 @@ function AccountantForm({
   handleSubmit,
   onCancel,
 }) {
+  const [showPassword, setShowPassword] = useState(false);
   return (
     <form onSubmit={handleSubmit}>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -746,17 +750,35 @@ function AccountantForm({
           onChange={handleChange}
         />
 
-        <Input
+        <Field
           icon={<Lock size={16} />}
           label={editId ? "New Password Optional" : "Password"}
-          type="password"
-          name="password"
-          placeholder={
-            editId ? "Leave blank to keep old password" : "Create password"
-          }
-          value={formData.password}
-          onChange={handleChange}
-        />
+        >
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              placeholder={
+                editId ? "Leave blank to keep old password" : "Create password"
+              }
+              value={formData.password || ""}
+              onChange={handleChange}
+              autoComplete="new-password"
+              className="input !pr-12"
+            />
+
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
+              title={showPassword ? "Hide Password" : "Show Password"}
+              aria-label={showPassword ? "Hide Password" : "Show Password"}
+              aria-pressed={showPassword}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+        </Field>
       </div>
 
       <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 dark:border-slate-800 sm:flex-row sm:justify-end">
@@ -961,7 +983,12 @@ function AccountantViewModal({ accountant, formatBranchLabel, onClose }) {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ViewField label="Name" value={accountant.name} />
             <ViewField label="Email" value={accountant.email} />
-            <ViewField label="Role" value={accountant.role || "accountant"} />
+            <ViewField
+              label="Role"
+              value={(accountant.role || "accountant")
+                .replaceAll("_", " ")
+                .replace(/\b\w/g, (char) => char.toUpperCase())}
+            />
             <ViewField
               label="Status"
               value={<StatusBadge status={accountant.status} />}

@@ -645,13 +645,7 @@ function SubscriptionHistoryTable({
   );
 }
 
-/**
- * SubscriptionHero
- * Spacing-only rework: header stays horizontal (grid on lg breakpoint),
- * but every cell now shares the same px-6 py-6 rhythm, a consistent
- * gap-4 between icon/text, and matching vertical centering so the
- * row no longer looks cramped or uneven across columns.
- */
+
 function SubscriptionHero({
   subscription,
   pendingAmount,

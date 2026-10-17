@@ -20,7 +20,7 @@ import auditLogRoutes from "./routes/auditLogRoutes.js";
 import branchRoutes from "./routes/branchRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import kycRoutes from "./routes/kycRoutes.js";
-
+import hsnSacRoutes from "./routes/hsnSacRoutes.js";
 import authMiddleware, {kycAccessMiddleware} from "./middlewares/authMiddleware.js";
 
 const app = express();
@@ -76,5 +76,6 @@ app.use("/api/vendors", vendorRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/branches", branchRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/hsn-sac", hsnSacRoutes);
 
 export default app;

@@ -138,19 +138,71 @@ function ViewInvoice() {
     }
   };
 
-  const handleCancel = async () => {
-    if (!confirm("Are you sure you want to cancel this invoice?")) return;
+  const confirmAction = ({ title, description, confirmText, onConfirm }) => {
+    toast(
+      (t) => (
+        <div className="flex w-full min-w-0 max-w-[340px] flex-col gap-3 sm:min-w-[320px]">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900 sm:text-base">
+              {title}
+            </p>
 
-    try {
-      setCancelling(true);
-      await api.patch(`/invoices/${id}/cancel`);
-      toast.success("Invoice cancelled");
-      fetchInvoice();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Cancel failed");
-    } finally {
-      setCancelling(false);
-    }
+            {description && (
+              <p className="mt-1 text-xs leading-5 text-slate-500 sm:text-sm">
+                {description}
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t.id)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 sm:text-sm"
+            >
+              No
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                toast.dismiss(t.id);
+                await onConfirm();
+              }}
+              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-red-700 sm:text-sm"
+            >
+              {confirmText}
+            </button>
+          </div>
+        </div>
+      ),
+      {
+        duration: 10000,
+      },
+    );
+  };
+
+  const handleCancel = async () => {
+    if (!invoice) return;
+
+    confirmAction({
+      title: "Cancel Invoice?",
+      description: "Are you sure you want to cancel this invoice?",
+      confirmText: "Yes",
+
+      onConfirm: async () => {
+        try {
+          setCancelling(true);
+          await api.patch(`/invoices/${id}/cancel`);
+          toast.success("Invoice cancelled");
+          fetchInvoice();
+        } catch (error) {
+          toast.error(error.response?.data?.message || "Cancel failed");
+        } finally {
+          setCancelling(false);
+        }
+      },
+    });
   };
 
   const handlePushToCrm = async () => {

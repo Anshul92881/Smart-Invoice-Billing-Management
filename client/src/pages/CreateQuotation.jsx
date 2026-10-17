@@ -205,6 +205,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
 
   const blankItem = {
     product_id: "",
+    variant_id: "",
     product_name: "",
     description: "",
     hsn_sac_code: "",
@@ -215,6 +216,10 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
 
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
+  const [variantsByProduct, setVariantsByProduct] = useState({});
+  const [variantLoading, setVariantLoading] = useState({});
+  const [variantErrors, setVariantErrors] = useState({});
+  const variantRequestRef = useRef(new Set());
   const [branches, setBranches] = useState([]);
 
   const [saving, setSaving] = useState(false);
@@ -436,6 +441,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
           quotationItems.length > 0
             ? quotationItems.map((item) => ({
                 product_id: item.product_id ? String(item.product_id) : "",
+                variant_id: item.variant_id ? String(item.variant_id) : "",
 
                 product_name: item.item_name || item.product_name || "",
 
@@ -469,6 +475,106 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
   const filteredCustomers = useMemo(() => customers, [customers]);
 
   const filteredProducts = useMemo(() => products, [products]);
+
+  // Products with zero parent quantity are either out-of-stock simple products
+  // or variant products (parent quantity is always 0 for them). Check which.
+  const [stockKinds, setStockKinds] = useState({});
+  const stockCheckRef = useRef(new Set());
+
+  useEffect(() => {
+    products.forEach((product) => {
+      const qty = Number(product.quantity);
+
+      if (
+        product.quantity === undefined ||
+        product.quantity === null ||
+        product.quantity === "" ||
+        !Number.isFinite(qty) ||
+        qty > 0
+      ) {
+        return;
+      }
+
+      const key = String(product.id);
+
+      if (stockCheckRef.current.has(key)) return;
+      stockCheckRef.current.add(key);
+
+      api
+        .get(`/products/${key}`)
+        .then(({ data }) => {
+          const variants = data?.variants ?? data?.product?.variants;
+          const kind =
+            Array.isArray(variants) && variants.length > 0
+              ? "variant"
+              : "simple";
+
+          setStockKinds((prev) => ({ ...prev, [key]: kind }));
+        })
+        .catch(() => {
+          setStockKinds((prev) => ({ ...prev, [key]: "error" }));
+        });
+    });
+  }, [products]);
+
+  // Use product detail because dropdown endpoints may not include variants.
+  // Cache results by product ID, independently of each quotation row.
+  useEffect(() => {
+    const productIds = [
+      ...new Set(
+        items.map((item) => String(item.product_id || "")).filter(Boolean),
+      ),
+    ];
+
+    productIds.forEach((productId) => {
+      if (Object.prototype.hasOwnProperty.call(variantsByProduct, productId))
+        return;
+      if (variantRequestRef.current.has(productId)) return;
+      variantRequestRef.current.add(productId);
+      setVariantLoading((prev) => ({ ...prev, [productId]: true }));
+      setVariantErrors((prev) => ({ ...prev, [productId]: false }));
+
+      api
+        .get(`/products/${productId}`)
+        .then(({ data }) => {
+          const variants = data?.variants ?? data?.product?.variants;
+          if (!Array.isArray(variants)) {
+            throw new Error("Product details did not include a variants array");
+          }
+          setVariantsByProduct((prev) => ({ ...prev, [productId]: variants }));
+        })
+        .catch((error) => {
+          console.error(
+            "Failed to load variants for product:",
+            productId,
+            error,
+          );
+          setVariantErrors((prev) => ({ ...prev, [productId]: true }));
+        })
+        .finally(() => {
+          variantRequestRef.current.delete(productId);
+          setVariantLoading((prev) => ({ ...prev, [productId]: false }));
+        });
+    });
+  }, [items, variantsByProduct]);
+
+  const formatVariant = (variant) => {
+    let attributes = variant.attributes;
+    if (typeof attributes === "string") {
+      try {
+        attributes = JSON.parse(attributes);
+      } catch {
+        attributes = {};
+      }
+    }
+    const attributesLabel =
+      attributes && typeof attributes === "object"
+        ? Object.entries(attributes)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join(" / ")
+        : "";
+    return attributesLabel || variant.sku || `Variant #${variant.id}`;
+  };
 
   const clearBranchError = (name) => {
     if (!branchErrors[name]) return;
@@ -1007,6 +1113,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
           updatedItems[productItemIndex] = {
             ...updatedItems[productItemIndex],
             product_id: String(selectedProductData.id),
+            variant_id: "",
             product_name:
               selectedProductData.product_name ||
               selectedProductData.name ||
@@ -1041,8 +1148,27 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
     }
   };
 
+  const handleVariantSelect = (index, variantId) => {
+    const productId = String(items[index]?.product_id || "");
+    const variant = (variantsByProduct[productId] || []).find(
+      (entry) => String(entry.id) === String(variantId),
+    );
+    setItems((prev) =>
+      prev.map((item, itemIndex) =>
+        itemIndex !== index
+          ? item
+          : {
+              ...item,
+              variant_id: variant ? String(variant.id) : "",
+              price: variant ? Number(variant.unit_price) : item.price,
+            },
+      ),
+    );
+  };
+
   const handleItemChange = (index, e) => {
     const { name, value } = e.target;
+    if (name === "price" || name === "tax_rate") return;
 
     setItems((prevItems) => {
       const updatedItems = [...prevItems];
@@ -1083,6 +1209,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
       updatedItems[index] = {
         ...updatedItems[index],
         product_id: productId,
+        variant_id: "",
         product_name: product?.product_name || product?.name || "",
         description: product?.description || "",
         hsn_sac_code: product?.hsn_sac_code || "",
@@ -1212,6 +1339,30 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
         return false;
       }
 
+      const productId = String(item.product_id);
+      if (!Object.prototype.hasOwnProperty.call(variantsByProduct, productId)) {
+        toast.error(
+          `Variant information is still loading or unavailable at row ${index + 1}`,
+        );
+        return false;
+      }
+      const productVariants = variantsByProduct[productId];
+      if (productVariants.length) {
+        const selectedVariant = productVariants.find(
+          (variant) => String(variant.id) === String(item.variant_id),
+        );
+        if (!selectedVariant || selectedVariant.status !== "active") {
+          toast.error(`Please select an active variant at row ${index + 1}`);
+          return false;
+        }
+        if (!Number.isInteger(Number(item.quantity))) {
+          toast.error(
+            `Variant quantity must be a whole number at row ${index + 1}`,
+          );
+          return false;
+        }
+      }
+
       if (Number(item.quantity || 0) <= 0) {
         toast.error(`Quantity must be greater than 0 at row ${index + 1}`);
         return false;
@@ -1241,6 +1392,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
     terms_conditions: cleanString(formData.terms_conditions),
     items: items.map((item) => ({
       product_id: item.product_id || null,
+      variant_id: item.variant_id || null,
       item_name: cleanString(item.product_name),
       description: cleanString(item.description),
       hsn_sac_code: normalizeUpper(item.hsn_sac_code),
@@ -1442,7 +1594,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
               return (
                 <div
                   key={index}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950"
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950"
                 >
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -1459,60 +1611,121 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
-                    <Field label="Product">
-                      <ProductSelect
-                        products={filteredProducts}
-                        value={item.product_id}
-                        canAddProduct={canManageProducts}
-                        onChange={(value) =>
-                          handleProductSelect(index, {
-                            target: { value },
-                          })
-                        }
+                  <div
+                    className={`quotation-item-fields grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 [&_.input]:min-h-9 [&_.input]:rounded-lg [&_.input]:px-2.5 [&_.input]:py-2 [&_label]:mb-1 [&_label]:text-xs ${
+                      item.product_id &&
+                      (variantsByProduct[String(item.product_id)]?.length ||
+                        variantLoading[String(item.product_id)] ||
+                        variantErrors[String(item.product_id)])
+                        ? "xl:grid-cols-[minmax(160px,1.5fr)_minmax(170px,1.6fr)_minmax(125px,1.2fr)_minmax(95px,.8fr)_minmax(65px,.6fr)_minmax(100px,.85fr)_minmax(70px,.6fr)]"
+                        : "xl:grid-cols-[minmax(180px,1.6fr)_minmax(150px,1.3fr)_minmax(105px,.9fr)_minmax(70px,.6fr)_minmax(115px,.9fr)_minmax(75px,.65fr)]"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <Field label="Product">
+                        <ProductSelect
+                          products={filteredProducts}
+                          value={item.product_id}
+                          canAddProduct={canManageProducts}
+                          stockKinds={stockKinds}
+                          onChange={(value) =>
+                            handleProductSelect(index, {
+                              target: { value },
+                            })
+                          }
+                        />
+                      </Field>
+                    </div>
+
+                    {(() => {
+                      const productId = String(item.product_id || "");
+                      const variants = variantsByProduct[productId] || [];
+                      const loading =
+                        Boolean(productId) &&
+                        Boolean(variantLoading[productId]);
+                      const failed =
+                        Boolean(productId) && Boolean(variantErrors[productId]);
+                      return variants.length > 0 || loading || failed ? (
+                        <div className="min-w-0">
+                          <Field label="Variant">
+                            <SearchableDropdown
+                              value={item.variant_id || ""}
+                              placeholder={
+                                loading
+                                  ? "Loading variants..."
+                                  : failed
+                                    ? "Unable to load"
+                                    : "Select Variant"
+                              }
+                              searchPlaceholder="Search variant..."
+                              wide
+                              emptyText="No active variants"
+                              options={variants
+                                .filter(
+                                  (variant) =>
+                                    variant.status === "active" &&
+                                    Number(variant.quantity) > 0,
+                                )
+                                .map((variant) => ({
+                                  value: String(variant.id),
+                                  title: formatVariant(variant),
+                                  subtitle: `SKU: ${variant.sku || "—"} • ₹${Number(variant.unit_price).toFixed(2)} • Stock: ${variant.quantity}`,
+                                }))}
+                              onChange={(value) =>
+                                handleVariantSelect(index, value)
+                              }
+                            />
+                          </Field>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    <div className="min-w-0">
+                      <Input
+                        label="Description"
+                        name="description"
+                        value={item.description}
+                        onChange={(e) => handleItemChange(index, e)}
                       />
-                    </Field>
-
-                    <Input
-                      label="Description"
-                      name="description"
-                      value={item.description}
-                      onChange={(e) => handleItemChange(index, e)}
-                    />
-
-                    <Input
-                      label="HSN/SAC"
-                      name="hsn_sac_code"
-                      value={item.hsn_sac_code}
-                      onChange={(e) => handleItemChange(index, e)}
-                    />
-
-                    <Input
-                      label="Qty"
-                      type="number"
-                      name="quantity"
-                      value={item.quantity}
-                      onChange={(e) => handleItemChange(index, e)}
-                    />
-
-                    <Input
-                      label="Price"
-                      type="number"
-                      name="price"
-                      value={item.price}
-                      onChange={(e) => handleItemChange(index, e)}
-                    />
-
-                    <Input
-                      label="Tax %"
-                      type="number"
-                      name="tax_rate"
-                      value={item.tax_rate}
-                      onChange={(e) => handleItemChange(index, e)}
-                    />
+                    </div>
+                    <div className="min-w-0">
+                      <Input
+                        label="HSN/SAC"
+                        name="hsn_sac_code"
+                        value={item.hsn_sac_code}
+                        onChange={(e) => handleItemChange(index, e)}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <Input
+                        label="Qty"
+                        type="number"
+                        name="quantity"
+                        value={item.quantity}
+                        onChange={(e) => handleItemChange(index, e)}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <Input
+                        label="Price"
+                        type="number"
+                        name="price"
+                        value={item.price}
+                        readOnly
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <Input
+                        label="Tax %"
+                        type="number"
+                        name="tax_rate"
+                        value={item.tax_rate}
+                        readOnly
+                      />
+                    </div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <AmountBox title="Taxable" value={itemTotal.base} />
                     <AmountBox title="Tax" value={itemTotal.tax} />
                     <AmountBox title="Line Total" value={itemTotal.total} />
@@ -2155,6 +2368,8 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
       )}
 
       <style>{`
+        .quotation-item-fields > div > label { margin-bottom: 4px; font-size: 12px; }
+        .quotation-item-fields > div button { min-height: 36px; padding: 7px 9px; font-size: 13px; }
         .input {
           width: 100%;
           border: 1px solid #cbd5e1;
@@ -2236,7 +2451,16 @@ function Field({ label, icon, children, error }) {
   );
 }
 
-function Input({ label, icon, name, value, onChange, type = "text", min }) {
+function Input({
+  label,
+  icon,
+  name,
+  value,
+  onChange,
+  type = "text",
+  min,
+  readOnly = false,
+}) {
   return (
     <Field icon={icon} label={label}>
       <input
@@ -2245,7 +2469,8 @@ function Input({ label, icon, name, value, onChange, type = "text", min }) {
         value={value || ""}
         onChange={onChange}
         min={min}
-        className="input"
+        readOnly={readOnly}
+        className={`input ${readOnly ? "cursor-default bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200" : ""}`}
       />
     </Field>
   );
@@ -2343,14 +2568,58 @@ function CustomerSelect({
   );
 }
 
-function ProductSelect({ products, value, canAddProduct = false, onChange }) {
-  const productOptions = products.map((product) => ({
-    value: String(product.id),
-    title: product.product_name || product.name || "Unnamed Product",
-    subtitle: product.branch_name
-      ? `${product.branch_name}${product.sku ? ` • ${product.sku}` : ""}`
-      : product.sku || "No SKU",
-  }));
+function ProductSelect({
+  products,
+  value,
+  canAddProduct = false,
+  stockKinds = {},
+  onChange,
+}) {
+  const productOptions = products
+    .filter((product) => {
+      const qty = Number(product.quantity);
+
+      // No stock info available -> keep product visible as before.
+      if (
+        product.quantity === undefined ||
+        product.quantity === null ||
+        product.quantity === "" ||
+        !Number.isFinite(qty) ||
+        qty > 0
+      ) {
+        return true;
+      }
+
+      // Keep the currently selected product visible.
+      if (String(product.id) === String(value)) return true;
+
+      // Zero stock: hide simple products, keep variant products.
+      const kind = stockKinds[String(product.id)];
+      return kind === "variant" || kind === "error";
+    })
+    .map((product) => {
+      const qty = Number(product.quantity);
+      const hasStock =
+        product.quantity !== undefined &&
+        product.quantity !== null &&
+        product.quantity !== "" &&
+        Number.isFinite(qty) &&
+        qty > 0;
+
+      const baseSubtitle = product.branch_name
+        ? `${product.branch_name}${product.sku ? ` • ${product.sku}` : ""}`
+        : product.sku || "No SKU";
+
+      return {
+        value: String(product.id),
+        title: product.product_name || product.name || "Unnamed Product",
+        subtitle: hasStock
+          ? `${baseSubtitle} • Stock: ${qty}${
+              product.unit_type ? ` ${product.unit_type}` : ""
+            }`
+          : baseSubtitle,
+      };
+    });
 
   return (
     <SearchableDropdown
@@ -2359,6 +2628,7 @@ function ProductSelect({ products, value, canAddProduct = false, onChange }) {
       searchPlaceholder="Search product..."
       emptyText="No product found"
       options={productOptions}
+      wrapSubtitle
       addAction={
         canAddProduct
           ? { label: "Add New Product", value: "__add_product__" }
@@ -2489,9 +2759,14 @@ function SearchableDropdown({
   searchPlaceholder = "Search...",
   emptyText = "No option found",
   addAction = null,
+  wide = false,
+  wrapSubtitle = false,
 }) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
+  const [dropdownStyle, setDropdownStyle] = useState({});
+
+  const buttonRef = useRef(null);
   const dropdownRef = useRef(null);
 
   const selected = options.find(
@@ -2504,17 +2779,66 @@ function SearchableDropdown({
       .includes(keyword.trim().toLowerCase()),
   );
 
+  const updateDropdownPosition = () => {
+    if (!buttonRef.current) return;
+
+    const rect = buttonRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const dropdownHeight = wide ? 290 : 330;
+    const shouldOpenUp =
+      spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+
+    const width = wide ? Math.min(300, window.innerWidth - 24) : rect.width;
+    const left = wide
+      ? Math.max(12, Math.min(rect.left, window.innerWidth - width - 12))
+      : rect.left;
+
+    setDropdownStyle({
+      position: "fixed",
+      left,
+      width,
+      top: shouldOpenUp ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
+      maxHeight: dropdownHeight,
+      zIndex: 30000,
+    });
+  };
+
   useEffect(() => {
+    if (!open) return;
+
+    updateDropdownPosition();
+
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setOpen(false);
-        setKeyword("");
+      if (
+        buttonRef.current?.contains(event.target) ||
+        dropdownRef.current?.contains(event.target)
+      ) {
+        return;
       }
+
+      setOpen(false);
+      setKeyword("");
     };
 
+    const handleScroll = (event) => {
+      if (dropdownRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setOpen(false);
+      setKeyword("");
+    };
+
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleScroll);
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleScroll);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [open, wide]);
 
   const handleSelect = (nextValue) => {
     onChange(nextValue);
@@ -2523,8 +2847,9 @@ function SearchableDropdown({
   };
 
   return (
-    <div ref={dropdownRef} className="relative min-w-0">
+    <>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
@@ -2542,7 +2867,11 @@ function SearchableDropdown({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+        <div
+          ref={dropdownRef}
+          style={dropdownStyle}
+          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        >
           <div className="border-b border-slate-100 p-2 dark:border-slate-800">
             <div className="relative">
               <Search
@@ -2556,7 +2885,7 @@ function SearchableDropdown({
                 onChange={(e) => setKeyword(e.target.value)}
                 placeholder={searchPlaceholder}
                 autoFocus
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
               />
             </div>
           </div>
@@ -2568,17 +2897,21 @@ function SearchableDropdown({
                 type="button"
                 onClick={() => handleSelect(option.value)}
                 className={`w-full rounded-xl px-3 py-2 text-left transition hover:bg-blue-50 dark:hover:bg-slate-800 ${
-                  String(value) === String(option.value)
+                  String(value || "") === String(option.value)
                     ? "bg-blue-50 dark:bg-blue-950/40"
                     : ""
                 }`}
               >
-                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+                <p
+                  className={`${wide ? "whitespace-normal break-words" : "truncate"} text-sm font-semibold text-slate-800 dark:text-slate-100`}
+                >
                   {option.title}
                 </p>
 
                 {option.subtitle && (
-                  <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+                  <p
+                    className={`${wide || wrapSubtitle ? "whitespace-normal break-words" : "truncate"} text-xs font-medium text-slate-500 dark:text-slate-400`}
+                  >
                     {option.subtitle}
                   </p>
                 )}
@@ -2597,7 +2930,7 @@ function SearchableDropdown({
               <button
                 type="button"
                 onClick={() => handleSelect(addAction.value)}
-                className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
+                className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
               >
                 <Plus size={16} />
                 {addAction.label}
@@ -2606,7 +2939,7 @@ function SearchableDropdown({
           )}
         </div>
       )}
-    </div>
+    </>
   );
 }
 

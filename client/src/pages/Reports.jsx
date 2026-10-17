@@ -25,6 +25,7 @@ import {
   Boxes,
   Landmark,
   CalendarDays,
+  Check,
 } from "lucide-react";
 
 import {
@@ -441,169 +442,119 @@ function Reports() {
 }
 
 function BranchSelect({ branches, value, onChange }) {
-  const list = getList(branches);
   const [open, setOpen] = useState(false);
-  const [branchSearch, setBranchSearch] = useState("");
-  const [dropdownStyle, setDropdownStyle] = useState({});
-
-  const buttonRef = useRef(null);
   const dropdownRef = useRef(null);
 
-  const branchOptions = [
-    {
-      value: "",
-      label: "All Branches",
-      description: "Company-wide report",
-    },
-    ...list.map((branch) => ({
-      value: String(branch.id),
-      label: branch.branch_name || "Unnamed Branch",
-      description: branch.branch_code
-        ? `Code: ${branch.branch_code}`
-        : "No branch code",
-    })),
-  ];
-
-  const selected = branchOptions.find(
-    (branch) => String(branch.value) === String(value),
-  );
-
-  const filteredBranches = branchOptions.filter((branch) =>
-    `${branch.label || ""} ${branch.description || ""}`
-      .toLowerCase()
-      .includes(branchSearch.trim().toLowerCase()),
-  );
-
-  const updateDropdownPosition = () => {
-    if (!buttonRef.current) return;
-
-    const rect = buttonRef.current.getBoundingClientRect();
-    const dropdownHeight = 330;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const shouldOpenUp =
-      spaceBelow < dropdownHeight && rect.top > dropdownHeight;
-
-    setDropdownStyle({
-      position: "fixed",
-      left: rect.left,
-      width: rect.width,
-      top: shouldOpenUp ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
-      maxHeight: dropdownHeight,
-      zIndex: 9999,
-    });
-  };
-
   useEffect(() => {
-    if (!open) return;
-
-    updateDropdownPosition();
-
     const handleClickOutside = (event) => {
       if (
-        buttonRef.current?.contains(event.target) ||
-        dropdownRef.current?.contains(event.target)
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target)
       ) {
-        return;
+        setOpen(false);
       }
-
-      setOpen(false);
-      setBranchSearch("");
     };
 
-    window.addEventListener("scroll", updateDropdownPosition, true);
-    window.addEventListener("resize", updateDropdownPosition);
     document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
-      window.removeEventListener("scroll", updateDropdownPosition, true);
-      window.removeEventListener("resize", updateDropdownPosition);
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [open]);
+  }, []);
 
-  const handleSelect = (selectedValue) => {
-    onChange(selectedValue);
-    setOpen(false);
-    setBranchSearch("");
+  const branchList = getList(branches);
+
+  const formatBranchLabel = (branch) => {
+    if (!branch?.branch_name) return "Selected Branch";
+
+    return branch.branch_code
+      ? `${branch.branch_name} (${branch.branch_code})`
+      : branch.branch_name;
   };
 
+  const selectedBranch = branchList.find(
+    (branch) => String(branch.id) === String(value)
+  );
+
   return (
-    <>
+    <div
+      ref={dropdownRef}
+      className="relative w-full min-w-0 sm:min-w-[220px]"
+    >
       <button
-        ref={buttonRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
+        aria-expanded={open}
+        aria-label="Select branch"
+        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-600"
       >
         <span className="min-w-0 truncate">
-          {selected?.label || "All Branches"}
+          {value === ""
+            ? "All Branches"
+            : formatBranchLabel(selectedBranch)}
         </span>
 
         <ChevronDown
-          size={17}
-          className={`shrink-0 text-slate-400 dark:text-slate-500 transition ${
+          size={16}
+          className={`shrink-0 transition ${
             open ? "rotate-180" : ""
           }`}
         />
       </button>
 
       {open && (
-        <div
-          ref={dropdownRef}
-          style={dropdownStyle}
-          className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl"
-        >
-          <div className="border-b border-slate-100 p-2">
-            <div className="relative">
-              <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
-              />
+        <div className="absolute right-0 top-full z-50 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+          <div className="max-h-64 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <span>All Branches</span>
 
-              <input
-                type="text"
-                value={branchSearch}
-                onChange={(event) => setBranchSearch(event.target.value)}
-                placeholder="Search branch..."
-                autoFocus
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 focus:bg-white dark:bg-slate-900 focus:ring-4 focus:ring-blue-100"
-              />
-            </div>
-          </div>
+              {value === "" && (
+                <Check
+                  size={15}
+                  className="shrink-0 text-green-600"
+                />
+              )}
+            </button>
 
-          <div className="max-h-56 overflow-y-auto p-2">
-            {filteredBranches.map((branch) => (
+            {branchList.map((branch) => (
               <button
-                key={branch.value || "all"}
+                key={branch.id}
                 type="button"
-                onClick={() => handleSelect(branch.value)}
-                className={`w-full rounded-xl px-3 py-2 text-left transition hover:bg-blue-50 ${
-                  String(value || "") === String(branch.value)
-                    ? "bg-blue-50"
-                    : ""
-                }`}
+                onClick={() => {
+                  onChange(String(branch.id));
+                  setOpen(false);
+                }}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
               >
-                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  {branch.label}
-                </p>
+                <span className="min-w-0 truncate">
+                  {formatBranchLabel(branch)}
+                  {(branch.is_main === true ||
+                    branch.is_main === 1) &&
+                    " • HQ"}
+                </span>
 
-                <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {branch.description}
-                </p>
+                {String(value) === String(branch.id) && (
+                  <Check
+                    size={15}
+                    className="shrink-0 text-green-600"
+                  />
+                )}
               </button>
             ))}
-
-            {filteredBranches.length === 0 && (
-              <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
-                No branch found
-              </div>
-            )}
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
+
 
 function QuickInsights({ bestMonth, bestCustomer, highestBranch, summary }) {
   const insights = [

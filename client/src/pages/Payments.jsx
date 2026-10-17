@@ -127,7 +127,10 @@ function Payments() {
   const branches = useMemo(() => {
     const branchMap = new Map();
 
-    [...(Array.isArray(invoices) ? invoices : []), ...(Array.isArray(payments) ? payments : [])].forEach((item) => {
+    [
+      ...(Array.isArray(invoices) ? invoices : []),
+      ...(Array.isArray(payments) ? payments : []),
+    ].forEach((item) => {
       if (item.branch_id && item.branch_name) {
         branchMap.set(Number(item.branch_id), {
           id: item.branch_id,
@@ -604,7 +607,7 @@ function Payments() {
                 onClick={() => setShowCreateInvoiceModal(false)}
                 className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
               >
-                Back
+                <X size={16} />
               </button>
             </div>
 
@@ -761,9 +764,7 @@ function PaymentModal({
                       })
                     }
                     icon={<CreditCard size={16} />}
-                    options={[
-                      ...PAYMENT_METHOD_OPTIONS,
-                    ]}
+                    options={[...PAYMENT_METHOD_OPTIONS]}
                   />
                 </InputWrapper>
 
@@ -823,7 +824,7 @@ function PaymentModal({
                     <Building2 size={15} />
                     Branch
                   </p>
-                  <h3 className="mt-1 text-lg font-bold">
+                  <h3 className="mt-1 text-medium font-medium">
                     {selectedInvoice.branch_name || "Main Company"}
                   </h3>
                 </div>

@@ -366,19 +366,6 @@ export const createCustomer = async (req, res) => {
       return res.status(409).json({ message: duplicateCustomerError });
     }
 
-    const duplicateUserEmail = await checkDuplicateUserEmail({
-      connection,
-      email: payload.email,
-    });
-
-    if (duplicateUserEmail) {
-      await connection.rollback();
-      return res.status(409).json({
-        message:
-          "This email is already used for login. Please use another email.",
-      });
-    }
-
     const [customerResult] = await connection.query(
       `
       INSERT INTO tbl_customers
@@ -701,21 +688,6 @@ export const updateCustomer = async (req, res) => {
     if (duplicateCustomerError) {
       await connection.rollback();
       return res.status(409).json({ message: duplicateCustomerError });
-    }
-
-    const duplicateUserEmail = await checkDuplicateUserEmail({
-      connection,
-      email: payload.email,
-      customerId: id,
-      companyId: company_id,
-    });
-
-    if (duplicateUserEmail) {
-      await connection.rollback();
-      return res.status(409).json({
-        message:
-          "This email is already used for login. Please use another email.",
-      });
     }
 
     const [result] = await connection.query(

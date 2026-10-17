@@ -32,209 +32,265 @@ const formatCycle = (cycle) => {
 
 const drawSubscriptionInvoicePdf = ({ doc, invoice }) => {
   const pageWidth = doc.page.width;
+  const pageHeight = doc.page.height;
   const margin = 50;
+  const right = pageWidth - margin;
+  const contentWidth = pageWidth - margin * 2;
 
-  // Header
-  doc.rect(0, 0, pageWidth, 115).fill("#0f172a");
+  const colors = {
+    dark: "#0f172a",
+    slate: "#334155",
+    muted: "#64748b",
+    light: "#cbd5e1",
+    border: "#e2e8f0",
+    surface: "#f8fafc",
+    tableHead: "#f1f5f9",
+    accent: "#6366f1",
+    footer: "#94a3b8",
+  };
+
+  const isPaid = invoice.invoice_status === "paid";
+
+  const formatDate = (value) =>
+    value ? new Date(value).toLocaleDateString("en-IN") : "-";
+
+  // ---------- Header ----------
+  doc.rect(0, 0, pageWidth, 110).fill(colors.dark);
+  doc.rect(0, 110, pageWidth, 4).fill(colors.accent);
 
   doc
     .fillColor("#ffffff")
     .fontSize(22)
     .font("Helvetica-Bold")
-    .text("Smart Invoice SaaS", margin, 32);
+    .text("Smart Invoice SaaS", margin, 34, { lineBreak: false });
 
   doc
     .fontSize(10)
     .font("Helvetica")
-    .fillColor("#cbd5e1")
-    .text("Subscription Billing Invoice", margin, 62);
+    .fillColor(colors.light)
+    .text("Subscription Billing Invoice", margin, 64, { lineBreak: false });
 
   doc
     .fontSize(26)
     .font("Helvetica-Bold")
     .fillColor("#ffffff")
-    .text("INVOICE", 390, 32, { align: "right" });
+    .text("INVOICE", right - 220, 30, {
+      width: 220,
+      align: "right",
+      lineBreak: false,
+    });
 
   doc
     .fontSize(10)
     .font("Helvetica")
-    .fillColor("#cbd5e1")
-    .text(invoice.invoice_number || "-", 390, 65, { align: "right" });
+    .fillColor(colors.light)
+    .text(invoice.invoice_number || "-", right - 220, 66, {
+      width: 220,
+      align: "right",
+      lineBreak: false,
+    });
 
-  // Invoice status badge
-  doc
-    .roundedRect(margin, 140, 120, 30, 8)
-    .fill(invoice.invoice_status === "paid" ? "#dcfce7" : "#ffedd5");
+  // ---------- Bill To (left column) ----------
+  const topY = 145;
 
   doc
-    .fillColor(invoice.invoice_status === "paid" ? "#15803d" : "#c2410c")
-    .fontSize(11)
+    .fillColor(colors.muted)
+    .fontSize(9)
+    .font("Helvetica-Bold")
+    .text("BILL TO", margin, topY, { characterSpacing: 1, lineBreak: false });
+
+  doc
+    .fillColor(colors.dark)
+    .fontSize(16)
+    .font("Helvetica-Bold")
+    .text(invoice.company_name || "-", margin, topY + 18, {
+      width: 250,
+      height: 20,
+      ellipsis: true,
+    });
+
+  doc
+    .fontSize(10)
+    .font("Helvetica")
+    .fillColor(colors.muted)
+    .text("Company subscription billing", margin, topY + 42, {
+      lineBreak: false,
+    });
+
+  // Status badge (pill)
+  const badgeY = topY + 68;
+  doc
+    .roundedRect(margin, badgeY, 110, 26, 13)
+    .fill(isPaid ? "#dcfce7" : "#ffedd5");
+
+  doc
+    .fillColor(isPaid ? "#15803d" : "#c2410c")
+    .fontSize(10)
     .font("Helvetica-Bold")
     .text(
       String(invoice.invoice_status || "generated").toUpperCase(),
       margin,
-      149,
-      { width: 120, align: "center" },
+      badgeY + 8,
+      { width: 110, align: "center", lineBreak: false },
     );
 
-  // Bill To
-  doc
-    .fillColor("#0f172a")
-    .fontSize(12)
-    .font("Helvetica-Bold")
-    .text("BILL TO", margin, 195);
+  // ---------- Invoice details card (right column) ----------
+  const cardW = 220;
+  const cardX = right - cardW;
+  const cardH = 100;
 
   doc
-    .fontSize(16)
-    .font("Helvetica-Bold")
-    .text(invoice.company_name || "-", margin, 215);
-
-  doc
-    .fontSize(10)
-    .font("Helvetica")
-    .fillColor("#64748b")
-    .text("Company subscription billing", margin, 240);
-
-  // Invoice details box
-  const boxX = 340;
-  const boxY = 180;
-
-  doc
-    .roundedRect(boxX, boxY, 205, 110, 12)
-    .strokeColor("#e2e8f0")
-    .lineWidth(1)
-    .stroke();
+    .roundedRect(cardX, topY, cardW, cardH, 12)
+    .fillAndStroke(colors.surface, colors.border);
 
   const detailRow = (label, value, y) => {
     doc
-      .fillColor("#64748b")
+      .fillColor(colors.muted)
       .fontSize(9)
       .font("Helvetica")
-      .text(label, boxX + 15, y);
+      .text(label, cardX + 16, y, { width: 80, lineBreak: false });
 
     doc
-      .fillColor("#0f172a")
+      .fillColor(colors.dark)
       .fontSize(10)
       .font("Helvetica-Bold")
-      .text(value || "-", boxX + 95, y);
+      .text(String(value || "-"), cardX + 100, y, {
+        width: cardW - 116,
+        align: "right",
+        lineBreak: false,
+      });
   };
 
-  detailRow(
-    "Invoice Date",
-    invoice.invoice_date
-      ? new Date(invoice.invoice_date).toLocaleDateString("en-IN")
-      : "-",
-    boxY + 18,
-  );
+  detailRow("Invoice Date", formatDate(invoice.invoice_date), topY + 18);
+  detailRow("Due Date", formatDate(invoice.due_date), topY + 46);
+  detailRow("Billing Cycle", formatCycle(invoice.billing_cycle), topY + 74);
 
-  detailRow(
-    "Due Date",
-    invoice.due_date
-      ? new Date(invoice.due_date).toLocaleDateString("en-IN")
-      : "-",
-    boxY + 43,
-  );
+  // ---------- Plan table ----------
+  const tableY = 280;
+  const amountW = 130;
+  const amountX = right - 16 - amountW;
 
-  detailRow("Billing Cycle", formatCycle(invoice.billing_cycle), boxY + 68);
-
-  // Plan table header
-  const tableY = 340;
+  doc.roundedRect(margin, tableY, contentWidth, 34, 8).fill(colors.tableHead);
 
   doc
-    .roundedRect(margin, tableY, pageWidth - margin * 2, 38, 8)
-    .fill("#f1f5f9");
-
-  doc
-    .fillColor("#334155")
-    .fontSize(10)
+    .fillColor(colors.slate)
+    .fontSize(9)
     .font("Helvetica-Bold")
-    .text("DESCRIPTION", margin + 18, tableY + 14)
-    .text("AMOUNT", 430, tableY + 14, { width: 95, align: "right" });
+    .text("DESCRIPTION", margin + 16, tableY + 12, {
+      characterSpacing: 1,
+      lineBreak: false,
+    })
+    .text("AMOUNT", amountX, tableY + 12, {
+      width: amountW,
+      align: "right",
+      characterSpacing: 1,
+      lineBreak: false,
+    });
 
   // Plan row
-  doc
-    .fillColor("#0f172a")
-    .fontSize(12)
-    .font("Helvetica-Bold")
-    .text(invoice.plan_name || "Subscription Plan", margin + 18, tableY + 62);
+  const rowY = tableY + 54;
 
   doc
-    .fontSize(10)
-    .font("Helvetica")
-    .fillColor("#64748b")
-    .text(
-      `SaaS subscription - ${formatCycle(invoice.billing_cycle)}`,
-      margin + 18,
-      tableY + 82,
-    );
-
-  doc
-    .fillColor("#0f172a")
+    .fillColor(colors.dark)
     .fontSize(12)
     .font("Helvetica-Bold")
-    .text(`INR ${formatAmount(invoice.amount)}`, 430, tableY + 66, {
-      width: 95,
-      align: "right",
+    .text(invoice.plan_name || "Subscription Plan", margin + 16, rowY, {
+      width: amountX - margin - 32,
+      height: 16,
+      ellipsis: true,
     });
 
   doc
-    .moveTo(margin, tableY + 120)
-    .lineTo(pageWidth - margin, tableY + 120)
-    .strokeColor("#e2e8f0")
-    .stroke();
-
-  // Total box
-  doc.roundedRect(330, tableY + 145, 215, 72, 12).fill("#0f172a");
-
-  doc
-    .fillColor("#cbd5e1")
     .fontSize(10)
     .font("Helvetica")
-    .text("TOTAL PAYABLE", 350, tableY + 162);
+    .fillColor(colors.muted)
+    .text(
+      `SaaS subscription - ${formatCycle(invoice.billing_cycle)}`,
+      margin + 16,
+      rowY + 20,
+      { width: amountX - margin - 32, lineBreak: false },
+    );
+
+  doc
+    .fillColor(colors.dark)
+    .fontSize(12)
+    .font("Helvetica-Bold")
+    .text(`INR ${formatAmount(invoice.amount)}`, amountX, rowY, {
+      width: amountW,
+      align: "right",
+      lineBreak: false,
+    });
+
+  // Divider
+  doc
+    .moveTo(margin, tableY + 106)
+    .lineTo(right, tableY + 106)
+    .lineWidth(1)
+    .strokeColor(colors.border)
+    .stroke();
+
+  // ---------- Total box (right) ----------
+  const totalY = tableY + 130;
+  const totalW = 230;
+  const totalX = right - totalW;
+
+  doc.roundedRect(totalX, totalY, totalW, 78, 12).fill(colors.dark);
+
+  doc
+    .fillColor(colors.light)
+    .fontSize(9)
+    .font("Helvetica-Bold")
+    .text("TOTAL PAYABLE", totalX + 20, totalY + 16, {
+      characterSpacing: 1,
+      lineBreak: false,
+    });
 
   doc
     .fillColor("#ffffff")
-    .fontSize(22)
+    .fontSize(20)
     .font("Helvetica-Bold")
-    .text(`INR ${formatAmount(invoice.amount)}`, 350, tableY + 184);
+    .text(`INR ${formatAmount(invoice.amount)}`, totalX + 20, totalY + 38, {
+      width: totalW - 40,
+      lineBreak: false,
+    });
 
-  // Notes
+  // ---------- Notes (left) ----------
   doc
-    .fillColor("#0f172a")
-    .fontSize(12)
+    .fillColor(colors.dark)
+    .fontSize(11)
     .font("Helvetica-Bold")
-    .text("Notes", margin, tableY + 165);
+    .text("Notes", margin, totalY, { lineBreak: false });
 
   doc
-    .fillColor("#64748b")
+    .fillColor(colors.muted)
     .fontSize(10)
     .font("Helvetica")
     .text(
       "This is a system generated subscription invoice. Please complete payment before the due date to activate or continue your subscription.",
       margin,
-      tableY + 185,
-      { width: 250, lineGap: 4 },
+      totalY + 20,
+      { width: totalX - margin - 30, lineGap: 4 },
     );
 
-  // Footer
+  // ---------- Footer ----------
+  const footerY = pageHeight - 100;
+
   doc
-    .moveTo(margin, 735)
-    .lineTo(pageWidth - margin, 735)
-    .strokeColor("#e2e8f0")
+    .moveTo(margin, footerY)
+    .lineTo(right, footerY)
+    .lineWidth(1)
+    .strokeColor(colors.border)
     .stroke();
 
   doc
-    .fillColor("#94a3b8")
+    .fillColor(colors.footer)
     .fontSize(9)
     .font("Helvetica")
     .text(
       "Generated by Smart Invoice & Billing Management System",
       margin,
-      750,
-      {
-        align: "center",
-        width: pageWidth - margin * 2,
-      },
+      footerY + 14,
+      { width: contentWidth, align: "center", lineBreak: false },
     );
 };
 

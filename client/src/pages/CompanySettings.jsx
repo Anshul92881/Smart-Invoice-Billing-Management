@@ -664,24 +664,6 @@ function CompanySettings() {
             description="Configure company SMTP. These details will be used to send invoices and quotations from this company email."
           />
 
-          <div className="mb-5 rounded-xl border border-blue-100 bg-blue-50 p-4 dark:border-blue-900/40 dark:bg-blue-950/30">
-            <div className="flex gap-3">
-              <ShieldCheck
-                className="mt-0.5 shrink-0 text-blue-700 dark:text-blue-300"
-                size={18}
-              />
-              <div>
-                <p className="text-sm font-bold text-blue-900 dark:text-blue-200">
-                  Multi-tenant company email
-                </p>
-                <p className="mt-1 text-sm font-medium leading-6 text-blue-700 dark:text-blue-300">
-                  This SMTP belongs only to this company. Other companies will
-                  use their own SMTP configuration.
-                </p>
-              </div>
-            </div>
-          </div>
-
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Field icon={<Mail size={16} />} label="SMTP Host">
               <input

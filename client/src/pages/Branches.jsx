@@ -372,7 +372,6 @@ function Branches() {
           value={stats.total}
           icon={<GitBranch size={20} />}
           color="bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-          onClick={() => setStatusFilter("all")}
         />
 
         <SummaryCard
@@ -380,7 +379,6 @@ function Branches() {
           value={stats.active}
           icon={<CheckCircle2 size={20} />}
           color="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-          onClick={() => setStatusFilter("active")}
         />
 
         <SummaryCard
@@ -388,7 +386,6 @@ function Branches() {
           value={stats.inactive}
           icon={<XCircle size={20} />}
           color="bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
-          onClick={() => setStatusFilter("inactive")}
         />
       </div>
 
@@ -953,28 +950,28 @@ function FormModal({ title, children, onClose }) {
   );
 }
 
-function SummaryCard({ title, value, icon, color, onClick }) {
+function SummaryCard({ title, value, icon, color }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-800"
-    >
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
             {title}
           </p>
+
           <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
             {value}
           </h2>
         </div>
 
-        <div className={`rounded-xl p-3 ${color}`}>{icon}</div>
+        <div className={`rounded-xl p-3 ${color}`}>
+          {icon}
+        </div>
       </div>
-    </button>
+    </div>
   );
 }
+
 
 function ViewField({ label, value, full }) {
   return (

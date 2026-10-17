@@ -24,7 +24,9 @@ const getUserAgent = (req) => req.headers["user-agent"] || null;
 
 const normalizeText = (value) => {
   if (value === undefined || value === null) return "";
-  return String(value).replace(/<[^>]*>?/gm, "").trim();
+  return String(value)
+    .replace(/<[^>]*>?/gm, "")
+    .trim();
 };
 
 const normalizeNullable = (value) => {
@@ -88,9 +90,7 @@ const getMainBranchId = async (companyId) => {
 const getFinalBranchId = (branch_id) => {
   const id = Number(branch_id);
 
-  return Number.isInteger(id) && id > 0
-    ? id
-    : null;
+  return Number.isInteger(id) && id > 0 ? id : null;
 };
 
 const getBranchCondition = () => {
@@ -267,25 +267,39 @@ const checkDuplicateSku = async ({
 }) => {
   if (!sku) return false;
 
-  const params = [companyId, sku];
-
-  let query = `
+  // Check existing parent product SKUs.
+  let productQuery = `
     SELECT id
     FROM tbl_products
-    WHERE company_id = ?
-    AND sku = ?
+    WHERE company_id = ? AND sku = ?
   `;
 
+  const productParams = [companyId, sku];
+
   if (excludeProductId) {
-    query += " AND id != ?";
-    params.push(excludeProductId);
+    productQuery += " AND id != ?";
+    productParams.push(excludeProductId);
   }
 
-  query += " LIMIT 1";
+  productQuery += " LIMIT 1";
 
-  const [rows] = await db.query(query, params);
+  const [products] = await db.query(productQuery, productParams);
 
-  return rows.length > 0;
+  if (products.length > 0) return true;
+
+  // Also check variant SKUs.
+  const [variants] = await db.query(
+    `
+      SELECT id
+      FROM tbl_product_variants
+      WHERE company_id = ?
+        AND sku = ?
+      LIMIT 1
+    `,
+    [companyId, sku],
+  );
+
+  return variants.length > 0;
 };
 
 // CREATE PRODUCT
@@ -591,7 +605,48 @@ export const getSingleProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    return res.json(products[0]);
+    const product = products[0];
+
+    const [variants] = await db.query(
+      `
+    SELECT
+      id,
+      product_id,
+      sku,
+      attributes,
+      unit_price,
+      quantity,
+      status
+    FROM tbl_product_variants
+    WHERE product_id = ?
+      AND company_id = ?
+    ORDER BY id DESC
+  `,
+      [id, company_id],
+    );
+
+    const formattedVariants = variants.map((variant) => ({
+      ...variant,
+      attributes:
+        typeof variant.attributes === "string"
+          ? JSON.parse(variant.attributes)
+          : variant.attributes,
+    }));
+
+    const activeVariants = formattedVariants.filter(
+      (variant) => variant.status === "active",
+    );
+
+    return res.json({
+      ...product,
+      has_variants: formattedVariants.length > 0,
+      variant_count: formattedVariants.length,
+      variant_stock: activeVariants.reduce(
+        (total, variant) => total + Number(variant.quantity || 0),
+        0,
+      ),
+      variants: formattedVariants,
+    });
   } catch (error) {
     return res.status(500).json({
       message: "Get product error",
@@ -668,7 +723,6 @@ export const updateProduct = async (req, res) => {
       }
 
       finalTaxRate = toNumber(tax.tax_percentage);
-      finalHsnSac = finalHsnSac || tax.hsn_sac_code || null;
     }
 
     const validationError = validateProductPayload({
@@ -691,6 +745,35 @@ export const updateProduct = async (req, res) => {
       return res.status(409).json({
         message: "SKU already exists for this company",
       });
+    }
+
+    const [variantCountRows] = await db.query(
+      `
+    SELECT COUNT(*) AS total
+    FROM tbl_product_variants
+    WHERE company_id = ?
+      AND product_id = ?
+  `,
+      [company_id, id],
+    );
+
+    if (Number(variantCountRows[0]?.total || 0) > 0) {
+      const [currentRows] = await db.query(
+        `
+      SELECT quantity
+      FROM tbl_products
+      WHERE id = ? AND company_id = ?
+      LIMIT 1
+    `,
+        [id, company_id],
+      );
+
+      if (Number(payload.quantity) !== Number(currentRows[0]?.quantity)) {
+        return res.status(400).json({
+          message:
+            "This product has variants. Manage stock individually for each variant.",
+        });
+      }
     }
 
     const [result] = await db.query(

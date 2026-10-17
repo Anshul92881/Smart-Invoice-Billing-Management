@@ -96,6 +96,8 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
 
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
+  // Loaded per product. A failed lookup must never be treated as a simple product.
+  const [variantLookup, setVariantLookup] = useState({});
   const [branches, setBranches] = useState([]);
 
   const [rolePermissions, setRolePermissions] = useState({});
@@ -166,6 +168,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
     items: [
       {
         product_id: "",
+        variant_id: null,
         product_name: "",
         description: "",
         hsn_sac_code: "",
@@ -292,6 +295,96 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
     );
   }, [products]);
 
+  // Products with zero parent quantity are either out-of-stock simple products
+  // or variant products (parent quantity is always 0 for them). Check which.
+  const [stockKinds, setStockKinds] = useState({});
+  const stockCheckRef = useRef(new Set());
+
+  useEffect(() => {
+    products.forEach((product) => {
+      const qty = Number(product.quantity);
+
+      if (
+        product.quantity === undefined ||
+        product.quantity === null ||
+        product.quantity === "" ||
+        !Number.isFinite(qty) ||
+        qty > 0
+      ) {
+        return;
+      }
+
+      const key = String(product.id);
+
+      if (stockCheckRef.current.has(key)) return;
+      stockCheckRef.current.add(key);
+
+      api
+        .get(`/products/${key}`)
+        .then(({ data }) => {
+          const variants = data?.variants ?? data?.product?.variants;
+          const kind =
+            Array.isArray(variants) && variants.length > 0
+              ? "variant"
+              : "simple";
+
+          setStockKinds((prev) => ({ ...prev, [key]: kind }));
+        })
+        .catch(() => {
+          setStockKinds((prev) => ({ ...prev, [key]: "error" }));
+        });
+    });
+  }, [products]);
+
+  const loadProductVariants = async (productId) => {
+    if (!productId) return;
+    const key = String(productId);
+    if (
+      variantLookup[key]?.state === "ready" ||
+      variantLookup[key]?.state === "loading"
+    )
+      return;
+
+    setVariantLookup((prev) => ({
+      ...prev,
+      [key]: { state: "loading", variants: [] },
+    }));
+    try {
+      // Product detail endpoint already returns the saved variants array.
+      const { data } = await api.get(`/products/${key}`);
+      if (!Array.isArray(data?.variants)) {
+        throw new Error("Product variants were not included in the response");
+      }
+      setVariantLookup((prev) => ({
+        ...prev,
+        [key]: { state: "ready", variants: data.variants },
+      }));
+    } catch (error) {
+      setVariantLookup((prev) => ({
+        ...prev,
+        [key]: { state: "error", variants: [] },
+      }));
+      toast.error(
+        error.response?.data?.message || "Unable to load product variants",
+      );
+    }
+  };
+
+  const getVariantTitle = (variant) => {
+    let attributes = variant.attributes;
+    if (typeof attributes === "string") {
+      try {
+        attributes = JSON.parse(attributes);
+      } catch {
+        attributes = {};
+      }
+    }
+    const description = Object.entries(attributes || {})
+      .map(([key, value]) => `${key}: ${value}`)
+      .join(" / ");
+    return description || variant.sku || `Variant #${variant.id}`;
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -303,6 +396,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
         items: [
           {
             product_id: "",
+            variant_id: null,
             product_name: "",
             description: "",
             hsn_sac_code: "",
@@ -565,6 +659,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
             items: [
               {
                 product_id: "",
+                variant_id: null,
                 product_name: "",
                 description: "",
                 hsn_sac_code: "",
@@ -901,6 +996,10 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
           ...prev,
           items: updatedItems,
         }));
+        setVariantLookup((prev) => ({
+          ...prev,
+          [String(selectedProduct.id)]: { state: "ready", variants: [] },
+        }));
       }
 
       resetProductForm();
@@ -974,14 +1073,12 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
   };
 
   const handleItemChange = (index, field, value) => {
-    const updatedItems = [...formData.items];
-
+    if (field === "price" || field === "tax_rate") return;
     if (field === "product_id" && value === "__add_product__") {
       if (!canAddProduct) {
         toast.error("Product permission required");
         return;
       }
-
       setProductItemIndex(index);
       setProductForm({
         ...initialProductForm,
@@ -991,31 +1088,50 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
       return;
     }
 
-    updatedItems[index][field] =
-      field === "hsn_sac_code" ? normalizeUpper(value) : value;
+    if (field === "product_id" && value) loadProductVariants(value);
 
-    if (field === "product_id") {
-      const selectedProduct = filteredProducts.find(
-        (product) => Number(product.id) === Number(value),
-      );
+    setFormData((prev) => {
+      const updatedItems = prev.items.map((item, i) => {
+        if (i !== index) return item;
 
-      if (selectedProduct) {
-        updatedItems[index] = {
-          ...updatedItems[index],
-          product_id: selectedProduct.id,
-          product_name: selectedProduct.product_name || "",
-          description: selectedProduct.description || "",
-          hsn_sac_code: selectedProduct.hsn_sac_code || "",
-          price: selectedProduct.unit_price || 0,
-          tax_rate: selectedProduct.tax_rate || 0,
-          cgst_percentage: selectedProduct.cgst_percentage || 0,
-          sgst_percentage: selectedProduct.sgst_percentage || 0,
-          igst_percentage: selectedProduct.igst_percentage || 0,
+        if (field === "product_id") {
+          const product = filteredProducts.find(
+            (p) => Number(p.id) === Number(value),
+          );
+          if (!product) return { ...item, product_id: "", variant_id: null };
+          return {
+            ...item,
+            product_id: product.id,
+            variant_id: null,
+            product_name: product.product_name || "",
+            description: product.description || "",
+            hsn_sac_code: product.hsn_sac_code || "",
+            price: product.unit_price || 0,
+            tax_rate: product.tax_rate || 0,
+            cgst_percentage: product.cgst_percentage || 0,
+            sgst_percentage: product.sgst_percentage || 0,
+            igst_percentage: product.igst_percentage || 0,
+          };
+        }
+
+        if (field === "variant_id") {
+          const variants =
+            variantLookup[String(item.product_id)]?.variants || [];
+          const variant = variants.find((v) => String(v.id) === String(value));
+          return {
+            ...item,
+            variant_id: variant ? Number(variant.id) : null,
+            price: variant ? Number(variant.unit_price) : item.price,
+          };
+        }
+
+        return {
+          ...item,
+          [field]: field === "hsn_sac_code" ? normalizeUpper(value) : value,
         };
-      }
-    }
-
-    setFormData((prev) => ({ ...prev, items: updatedItems }));
+      });
+      return { ...prev, items: updatedItems };
+    });
   };
 
   const calculateTotals = () => {
@@ -1103,6 +1219,35 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
         return false;
       }
 
+      const variantData = variantLookup[String(item.product_id)];
+      if (!variantData || variantData.state !== "ready") {
+        toast.error(`Wait for product details to load at row ${row}`);
+        return false;
+      }
+      if (variantData.variants.length > 0) {
+        const selectedVariant = variantData.variants.find(
+          (variant) => Number(variant.id) === Number(item.variant_id),
+        );
+        if (!selectedVariant || selectedVariant.status !== "active") {
+          toast.error(`Select an active variant at row ${row}`);
+          return false;
+        }
+        const requestedQuantity = formData.items
+          .filter(
+            (rowItem) => Number(rowItem.variant_id) === Number(item.variant_id),
+          )
+          .reduce((sum, rowItem) => sum + Number(rowItem.quantity || 0), 0);
+        if (
+          !Number.isSafeInteger(Number(item.quantity)) ||
+          requestedQuantity > Number(selectedVariant.quantity)
+        ) {
+          toast.error(
+            `Invalid quantity or insufficient variant stock at row ${row}`,
+          );
+          return false;
+        }
+      }
+
       if (cleanString(item.description).length > 500) {
         toast.error(
           `Description must be less than 500 characters at row ${row}`,
@@ -1149,6 +1294,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
     notes: cleanString(formData.notes),
     items: formData.items.map((item) => ({
       product_id: item.product_id,
+      variant_id: item.variant_id || null,
       item_name: cleanString(item.product_name),
       description: cleanString(item.description),
       hsn_sac_code: normalizeUpper(item.hsn_sac_code),
@@ -1328,11 +1474,17 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
           <div className="space-y-4">
             {formData.items.map((item, index) => {
               const itemTotals = calculateItem(item);
+              const variantData = variantLookup[String(item.product_id)];
+              const hasVariants = (variantData?.variants?.length || 0) > 0;
+              const activeVariants = (variantData?.variants || []).filter(
+                (variant) =>
+                  variant.status === "active" && Number(variant.quantity) > 0,
+              );
 
               return (
                 <div
                   key={index}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950"
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950"
                 >
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -1349,17 +1501,44 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+                  <div
+                    className={`invoice-item-fields grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 ${
+                      hasVariants
+                        ? "xl:grid-cols-[minmax(160px,1.5fr)_minmax(170px,1.6fr)_minmax(125px,1.2fr)_minmax(95px,.8fr)_minmax(65px,.6fr)_minmax(100px,.85fr)_minmax(70px,.6fr)]"
+                        : "xl:grid-cols-[minmax(180px,1.6fr)_minmax(150px,1.3fr)_minmax(105px,.9fr)_minmax(70px,.6fr)_minmax(115px,.9fr)_minmax(75px,.65fr)]"
+                    }`}
+                  >
                     <Field label="Product">
                       <ProductSelect
                         products={filteredProducts}
                         value={item.product_id}
                         canAddProduct={canAddProduct}
+                        stockKinds={stockKinds}
                         onChange={(value) =>
                           handleItemChange(index, "product_id", value)
                         }
                       />
                     </Field>
+
+                    {hasVariants && (
+                      <Field label="Variant">
+                        <SearchableDropdown
+                          value={item.variant_id || ""}
+                          placeholder="Select Variant"
+                          searchPlaceholder="Search variants..."
+                          variantDetails
+                          emptyText="No active variants"
+                          options={activeVariants.map((variant) => ({
+                            value: String(variant.id),
+                            title: getVariantTitle(variant),
+                            subtitle: `${variant.sku} • ₹${Number(variant.unit_price).toLocaleString("en-IN")} • Stock: ${variant.quantity}`,
+                          }))}
+                          onChange={(value) =>
+                            handleItemChange(index, "variant_id", value)
+                          }
+                        />
+                      </Field>
+                    )}
 
                     <Input
                       label="Description"
@@ -1394,9 +1573,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                       type="number"
                       name="price"
                       value={item.price}
-                      onChange={(e) =>
-                        handleItemChange(index, "price", e.target.value)
-                      }
+                      readOnly
                     />
 
                     <Input
@@ -1404,13 +1581,22 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                       type="number"
                       name="tax_rate"
                       value={item.tax_rate}
-                      onChange={(e) =>
-                        handleItemChange(index, "tax_rate", e.target.value)
-                      }
+                      readOnly
                     />
                   </div>
+                  {item.product_id && variantData?.state === "loading" && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Loading product variants...
+                    </p>
+                  )}
+                  {item.product_id && variantData?.state === "error" && (
+                    <p className="mt-1 text-xs text-red-600">
+                      Variant lookup failed — select another product, then
+                      select this product again to retry.
+                    </p>
+                  )}
 
-                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-5">
                     <AmountBox title="Taxable" value={itemTotals.taxable} />
                     <AmountBox title="CGST" value={itemTotals.cgst} />
                     <AmountBox title="SGST" value={itemTotals.sgst} />
@@ -1460,7 +1646,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                   <span className="text-base font-bold text-slate-900 dark:text-white">
                     Grand Total
                   </span>
-                  <span className="text-xl font-bold text-blue-700 dark:text-blue-300">
+                  <span className="text-lg font-bold text-blue-700 dark:text-blue-300">
                     ₹ {Number(totals.total || 0).toFixed(2)}
                   </span>
                 </div>
@@ -2020,6 +2206,18 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
       )}
 
       <style>{`
+        .invoice-item-fields .input {
+          padding: 7px 9px;
+          font-size: 13px;
+        }
+        .invoice-item-fields > div > label {
+          margin-bottom: 4px;
+          font-size: 12px;
+        }
+        .invoice-item-fields > div > button {
+          padding: 7px 9px;
+          font-size: 13px;
+        }
         .input {
           width: 100%;
           border: 1px solid #cbd5e1;
@@ -2155,6 +2353,7 @@ function Input({
   helper = "",
   required = false,
   min,
+  readOnly = false,
 }) {
   return (
     <div className="min-w-0">
@@ -2171,7 +2370,8 @@ function Input({
         value={value ?? ""}
         onChange={onChange}
         min={min}
-        className="input"
+        readOnly={readOnly}
+        className={`input ${readOnly ? "cursor-default bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200" : ""}`}
       />
 
       {helper && (
@@ -2288,14 +2488,58 @@ function CustomerSelect({
   );
 }
 
-function ProductSelect({ products, value, canAddProduct = false, onChange }) {
-  const productOptions = products.map((product) => ({
-    value: String(product.id),
-    title: product.product_name || product.name || "Unnamed Product",
-    subtitle: product.branch_name
-      ? `${product.branch_name}${product.sku ? ` • ${product.sku}` : ""}`
-      : product.sku || "No SKU",
-  }));
+function ProductSelect({
+  products,
+  value,
+  canAddProduct = false,
+  stockKinds = {},
+  onChange,
+}) {
+  const productOptions = products
+    .filter((product) => {
+      const qty = Number(product.quantity);
+
+      // No stock info available -> keep product visible as before.
+      if (
+        product.quantity === undefined ||
+        product.quantity === null ||
+        product.quantity === "" ||
+        !Number.isFinite(qty) ||
+        qty > 0
+      ) {
+        return true;
+      }
+
+      // Keep the currently selected product visible.
+      if (String(product.id) === String(value)) return true;
+
+      // Zero stock: hide simple products, keep variant products.
+      const kind = stockKinds[String(product.id)];
+      return kind === "variant" || kind === "error";
+    })
+    .map((product) => {
+      const qty = Number(product.quantity);
+      const hasStock =
+        product.quantity !== undefined &&
+        product.quantity !== null &&
+        product.quantity !== "" &&
+        Number.isFinite(qty) &&
+        qty > 0;
+
+      const baseSubtitle = product.branch_name
+        ? `${product.branch_name}${product.sku ? ` • ${product.sku}` : ""}`
+        : product.sku || "No SKU";
+
+      return {
+        value: String(product.id),
+        title: product.product_name || product.name || "Unnamed Product",
+        subtitle: hasStock
+          ? `${baseSubtitle} • Stock: ${qty}${
+              product.unit_type ? ` ${product.unit_type}` : ""
+            }`
+          : baseSubtitle,
+      };
+    });
 
   return (
     <SearchableDropdown
@@ -2304,6 +2548,7 @@ function ProductSelect({ products, value, canAddProduct = false, onChange }) {
       searchPlaceholder="Search product..."
       emptyText="No product found"
       options={productOptions}
+      wrapSubtitle
       addAction={
         canAddProduct
           ? {
@@ -2325,6 +2570,8 @@ function SearchableDropdown({
   searchPlaceholder = "Search...",
   emptyText = "No option found",
   addAction = null,
+  variantDetails = false,
+  wrapSubtitle = false,
 }) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
@@ -2348,14 +2595,21 @@ function SearchableDropdown({
 
     const rect = buttonRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
-    const dropdownHeight = 330;
+    const dropdownHeight = variantDetails ? 290 : 330;
     const shouldOpenUp =
       spaceBelow < dropdownHeight && rect.top > dropdownHeight;
 
+    const width = variantDetails
+      ? Math.min(300, window.innerWidth - 24)
+      : rect.width;
+    const left = variantDetails
+      ? Math.max(12, Math.min(rect.left, window.innerWidth - width - 12))
+      : rect.left;
+
     setDropdownStyle({
       position: "fixed",
-      left: rect.left,
-      width: rect.width,
+      left,
+      width,
       top: shouldOpenUp ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
       maxHeight: dropdownHeight,
       zIndex: 30000,
@@ -2461,12 +2715,16 @@ function SearchableDropdown({
                     : ""
                 }`}
               >
-                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+                <p
+                  className={`${variantDetails ? "whitespace-normal break-words" : "truncate"} text-sm font-semibold text-slate-800 dark:text-slate-100`}
+                >
                   {option.title}
                 </p>
 
                 {option.subtitle && (
-                  <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+                  <p
+                    className={`${variantDetails || wrapSubtitle ? "whitespace-normal break-words" : "truncate"} text-xs font-medium text-slate-500 dark:text-slate-400`}
+                  >
                     {option.subtitle}
                   </p>
                 )}

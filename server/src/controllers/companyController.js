@@ -207,7 +207,6 @@ const validateCompanySettingsPayload = ({
   ifsc_code,
   upi_id,
 }) => {
-
   if (invoice_prefix && !isValidPrefix(invoice_prefix)) {
     return "Invoice prefix must be 1-10 characters and contain only letters, numbers or hyphen";
   }
@@ -220,10 +219,7 @@ const validateCompanySettingsPayload = ({
     return "Bank name must be less than 100 characters";
   }
 
-  if (
-    account_holder_name &&
-    normalizeText(account_holder_name).length > 100
-  ) {
+  if (account_holder_name && normalizeText(account_holder_name).length > 100) {
     return "Account holder name must be less than 100 characters";
   }
 
@@ -244,7 +240,6 @@ const validateCompanySettingsPayload = ({
 
   return null;
 };
-
 
 const normalizeRolePermissions = (permissions) => {
   const cleanedPermissions = {};
@@ -425,6 +420,7 @@ export const createCompany = async (req, res) => {
         normalizedName,
         normalizedGST,
         normalizeNullable(address),
+        normalizeNullable(city),
         normalizeUpper(currency) || "INR",
         normalizedEmail,
         normalizeNullable(phone),
@@ -532,6 +528,7 @@ export const getCompanies = async (req, res) => {
     name,
     gst_number,
     address,
+    city,
     currency,
     status,
     email,
@@ -592,6 +589,7 @@ export const getMyCompany = async (req, res) => {
     name,
     gst_number,
     address,
+    city,
     currency,
     status,
     email,
@@ -629,6 +627,8 @@ export const getMyCompany = async (req, res) => {
 
 // UPDATE COMPANY
 export const updateCompany = async (req, res) => {
+  const connection = await db.getConnection();
+  let transactionStarted = false;
   try {
     let companyId = req.params.id;
 
@@ -646,6 +646,7 @@ export const updateCompany = async (req, res) => {
       name,
       gst_number,
       address,
+      city,
       currency,
       status,
       email,
@@ -765,6 +766,9 @@ export const updateCompany = async (req, res) => {
     const shouldUpdateCrmKey =
       req.user.role === "superadmin" && Boolean(crmApiKey);
 
+    await connection.beginTransaction();
+    transactionStarted = true;
+
     const [result] = await db.query(
       `
       UPDATE tbl_companies
@@ -772,6 +776,7 @@ export const updateCompany = async (req, res) => {
         name = ?,
         gst_number = ?,
         address = ?,
+        city = ?,
         currency = ?,
         status = ?,
         email = ?,
@@ -791,6 +796,7 @@ export const updateCompany = async (req, res) => {
         normalizedName,
         normalizedGST,
         normalizeNullable(address),
+        normalizeNullable(city),
         normalizeUpper(currency) || "INR",
         normalizedStatus,
         normalizedEmail,
@@ -807,8 +813,50 @@ export const updateCompany = async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
+      await connection.rollback();
+      transactionStarted = false;
+
       return res.status(404).json({
         message: "Company not found",
+      });
+    }
+
+    // Sync HQ branch with Company Profile
+    const [hqResult] = await connection.query(
+      `
+    UPDATE tbl_company_branches
+    SET
+      email = ?,
+      phone = ?,
+      gst_number = ?,
+      address = ?,
+      city = ?,
+      state = ?,
+      country = ?,
+      zip_code = ?
+    WHERE company_id = ?
+      AND is_main = 1
+  `,
+      [
+        normalizedEmail,
+        normalizeNullable(phone),
+        normalizedGST,
+        normalizeNullable(address),
+        normalizeNullable(city),
+        normalizeNullable(state),
+        normalizeText(country) || "India",
+        normalizeNullable(zip_code),
+        companyId,
+      ],
+    );
+
+    if (hqResult.affectedRows !== 1) {
+      await connection.rollback();
+      transactionStarted = false;
+
+      return res.status(404).json({
+        message:
+          "Head Office branch not found. Company changes were not saved.",
       });
     }
 
@@ -824,14 +872,25 @@ export const updateCompany = async (req, res) => {
       user_agent: getUserAgent(req),
     });
 
+    await connection.commit();
+    transactionStarted = false;
+
     return res.json({
       message: "Company updated successfully",
     });
   } catch (error) {
+    if (transactionStarted) {
+      await connection.rollback();
+    }
+
+    console.error("UPDATE COMPANY ERROR:", error);
+
     return res.status(500).json({
       message: "Update company error",
       error: error.message,
     });
+  } finally {
+    connection.release();
   }
 };
 

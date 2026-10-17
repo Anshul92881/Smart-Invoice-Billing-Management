@@ -262,16 +262,31 @@ const getQuotationDocumentData = async (quotationId, companyId) => {
     `
     SELECT
       qi.*,
+
       p.product_name,
+      p.sku AS product_sku,
+      p.unit_type,
       p.description AS product_description,
-      p.hsn_sac_code AS product_hsn_sac_code
+      p.hsn_sac_code AS product_hsn_sac_code,
+
+      pv.sku AS variant_sku,
+      pv.attributes AS variant_attributes
+
     FROM tbl_quotation_items qi
+
     LEFT JOIN tbl_products p
       ON qi.product_id = p.id
+      AND p.company_id = ?
+
+    LEFT JOIN tbl_product_variants pv
+      ON qi.variant_id = pv.id
+      AND pv.product_id = qi.product_id
+      AND pv.company_id = ?
+
     WHERE qi.quotation_id = ?
     ORDER BY qi.id ASC
-    `,
-    [quotationId],
+  `,
+    [companyId, companyId, quotationId],
   );
 
   return {
@@ -398,6 +413,22 @@ const buildCalculatedItems = async (connection, items, companyId) => {
     let hsnSacCode = normalizeUpper(item.hsn_sac_code) || null;
     const productId = item.product_id ? Number(item.product_id) : null;
 
+    const variantId =
+      item.variant_id === null ||
+      item.variant_id === undefined ||
+      item.variant_id === ""
+        ? null
+        : Number(item.variant_id);
+
+    if (
+      variantId !== null &&
+      (!Number.isSafeInteger(variantId) || variantId <= 0 || !productId)
+    ) {
+      return {
+        error: `Invalid variant at row ${index + 1}`,
+      };
+    }
+
     if (productId) {
       if (!isPositiveInteger(productId)) {
         return {
@@ -432,6 +463,40 @@ const buildCalculatedItems = async (connection, items, companyId) => {
 
       const product = productRows[0];
 
+      // Quotation create/edit par stock deduct nahi hoga.
+      // Sirf selected variant ki validity check hogi.
+      const [productVariantRows] = await connection.query(
+        `
+  SELECT id, status
+  FROM tbl_product_variants
+  WHERE company_id = ?
+    AND product_id = ?
+  `,
+        [companyId, productId],
+      );
+
+      if (productVariantRows.length > 0) {
+        const selected = productVariantRows.find(
+          (variant) => Number(variant.id) === variantId,
+        );
+
+        if (!selected || selected.status !== "active") {
+          return {
+            error: `Select an active variant at row ${index + 1}`,
+          };
+        }
+
+        if (!Number.isSafeInteger(quantity)) {
+          return {
+            error: `Variant quantity must be a whole number at row ${index + 1}`,
+          };
+        }
+      } else if (variantId !== null) {
+        return {
+          error: `Variant does not belong to product at row ${index + 1}`,
+        };
+      }
+
       itemName = itemName || product.product_name;
       description = description || product.description || null;
       hsnSacCode = hsnSacCode || product.hsn_sac_code || null;
@@ -448,6 +513,7 @@ const buildCalculatedItems = async (connection, items, companyId) => {
 
     const calculatedItem = {
       product_id: productId,
+      variant_id: variantId,
       item_name: itemName,
       description,
       hsn_sac_code: hsnSacCode,
@@ -739,24 +805,26 @@ export const createQuotation = async (req, res) => {
     for (const item of calculatedItems) {
       await connection.query(
         `
-        INSERT INTO tbl_quotation_items
-        (
-          quotation_id,
-          product_id,
-          item_name,
-          description,
-          hsn_sac_code,
-          quantity,
-          price,
-          tax_rate,
-          tax_amount,
-          line_total
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
+    INSERT INTO tbl_quotation_items
+    (
+      quotation_id,
+      product_id,
+      variant_id,
+      item_name,
+      description,
+      hsn_sac_code,
+      quantity,
+      price,
+      tax_rate,
+      tax_amount,
+      line_total
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
         [
           quotationId,
           item.product_id,
+          item.variant_id,
           item.item_name,
           item.description,
           item.hsn_sac_code,
@@ -1350,7 +1418,53 @@ export const convertQuotationToInvoice = async (req, res) => {
         }
 
         const product = productRows[0];
-        const availableStock = Number(product.quantity || 0);
+
+        const [variantRows] = await connection.query(
+          `
+  SELECT id, quantity, status
+  FROM tbl_product_variants
+  WHERE product_id = ?
+    AND company_id = ?
+  `,
+          [item.product_id, companyId],
+        );
+
+        const variantId =
+          item.variant_id === null ||
+          item.variant_id === undefined ||
+          item.variant_id === ""
+            ? null
+            : Number(item.variant_id);
+
+        let selectedVariant = null;
+
+        if (variantRows.length > 0) {
+          selectedVariant = variantRows.find(
+            (variant) => Number(variant.id) === variantId,
+          );
+
+          if (
+            !selectedVariant ||
+            selectedVariant.status !== "active" ||
+            !Number.isSafeInteger(quantity)
+          ) {
+            await connection.rollback();
+
+            return res.status(400).json({
+              message: `Select a valid active variant and whole-number quantity for ${product.product_name}`,
+            });
+          }
+        } else if (variantId !== null) {
+          await connection.rollback();
+
+          return res.status(400).json({
+            message: `Invalid variant for ${product.product_name}`,
+          });
+        }
+
+        const availableStock = Number(
+          selectedVariant ? selectedVariant.quantity : product.quantity || 0,
+        );
 
         if (quantity > availableStock) {
           await connection.rollback();
@@ -1445,23 +1559,25 @@ export const convertQuotationToInvoice = async (req, res) => {
 
       await connection.query(
         `
-        INSERT INTO tbl_invoice_items
-        (
-          invoice_id,
-          product_id,
-          item_name,
-          quantity,
-          price,
-          tax,
-          total,
-          hsn_sac_code,
-          tax_rate
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
+  INSERT INTO tbl_invoice_items
+  (
+    invoice_id,
+    product_id,
+    variant_id,
+    item_name,
+    quantity,
+    price,
+    tax,
+    total,
+    hsn_sac_code,
+    tax_rate
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `,
         [
           invoiceId,
           item.product_id || null,
+          item.variant_id || null,
           item.item_name,
           quantity,
           price,
@@ -1473,15 +1589,40 @@ export const convertQuotationToInvoice = async (req, res) => {
       );
 
       if (item.product_id) {
-        await connection.query(
-          `
-          UPDATE tbl_products
-          SET quantity = quantity - ?
-          WHERE id = ?
+        const variantId = item.variant_id || null;
+
+        const [stockUpdate] = variantId
+          ? await connection.query(
+              `
+        UPDATE tbl_product_variants
+        SET quantity = quantity - ?
+        WHERE id = ?
+          AND product_id = ?
           AND company_id = ?
-          `,
-          [quantity, item.product_id, companyId],
-        );
+          AND status = 'active'
+          AND quantity >= ?
+        `,
+              [quantity, variantId, item.product_id, companyId, quantity],
+            )
+          : await connection.query(
+              `
+        UPDATE tbl_products
+        SET quantity = quantity - ?
+        WHERE id = ?
+          AND company_id = ?
+          AND status = 'active'
+          AND quantity >= ?
+        `,
+              [quantity, item.product_id, companyId, quantity],
+            );
+
+        if (stockUpdate.affectedRows !== 1) {
+          await connection.rollback();
+
+          return res.status(409).json({
+            message: `Insufficient or changed stock for ${item.item_name}. Refresh and retry conversion.`,
+          });
+        }
       }
     }
 
@@ -2244,27 +2385,30 @@ export const updateQuotation = async (req, res) => {
     );
 
     // Updated items insert
+    // Updated items insert
     for (const item of calculatedItems) {
       await connection.query(
         `
-        INSERT INTO tbl_quotation_items
-        (
-          quotation_id,
-          product_id,
-          item_name,
-          description,
-          hsn_sac_code,
-          quantity,
-          price,
-          tax_rate,
-          tax_amount,
-          line_total
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
+    INSERT INTO tbl_quotation_items
+    (
+      quotation_id,
+      product_id,
+      variant_id,
+      item_name,
+      description,
+      hsn_sac_code,
+      quantity,
+      price,
+      tax_rate,
+      tax_amount,
+      line_total
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
         [
           id,
           item.product_id,
+          item.variant_id,
           item.item_name,
           item.description,
           item.hsn_sac_code,

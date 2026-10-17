@@ -221,7 +221,20 @@ const validateInvoiceItem = (item, row) => {
     return `Valid product is required at row ${row}`;
   }
 
+  if (
+    item.variant_id !== null &&
+    item.variant_id !== undefined &&
+    item.variant_id !== "" &&
+    !isPositiveInteger(item.variant_id)
+  ) {
+    return `Valid variant is required at row ${row}`;
+  }
+
   const quantity = toNumber(item.quantity, NaN);
+
+  if (!Number.isSafeInteger(quantity)) {
+    return `Stock quantity must be a whole number at row ${row}`;
+  }
   const price =
     item.price !== undefined && item.price !== ""
       ? toNumber(item.price, NaN)
@@ -362,16 +375,31 @@ const getInvoiceDocumentData = async (invoiceId, companyId) => {
     `
     SELECT
       ii.*,
+
       p.product_name,
+      p.sku AS product_sku,
+      p.unit_type,
       p.description,
-      p.hsn_sac_code
+      p.hsn_sac_code,
+
+      pv.sku AS variant_sku,
+      pv.attributes AS variant_attributes
+
     FROM tbl_invoice_items ii
+
     LEFT JOIN tbl_products p
       ON ii.product_id = p.id
+      AND p.company_id = ?
+
+    LEFT JOIN tbl_product_variants pv
+      ON ii.variant_id = pv.id
+      AND pv.product_id = ii.product_id
+      AND pv.company_id = ?
+
     WHERE ii.invoice_id = ?
     ORDER BY ii.id ASC
-    `,
-    [invoiceId],
+  `,
+    [companyId, companyId, invoiceId],
   );
 
   return {
@@ -507,7 +535,44 @@ export const createInvoice = async (req, res) => {
           ? toNumber(item.tax_rate, NaN)
           : toNumber(product.tax_rate, 0);
 
-      const availableStock = Number(product.quantity || 0);
+      // Determine whether stock belongs to a variant or the base product.
+      const requestedVariantId = item.variant_id || null;
+
+      const [variantRows] = await connection.query(
+        `
+  SELECT id, product_id, unit_price, quantity, status
+  FROM tbl_product_variants
+  WHERE company_id = ?
+    AND product_id = ?
+  `,
+        [company_id, item.product_id],
+      );
+
+      let selectedVariant = null;
+
+      if (variantRows.length > 0) {
+        selectedVariant = variantRows.find(
+          (variant) => Number(variant.id) === Number(requestedVariantId),
+        );
+
+        if (!selectedVariant || selectedVariant.status !== "active") {
+          await connection.rollback();
+
+          return res.status(400).json({
+            message: `Select an active variant for ${product.product_name} at row ${row}`,
+          });
+        }
+      } else if (requestedVariantId) {
+        await connection.rollback();
+
+        return res.status(400).json({
+          message: `Invalid variant for ${product.product_name} at row ${row}`,
+        });
+      }
+
+      const availableStock = Number(
+        selectedVariant ? selectedVariant.quantity : product.quantity || 0,
+      );
 
       if (!Number.isFinite(price) || price <= 0) {
         await connection.rollback();
@@ -558,6 +623,7 @@ export const createInvoice = async (req, res) => {
 
       finalItems.push({
         product_id: Number(item.product_id),
+        variant_id: selectedVariant ? Number(selectedVariant.id) : null,
         quantity,
         price,
         product_name: product.product_name,
@@ -637,26 +703,28 @@ export const createInvoice = async (req, res) => {
     for (const item of finalItems) {
       await connection.query(
         `
-        INSERT INTO tbl_invoice_items
-        (
-          invoice_id,
-          product_id,
-          item_name,
-          quantity,
-          price,
-          tax_rate,
-          tax,
-          total,
-          hsn_sac_code,
-          cgst_amount,
-          sgst_amount,
-          igst_amount
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
+  INSERT INTO tbl_invoice_items
+  (
+    invoice_id,
+    product_id,
+    variant_id,
+    item_name,
+    quantity,
+    price,
+    tax_rate,
+    tax,
+    total,
+    hsn_sac_code,
+    cgst_amount,
+    sgst_amount,
+    igst_amount
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `,
         [
           invoiceId,
           item.product_id,
+          item.variant_id,
           item.product_name,
           item.quantity,
           item.price,
@@ -670,15 +738,31 @@ export const createInvoice = async (req, res) => {
         ],
       );
 
-      await connection.query(
+      const stockTable = item.variant_id
+        ? "tbl_product_variants"
+        : "tbl_products";
+
+      const stockId = item.variant_id || item.product_id;
+
+      const [stockUpdate] = await connection.query(
         `
-        UPDATE tbl_products
-        SET quantity = quantity - ?
-        WHERE id = ?
-        AND company_id = ?
-        `,
-        [item.quantity, item.product_id, company_id],
+  UPDATE ${stockTable}
+  SET quantity = quantity - ?
+  WHERE id = ?
+    AND company_id = ?
+    AND status = 'active'
+    AND quantity >= ?
+  `,
+        [item.quantity, stockId, company_id, item.quantity],
       );
+
+      if (stockUpdate.affectedRows !== 1) {
+        await connection.rollback();
+
+        return res.status(409).json({
+          message: `Insufficient or changed stock for ${item.product_name}. Refresh products and retry.`,
+        });
+      }
     }
 
     await createAuditLog({
@@ -723,8 +807,6 @@ export const createInvoice = async (req, res) => {
     `,
         [savedPdf.publicPath, invoiceId, company_id],
       );
-
-      console.log("Invoice PDF saved:", savedPdf.publicPath);
     } catch (pdfError) {
       console.error("INVOICE PDF SAVE ERROR:", pdfError.message);
     }
@@ -825,30 +907,42 @@ export const getSingleInvoice = async (req, res) => {
 };
 
 export const cancelInvoice = async (req, res) => {
+  const connection = await db.getConnection();
+
   try {
+    await connection.beginTransaction();
+
     const companyId = req.user.company_id;
     const { id } = req.params;
 
     if (!companyId) {
-      return res.status(400).json({ message: "Company id missing" });
+      await connection.rollback();
+      return res.status(400).json({
+        message: "Company id missing",
+      });
     }
 
     if (!isPositiveInteger(id)) {
-      return res.status(400).json({ message: "Valid invoice id is required" });
+      await connection.rollback();
+      return res.status(400).json({
+        message: "Valid invoice id is required",
+      });
     }
 
-    const [rows] = await db.query(
+    const [rows] = await connection.query(
       `
       SELECT *
       FROM tbl_invoices
       WHERE id = ?
-      AND company_id = ?
+        AND company_id = ?
       LIMIT 1
+      FOR UPDATE
       `,
       [id, companyId],
     );
 
     if (!rows.length) {
+      await connection.rollback();
       return res.status(404).json({
         message: "Invoice not found",
       });
@@ -857,38 +951,93 @@ export const cancelInvoice = async (req, res) => {
     const invoice = rows[0];
 
     if (invoice.status === "paid" || Number(invoice.paid_amount) > 0) {
+      await connection.rollback();
+
       return res.status(400).json({
         message: "Paid invoice cannot be cancelled",
       });
     }
 
     if (invoice.status === "cancelled") {
+      await connection.rollback();
+
       return res.status(400).json({
         message: "Invoice already cancelled",
       });
     }
 
-    await db.query(
+    const [items] = await connection.query(
+      `
+      SELECT product_id, variant_id, quantity
+      FROM tbl_invoice_items
+      WHERE invoice_id = ?
+      ORDER BY product_id, id
+      `,
+      [id],
+    );
+
+    for (const item of items) {
+      if (!item.product_id) continue;
+
+      const quantity = Number(item.quantity);
+
+      if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+        throw new Error(`Invalid item stock quantity for invoice ${id}`);
+      }
+
+      const stockTable = item.variant_id
+        ? "tbl_product_variants"
+        : "tbl_products";
+
+      const stockId = item.variant_id || item.product_id;
+
+      const [stockUpdate] = await connection.query(
+        `
+  UPDATE ${stockTable}
+  SET quantity = quantity + ?
+  WHERE id = ?
+    AND company_id = ?
+    ${item.variant_id ? "AND product_id = ?" : ""}
+  `,
+        item.variant_id
+          ? [quantity, stockId, companyId, item.product_id]
+          : [quantity, stockId, companyId],
+      );
+
+      if (stockUpdate.affectedRows !== 1) {
+        throw new Error(
+          `Cannot restore product ${item.product_id}; invoice not cancelled`,
+        );
+      }
+    }
+
+    await connection.query(
       `
       UPDATE tbl_invoices
       SET status = 'cancelled'
       WHERE id = ?
-      AND company_id = ?
+        AND company_id = ?
       `,
       [id, companyId],
     );
 
-    await createAuditLog({
-      company_id: companyId,
-      user_id: req.user.id,
-      role: req.user.role,
-      action: "CANCEL",
-      module_name: "Invoice",
-      record_id: id,
-      description: `Invoice ${invoice.invoice_number} cancelled`,
-      ip_address: req.ip,
-      user_agent: getUserAgent(req),
-    });
+    await connection.commit();
+
+    try {
+      await createAuditLog({
+        company_id: companyId,
+        user_id: req.user.id,
+        role: req.user.role,
+        action: "CANCEL",
+        module_name: "Invoice",
+        record_id: id,
+        description: `Invoice ${invoice.invoice_number} cancelled`,
+        ip_address: req.ip,
+        user_agent: getUserAgent(req),
+      });
+    } catch (auditError) {
+      console.error("INVOICE CANCEL AUDIT ERROR:", auditError);
+    }
 
     emitDashboardUpdate({
       company_id: companyId,
@@ -899,10 +1048,16 @@ export const cancelInvoice = async (req, res) => {
       message: "Invoice cancelled successfully",
     });
   } catch (error) {
+    await connection.rollback();
+
+    console.error("CANCEL INVOICE ERROR:", error);
+
     return res.status(500).json({
-      message: "Failed to cancel invoice",
+      message: "Failed to cancel invoice and restore stock",
       error: error.message,
     });
+  } finally {
+    connection.release();
   }
 };
 
@@ -1191,7 +1346,7 @@ Regards,
 ${company.name || invoice.business_name || "Company"}`,
       attachments: [
         {
-          filename: `${invoice.invoice_number}.pdf`,
+          filename: `${invoice.invoice_number.replace(/\//g, "_")}.pdf`,
           content: pdfBuffer,
           contentType: "application/pdf",
         },

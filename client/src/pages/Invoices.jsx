@@ -1226,7 +1226,41 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
     }
   };
 
-  const handleCancel = async (id) => {
+  const confirmToast = (message, onConfirm) => {
+    toast(
+      (t) => (
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">
+            {message}
+          </p>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t.id)}
+              className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              No
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                toast.dismiss(t.id);
+                onConfirm();
+              }}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700"
+            >
+              Yes
+            </button>
+          </div>
+        </div>
+      ),
+      { duration: 4000 },
+    );
+  };
+
+  const handleCancel = (id) => {
     if (!id) {
       toast.error("Invoice id missing");
       return;
@@ -1237,15 +1271,19 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
       return;
     }
 
-    if (!confirm("Are you sure you want to cancel this invoice?")) return;
+    confirmToast("Cancel this invoice?", async () => {
+      try {
+        await api.patch(`/invoices/${id}/cancel`);
 
-    try {
-      await api.patch(`/invoices/${id}/cancel`);
-      toast.success("Invoice cancelled");
-      fetchData();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Cancel failed");
-    }
+        toast.success("Invoice cancelled");
+
+        await fetchData();
+      } catch (error) {
+        toast.error(
+          error.response?.data?.message || "Failed to cancel invoice",
+        );
+      }
+    });
   };
 
   return (
@@ -1368,27 +1406,34 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
 
         <div className="w-full max-w-full overflow-x-auto">
           <table className="w-full min-w-[1040px] text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 dark:bg-slate-800 dark:text-slate-300">
+            <thead className="bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">
-                  Invoice No
-                </th>
-                <th className="px-4 py-3 text-left font-semibold">Branch</th>
-                <th className="px-4 py-3 text-left font-semibold">Customer</th>
-                <th className="px-4 py-3 text-left font-semibold">Date</th>
-                <th className="px-4 py-3 text-left font-semibold">Total</th>
-                <th className="px-4 py-3 text-left font-semibold">Paid</th>
-                <th className="px-4 py-3 text-left font-semibold">Balance</th>
-                <th className="px-4 py-3 text-left font-semibold">Status</th>
-                <th className="px-4 py-3 text-left font-semibold">Actions</th>
+                {[
+                  "Invoice No",
+                  "Branch",
+                  "Customer",
+                  "Date",
+                  "Total",
+                  "Paid",
+                  "Balance",
+                  "Status",
+                  "Actions",
+                ].map((head) => (
+                  <th
+                    key={head}
+                    className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide"
+                  >
+                    {head}
+                  </th>
+                ))}
               </tr>
             </thead>
 
-            <tbody>
+            <tbody className="bg-white dark:bg-slate-900">
               {paginatedInvoices.map((invoice) => (
                 <tr
                   key={invoice.id}
-                  className="border-t border-slate-100 transition hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-950 dark:border-slate-800 dark:hover:bg-slate-800"
+                  className="border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
                 >
                   <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-900 dark:text-white">
                     {invoice.invoice_number || "-"}
@@ -1398,8 +1443,16 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
                     {invoice.branch_name || "Main Company"}
                   </td>
 
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                    {invoice.customer_name || "-"}
+                  <td className="min-w-[130px] w-[160px] px-4 py-3 text-slate-600 dark:text-slate-300">
+                    <p className="whitespace-nowrap font-semibold text-slate-800 dark:text-slate-100">
+                      {invoice.customer_name || invoice.company_name || "-"}
+                    </p>
+
+                    {invoice.company_name && invoice.customer_name && (
+                      <p className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+                        {invoice.company_name}
+                      </p>
+                    )}
                   </td>
 
                   <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">
@@ -1453,7 +1506,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
               {sortedInvoices.length === 0 && (
                 <tr>
                   <td colSpan="9" className="p-10 text-center">
-                    <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-6">
+                    <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-800">
                       <FileText className="mx-auto text-slate-400" size={34} />
 
                       <p className="mt-3 font-semibold text-slate-700 dark:text-slate-200">
@@ -1469,62 +1522,62 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
               )}
             </tbody>
           </table>
+        </div>
 
-          <div className="flex flex-col gap-3 border-t border-slate-200 bg-white dark:bg-slate-900 p-4 dark:border-slate-800 dark:bg-slate-900 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500 dark:text-slate-400">
-                Rows per page
-              </span>
+        <div className="flex flex-col gap-3 border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              Rows per page
+            </span>
 
-              <select
-                value={itemsPerPage}
-                onChange={(e) => {
-                  setItemsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-950/50"
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            </div>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-blue-950/50"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
 
-            <div className="text-sm text-slate-500 dark:text-slate-400">
-              Showing{" "}
-              {sortedInvoices.length === 0
-                ? 0
-                : (currentPage - 1) * itemsPerPage + 1}
-              {" - "}
-              {Math.min(currentPage * itemsPerPage, sortedInvoices.length)}
-              {" of "}
-              {sortedInvoices.length}
-            </div>
+          <div className="text-sm text-slate-500 dark:text-slate-400">
+            Showing{" "}
+            {sortedInvoices.length === 0
+              ? 0
+              : (currentPage - 1) * itemsPerPage + 1}
+            {" - "}
+            {Math.min(currentPage * itemsPerPage, sortedInvoices.length)}
+            {" of "}
+            {sortedInvoices.length}
+          </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((prev) => prev - 1)}
-                className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Prev
-              </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((prev) => prev - 1)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Prev
+            </button>
 
-              <span className="text-sm font-semibold">
-                {currentPage} / {totalPages || 1}
-              </span>
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              {currentPage} / {totalPages || 1}
+            </span>
 
-              <button
-                type="button"
-                disabled={currentPage === totalPages || totalPages === 0}
-                onClick={() => setCurrentPage((prev) => prev + 1)}
-                className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={currentPage === totalPages || totalPages === 0}
+              onClick={() => setCurrentPage((prev) => prev + 1)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
@@ -2469,18 +2522,20 @@ function SearchableDropdown({
           style={dropdownStyle}
           className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
         >
-          <div className="relative">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-            <input
-              type="text"
-              placeholder="Search invoice"
-              value={invoiceSearch}
-              onChange={(e) => setInvoiceSearch(e.target.value)}
-              className="input !pl-10"
-            />
+          <div className="border-b border-slate-100 p-2 dark:border-slate-800">
+            <div className="relative">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                type="text"
+                placeholder={searchPlaceholder}
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                className="input !pl-10"
+              />
+            </div>
           </div>
 
           <div className="max-h-56 overflow-y-auto p-2">

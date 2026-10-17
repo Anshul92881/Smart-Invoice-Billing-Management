@@ -260,25 +260,25 @@ function NotificationsTable({ notifications, loading, onMarkRead }) {
       <table className="w-full min-w-[900px] text-sm">
         <thead className="bg-slate-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
           <tr>
-            <th className="w-[30%] p-4 text-left text-xs font-bold uppercase tracking-wide">
+            <th className="w-[30%] p-4 text-center text-xs font-bold uppercase tracking-wide">
               Alert
             </th>
-            <th className="p-4 text-left text-xs font-bold uppercase tracking-wide">
+            <th className="p-4 text-center text-xs font-bold uppercase tracking-wide">
               Type
             </th>
-            <th className="p-4 text-left text-xs font-bold uppercase tracking-wide">
+            <th className="p-4 text-center text-xs font-bold uppercase tracking-wide">
               Company
             </th>
-            <th className="p-4 text-left text-xs font-bold uppercase tracking-wide">
+            <th className="p-4 text-center text-xs font-bold uppercase tracking-wide">
               User
             </th>
-            <th className="p-4 text-left text-xs font-bold uppercase tracking-wide">
+            <th className="p-4 text-center text-xs font-bold uppercase tracking-wide">
               Status
             </th>
-            <th className="p-4 text-left text-xs font-bold uppercase tracking-wide">
+            <th className="p-4 text-center text-xs font-bold uppercase tracking-wide">
               Date
             </th>
-            <th className="p-4 text-left text-xs font-bold uppercase tracking-wide">
+            <th className="p-4 text-center text-xs font-bold uppercase tracking-wide">
               Action
             </th>
           </tr>
@@ -289,7 +289,10 @@ function NotificationsTable({ notifications, loading, onMarkRead }) {
             <tr>
               <td colSpan="7" className="p-10 text-center">
                 <div className="flex items-center justify-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                  <Loader2 size={18} className="animate-spin text-indigo-600 dark:text-indigo-400" />
+                  <Loader2
+                    size={18}
+                    className="animate-spin text-indigo-600 dark:text-indigo-400"
+                  />
                   Loading notifications...
                 </div>
               </td>
@@ -323,7 +326,7 @@ function NotificationsTable({ notifications, loading, onMarkRead }) {
                         <h3 className="truncate font-bold text-slate-900 dark:text-white">
                           {item.title || "-"}
                         </h3>
-                        <p className="mt-1 line-clamp-2 text-sm font-medium leading-5 text-slate-600 dark:text-slate-400">
+                        <p className="mt-1 whitespace-normal break-words text-sm leading-5 text-slate-600 dark:text-slate-400">
                           {item.message || "-"}
                         </p>
                       </div>
@@ -378,7 +381,10 @@ function NotificationsTable({ notifications, loading, onMarkRead }) {
             <tr>
               <td colSpan="7" className="p-10 text-center">
                 <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-950">
-                  <Bell className="mx-auto text-slate-400 dark:text-slate-500" size={34} />
+                  <Bell
+                    className="mx-auto text-slate-400 dark:text-slate-500"
+                    size={34}
+                  />
                   <p className="mt-3 font-semibold text-slate-700 dark:text-slate-200">
                     No notifications found
                   </p>
@@ -425,7 +431,11 @@ function SmartDropdown({ value, onChange, options, icon, placeholder }) {
         className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-left text-sm font-semibold text-slate-700 shadow-sm outline-none transition hover:border-indigo-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-indigo-500 dark:focus:ring-indigo-950/50"
       >
         <span className="flex min-w-0 items-center gap-2">
-          {icon && <span className="shrink-0 text-slate-400 dark:text-slate-500">{icon}</span>}
+          {icon && (
+            <span className="shrink-0 text-slate-400 dark:text-slate-500">
+              {icon}
+            </span>
+          )}
           <span className="truncate">
             {selected?.label || placeholder || "Select"}
           </span>
@@ -494,8 +504,7 @@ function TypeBadge({ type }) {
   const styles = {
     security:
       "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300",
-    user:
-      "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-900/50 dark:bg-purple-950/40 dark:text-purple-300",
+    user: "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-900/50 dark:bg-purple-950/40 dark:text-purple-300",
     company:
       "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300",
     subscription:

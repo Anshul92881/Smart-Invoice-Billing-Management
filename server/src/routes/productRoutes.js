@@ -12,6 +12,13 @@ import {
   uploadProductImage,
 } from "../controllers/productController.js";
 
+import {
+  getProductVariants,
+  createProductVariant,
+  updateProductVariant,
+  deleteProductVariant,
+} from "../controllers/productVariantController.js";
+
 import authMiddleware, {
   authorizePermission,
   authorizeRoles,
@@ -65,7 +72,6 @@ router.get(
   getProducts,
 );
 
-
 router.get(
   "/dropdown",
   authorizeRoles("company_admin", "accountant", "sales_user"),
@@ -88,5 +94,33 @@ router.post(
 router.post("/", authorizePermission("products"), createProduct);
 router.put("/:id", authorizePermission("products"), updateProduct);
 router.delete("/:id", authorizePermission("products"), deleteProduct);
+
+/* =========================================
+   PRODUCT VARIANT ROUTES
+========================================= */
+
+router.get(
+  "/:id/variants",
+  authorizeRoles("company_admin", "accountant", "sales_user"),
+  getProductVariants,
+);
+
+router.post(
+  "/:id/variants",
+  authorizePermission("products"),
+  createProductVariant,
+);
+
+router.put(
+  "/:id/variants/:variantId",
+  authorizePermission("products"),
+  updateProductVariant,
+);
+
+router.delete(
+  "/:id/variants/:variantId",
+  authorizePermission("products"),
+  deleteProductVariant,
+);
 
 export default router;

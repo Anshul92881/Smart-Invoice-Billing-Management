@@ -95,7 +95,9 @@ function ViewQuotation() {
     user = null;
   }
 
-  const canPushToCrm = ["company_admin", "accountant"].includes(user?.role);
+  const canPushToCrm = ["company_admin", "accountant", "sales_user"].includes(
+    user?.role,
+  );
 
   const isPrint = searchParams.get("print") === "true";
 
@@ -294,7 +296,7 @@ function ViewQuotation() {
 
       link.href = fileUrl;
 
-      link.download = `${quotation.quotation_number?.replace(/[\\/]/g, "_")  || `quotation-${id}`}.pdf`;
+      link.download = `${quotation.quotation_number?.replace(/[\\/]/g, "_") || `quotation-${id}`}.pdf`;
 
       document.body.appendChild(link);
 

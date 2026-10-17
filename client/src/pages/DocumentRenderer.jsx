@@ -1,7 +1,7 @@
 const APP_ORIGIN =
   import.meta.env?.VITE_API_ORIGIN ||
   import.meta.env?.VITE_SERVER_URL ||
-  "http://localhost:5000";
+  "http\://localhost:5000";
 
 const DEFAULT_TEMPLATE = {
   show_logo: true,
@@ -48,11 +48,9 @@ const formatDate = (date) => {
 const getLogoUrl = (logo) => {
   if (!logo) return "";
   const value = String(logo);
-
   if (value.startsWith("http")) return value;
   if (value.startsWith("/upload")) return `${APP_ORIGIN}${value}`;
   if (value.startsWith("/uploads")) return `${APP_ORIGIN}${value}`;
-
   return `${APP_ORIGIN}/upload/company-logos/${value}`;
 };
 
@@ -128,20 +126,21 @@ const normalizeCustomer = (customer = {}) => ({
     customer.company_name,
     "-",
   ),
+
   companyName: firstValue(customer.companyName, customer.company_name, ""),
-  address: firstValue(
-    customer.address,
-    customer.billing_address,
-    customer.shipping_address,
-    "-",
-  ),
+
+  address: firstValue(customer.billing_address, customer.address, ""),
+
   shippingAddress: firstValue(
-    customer.shippingAddress,
     customer.shipping_address,
+    customer.shippingAddress,
     "",
   ),
+
   gstin: firstValue(customer.gstin, customer.customer_gstin, ""),
+
   email: firstValue(customer.email, customer.customer_email, ""),
+
   phone: firstValue(customer.phone, customer.customer_phone, ""),
 });
 
@@ -199,6 +198,29 @@ const normalizeDocument = (document = {}, type = "invoice") => {
   };
 };
 
+const formatVariantAttributes = (value) => {
+  if (!value) return "";
+  let attributes = value;
+  if (typeof attributes === "string") {
+    try {
+      attributes = JSON.parse(attributes);
+    } catch {
+      return "";
+    }
+  }
+  if (
+    !attributes ||
+    typeof attributes !== "object" ||
+    Array.isArray(attributes)
+  ) {
+    return "";
+  }
+  return Object.values(attributes)
+    .filter((value) => value !== null && value !== undefined && value !== "")
+    .map((value) => String(value))
+    .join(" / ");
+};
+
 const normalizeItems = (items = []) =>
   items.map((item, index) => {
     const quantity = Number(firstValue(item.quantity, item.qty, 0));
@@ -216,9 +238,18 @@ const normalizeItems = (items = []) =>
       id: firstValue(item.id, index),
       name: firstValue(item.name, item.item_name, item.product_name, "-"),
       description: firstValue(item.description, item.desc, ""),
+      variant: item.variant_id
+        ? formatVariantAttributes(item.variant_attributes)
+        : "",
+      sku: firstValue(
+        item.variant_id ? item.variant_sku : null,
+        item.product_sku,
+        "-",
+      ),
+
       hsnSac: firstValue(item.hsnSac, item.hsn_sac_code, item.hsn, "-"),
       quantity,
-      unit: firstValue(item.unit, item.unit_type, "Nos"),
+      unit: firstValue(item.unit, item.unit_type, "Pcs"),
       price,
       taxRate,
       taxAmount,
@@ -246,9 +277,7 @@ function DocumentRenderer({
   const customerView = normalizeCustomer(customer);
   const docView = normalizeDocument(document, type);
   const itemRows = normalizeItems(items);
-
   const currency = bankView.currency || document.currency || "INR";
-
   const subtotal =
     docView.subtotal ||
     itemRows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -284,11 +313,12 @@ function DocumentRenderer({
       className={`mx-auto w-full max-w-[920px] bg-slate-100 text-slate-900 print:max-w-none print:bg-white print:p-0 ${className}`}
     >
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white text-[12px] leading-normal shadow-sm print:rounded-none print:border-0 print:shadow-none">
-        <div className="grid grid-cols-[1fr_270px] gap-5 border-b border-slate-200 px-6 py-5 print:px-4 print:py-3">
+        <div className="grid grid-cols-1 items-start gap-3 border-b border-slate-200 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_280px] sm:gap-4 sm:px-5 print:grid-cols-[minmax(0,1fr)_340px] print:gap-3 print:px-4 print:py-3">
+          {" "}
           <div className="min-w-0">
             <div className="flex items-start gap-3">
               {settings.show_logo !== false && (
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white p-1.5">
+                <div className="flex h-[68px] w-[68px] shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white p-1.5 print:h-16 print:w-16">
                   {companyView.logoUrl ? (
                     <img
                       src={companyView.logoUrl}
@@ -296,30 +326,46 @@ function DocumentRenderer({
                       className="h-full w-full object-contain"
                     />
                   ) : (
-                    <span className="text-xl font-black text-blue-600">
+                    <span className="text-2xl font-black text-blue-600">
                       {(companyView.name || "C").slice(0, 1).toUpperCase()}
                     </span>
                   )}
                 </div>
               )}
 
-              <div className="min-w-0">
-                <h2 className="text-[22px] font-black uppercase leading-tight tracking-tight text-slate-950 print:text-[20px]">
+              <div className="min-w-0 flex-1">
+                <h2 className="pb-1 text-[19px] font-bold uppercase leading-tight tracking-tight text-slate-950 sm:text-[21px] print:text-[19px]">
                   {companyView.name}
                 </h2>
 
-                <p className="mt-1 max-w-[560px] whitespace-pre-line text-[12px] leading-5 text-slate-600">
+                <p className="max-w-[380px] whitespace-pre-line break-words py-1 text-[12px] leading-[18px] text-slate-600 [overflow-wrap:anywhere]">
                   {companyView.address}
                 </p>
 
-                {(companyView.phone || companyView.email) && (
-                  <p className="mt-1.5 text-[12px] font-medium text-slate-600">
-                    {companyView.phone || "-"} · {companyView.email || "-"}
-                  </p>
+                {(companyView.email || companyView.phone) && (
+                  <div className="text-[12px] font-medium leading-[18px] text-slate-600">
+                    {companyView.email && (
+                      <p className="break-words py-1">
+                        <span className="font-semibold text-slate-800">
+                          Email:
+                        </span>{" "}
+                        {companyView.email}
+                      </p>
+                    )}
+
+                    {companyView.phone && (
+                      <p className="py-1">
+                        <span className="font-semibold text-slate-800">
+                          Phone:
+                        </span>{" "}
+                        {companyView.phone}
+                      </p>
+                    )}
+                  </div>
                 )}
 
                 {settings.show_company_gst_pan !== false && (
-                  <p className="mt-1.5 text-[12px] font-bold text-slate-800">
+                  <p className="py-1 text-[12px] font-semibold leading-[18px] text-slate-800">
                     GSTIN: {companyView.gstNumber || "-"}
                     <span className="mx-2 text-slate-300">|</span>
                     PAN: {companyView.panNumber || "-"}
@@ -327,25 +373,36 @@ function DocumentRenderer({
                 )}
 
                 {settings.show_branch_details !== false && (
-                  <p className="mt-1.5 text-[12px] text-slate-600">
-                    <span className="font-bold text-slate-800">Branch:</span>{" "}
-                    {branchView.branchName || "Head Office"}
-                    {branchView.branchCode ? ` (${branchView.branchCode})` : ""}
-                    {branchView.address ? ` · ${branchView.address}` : ""}
-                  </p>
+                  <div className="text-[12px] leading-[18px] text-slate-600">
+                    <p className="py-1">
+                      <span className="font-bold text-slate-800">Branch:</span>{" "}
+                      {branchView.branchName || "Head Office"}
+                      {branchView.branchCode
+                        ? ` (${branchView.branchCode})`
+                        : ""}
+                    </p>
+
+                    {branchView.address && (
+                      <p className="max-w-[380px] whitespace-pre-line break-words py-1 [overflow-wrap:anywhere]">
+                        <span className="font-semibold text-slate-800">
+                          Branch Address:
+                        </span>{" "}
+                        {branchView.address}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
           </div>
-
-          <div className="rounded-lg border border-slate-200 bg-slate-50">
-            <div className="border-b border-slate-200 px-4 py-3 text-right">
-              <h1 className="mt-1 text-[24px] font-black uppercase leading-none text-slate-950 print:text-[22px]">
+          <div className="self-start rounded-lg border border-slate-200 bg-slate-50">
+            <div className="border-b border-slate-200 px-3 py-2 text-center">
+              <h1 className="text-[21px] font-bold uppercase leading-tight text-slate-950 print:text-[20px]">
                 {title}
               </h1>
             </div>
 
-            <div className="px-4 py-2.5">
+            <div className="px-3 py-2">
               <DocMeta label={numberLabel} value={docView.number} />
 
               {isInvoice && docView.quotationReference && (
@@ -364,9 +421,9 @@ function DocumentRenderer({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 items-start border-b border-slate-200">
+        <div className="grid grid-cols-1 items-stretch border-b border-slate-200 sm:grid-cols-2 print:grid-cols-2">
           <PartyBox
-            title={isInvoice ? "Bill To" : "Prepared For"}
+            title="Bill To"
             name={customerView.name}
             companyName={customerView.companyName}
             address={customerView.address}
@@ -378,38 +435,71 @@ function DocumentRenderer({
           />
 
           <PartyBox
-            title={isInvoice ? "Ship To" : "Quotation Details"}
-            name={isInvoice ? customerView.name : "Commercial Proposal"}
-            address={
-              isInvoice
-                ? customerView.shippingAddress || customerView.address
-                : "This quotation is valid until the expiry date mentioned above."
-            }
-            gstin={
-              isInvoice && settings.show_customer_gstin !== false
-                ? customerView.gstin
-                : ""
-            }
+            title="Ship To"
+            name={customerView.name}
+            companyName={customerView.companyName}
+            address={customerView.shippingAddress}
+            email={customerView.email}
+            phone={customerView.phone}
           />
         </div>
 
-        <div className="px-6 py-5 print:px-4 print:py-3">
-          <div className="overflow-hidden rounded-lg border border-slate-200">
-            <table className="w-full border-collapse text-[12px]">
+        <div className="px-4 py-3 sm:px-5 print:px-4 print:py-3">
+          <div className="w-full max-w-full overflow-x-auto rounded-lg border border-slate-200 print:overflow-visible">
+            <table className="w-full table-fixed border-collapse text-[11px] print:text-[10px]">
+              <colgroup>
+                <col style={{ width: "6%" }} />
+
+                <col
+                  style={{
+                    width: `${24 + (settings.show_hsn_sac === false ? 10 : 0) + (settings.show_tax_breakdown === false ? 7 : 0)}%`,
+                  }}
+                />
+
+                <col style={{ width: "14%" }} />
+
+                {settings.show_hsn_sac !== false && (
+                  <col style={{ width: "10%" }} />
+                )}
+
+                <col style={{ width: "7%" }} />
+
+                <col style={{ width: "7%" }} />
+
+                <col style={{ width: "11%" }} />
+
+                {settings.show_tax_breakdown !== false && (
+                  <col style={{ width: "7%" }} />
+                )}
+
+                <col style={{ width: "14%" }} />
+              </colgroup>
+
               <thead>
                 <tr className="bg-slate-900 text-white">
-                  <PreviewTh className="w-9 text-center">#</PreviewTh>
-                  <PreviewTh className="text-left">Item / Service</PreviewTh>
+                  <PreviewTh className="text-center">S.No.</PreviewTh>
+
+                  <PreviewTh className="text-center">
+                    Item / Description
+                  </PreviewTh>
+
+                  <PreviewTh className="text-center">SKU</PreviewTh>
+
                   {settings.show_hsn_sac !== false && (
-                    <PreviewTh className="w-20 text-center">HSN/SAC</PreviewTh>
+                    <PreviewTh className="text-center">HSN/SAC</PreviewTh>
                   )}
-                  <PreviewTh className="w-14 text-center">Qty</PreviewTh>
-                  <PreviewTh className="w-14 text-center">Unit</PreviewTh>
-                  <PreviewTh className="w-24 text-right">Rate</PreviewTh>
+
+                  <PreviewTh className="text-center">Qty</PreviewTh>
+
+                  <PreviewTh className="text-center">Unit</PreviewTh>
+
+                  <PreviewTh className="text-center">Rate</PreviewTh>
+
                   {settings.show_tax_breakdown !== false && (
-                    <PreviewTh className="w-16 text-center">GST</PreviewTh>
+                    <PreviewTh className="text-center">GST</PreviewTh>
                   )}
-                  <PreviewTh className="w-28 text-right" last>
+
+                  <PreviewTh className="text-center" last>
                     Amount
                   </PreviewTh>
                 </tr>
@@ -419,25 +509,40 @@ function DocumentRenderer({
                 {itemRows.length > 0 ? (
                   itemRows.map((item, index) => (
                     <tr
-                      key={item.id || index}
+                      key={item.id ?? index}
                       className="border-t border-slate-200"
                     >
-                      <PreviewTd className="text-center font-semibold text-slate-500">
+                      <PreviewTd className="text-center text-slate-600">
                         {index + 1}
                       </PreviewTd>
 
-                      <PreviewTd>
-                        <p className="font-bold text-slate-950">{item.name}</p>
-                        {settings.show_item_description !== false &&
-                          item.description && (
-                            <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
-                              {item.description}
+                      <PreviewTd className="text-center">
+                        <div className="min-w-0 space-y-0.5">
+                          <p className="break-words text-[11px] font-semibold leading-4 text-slate-950">
+                            {item.name}
+                          </p>
+
+                          {item.variant && (
+                            <p className="break-words text-[12px] font-semibold leading-[17px] text-slate-800">
+                              Variant: {item.variant}
                             </p>
                           )}
+
+                          {settings.show_item_description !== false &&
+                            item.description && (
+                              <p className="break-words text-[10px] leading-4 text-slate-500">
+                                {item.description}
+                              </p>
+                            )}
+                        </div>
+                      </PreviewTd>
+
+                      <PreviewTd className="break-all text-center text-[10px] leading-4 text-slate-700">
+                        {item.sku}
                       </PreviewTd>
 
                       {settings.show_hsn_sac !== false && (
-                        <PreviewTd className="text-center text-slate-600">
+                        <PreviewTd className="break-words text-center">
                           {item.hsnSac}
                         </PreviewTd>
                       )}
@@ -445,9 +550,12 @@ function DocumentRenderer({
                       <PreviewTd className="text-center">
                         {item.quantity}
                       </PreviewTd>
-                      <PreviewTd className="text-center">{item.unit}</PreviewTd>
 
-                      <PreviewTd className="text-right">
+                      <PreviewTd className="break-words text-center">
+                        {item.unit}
+                      </PreviewTd>
+
+                      <PreviewTd className="break-words text-center tabular-nums">
                         {Number(item.price || 0).toLocaleString("en-IN", {
                           minimumFractionDigits: 2,
                         })}
@@ -460,19 +568,25 @@ function DocumentRenderer({
                       )}
 
                       <PreviewTd
-                        className="text-right font-bold text-slate-950"
+                        className="break-words text-center font-semibold tabular-nums text-slate-950"
                         last
                       >
                         {Number(
                           item.amount || item.lineTotal || 0,
-                        ).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        ).toLocaleString("en-IN", {
+                          minimumFractionDigits: 2,
+                        })}
                       </PreviewTd>
                     </tr>
                   ))
                 ) : (
                   <tr>
                     <td
-                      colSpan="8"
+                      colSpan={
+                        7 +
+                        (settings.show_hsn_sac !== false ? 1 : 0) +
+                        (settings.show_tax_breakdown !== false ? 1 : 0)
+                      }
                       className="px-4 py-8 text-center text-slate-500"
                     >
                       No items found.
@@ -483,42 +597,25 @@ function DocumentRenderer({
             </table>
           </div>
 
-          <div className="mt-4 grid grid-cols-[1fr_300px] gap-4 print:mt-3">
+          <div
+            className={`mt-3 grid grid-cols-1 items-start gap-3 print:mt-3 print:gap-3 ${settings.show_bank_details !== false ? "sm:grid-cols-[minmax(0,1fr)_270px] print:grid-cols-[minmax(0,1fr)_250px]" : ""}`}
+          >
             <div className="space-y-3">
-              {settings.show_tax_breakdown !== false && (
-                <InfoCard title="GST Summary">
-                  <div className="grid grid-cols-2 gap-x-5 gap-y-2">
-                    <SummaryMini
-                      label="Taxable Value"
-                      value={formatMoney(subtotal, currency)}
-                    />
-                    <SummaryMini
-                      label="CGST"
-                      value={formatMoney(cgst, currency)}
-                    />
-                    <SummaryMini
-                      label="SGST"
-                      value={formatMoney(sgst, currency)}
-                    />
-                    <SummaryMini
-                      label="Total Tax"
-                      value={formatMoney(totalTax, currency)}
-                    />
-                  </div>
-                </InfoCard>
-              )}
-
               {settings.show_bank_details !== false && (
                 <InfoCard title="Payment / Bank Details">
                   {hasBankDetails ? (
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                    <div className="grid grid-cols-1 gap-y-1 sm:grid-cols-2 sm:gap-x-3 print:grid-cols-2">
                       <BankRow label="Bank" value={bankView.bankName} />
+
                       <BankRow
                         label="Holder"
                         value={bankView.accountHolderName}
                       />
+
                       <BankRow label="A/C No." value={bankView.accountNumber} />
+
                       <BankRow label="IFSC" value={bankView.ifscCode} />
+
                       <BankRow label="UPI" value={bankView.upiId} />
                     </div>
                   ) : (
@@ -542,6 +639,7 @@ function DocumentRenderer({
                     label="CGST"
                     value={formatMoney(cgst, currency)}
                   />
+
                   <AmountLine
                     label="SGST"
                     value={formatMoney(sgst, currency)}
@@ -563,11 +661,12 @@ function DocumentRenderer({
                 />
               )}
 
-              <div className="flex items-center justify-between bg-blue-600 px-4 py-3 text-white">
-                <span className="text-[12px] font-black uppercase tracking-wide">
+              <div className="flex items-center justify-between gap-2 bg-blue-600 px-3 py-2 text-white">
+                <span className="text-[11px] font-black uppercase tracking-wide">
                   Grand Total
                 </span>
-                <span className="text-[18px] font-black">
+
+                <span className="text-[15px] font-black">
                   {formatMoney(grandTotal, currency)}
                 </span>
               </div>
@@ -575,7 +674,7 @@ function DocumentRenderer({
           </div>
 
           {(settings.show_terms !== false || settings.show_notes !== false) && (
-            <div className="mt-4 grid grid-cols-2 gap-4 print:mt-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 print:mt-3 print:grid-cols-2 print:gap-3">
               {settings.show_terms !== false && (
                 <InfoCard title="Terms & Conditions">
                   <p className="whitespace-pre-line">
@@ -599,9 +698,10 @@ function DocumentRenderer({
           )}
 
           {settings.show_signature !== false && (
-            <div className="mt-6 grid grid-cols-[1fr_230px] items-end gap-8 print:mt-4">
+            <div className="mt-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_215px] print:mt-3 print:grid-cols-[minmax(0,1fr)_200px] print:gap-4">
               <div className="text-[11px] leading-5 text-slate-500">
                 <p className="font-bold text-slate-700">Declaration:</p>
+
                 <p>
                   We declare that this {isInvoice ? "invoice" : "quotation"}{" "}
                   shows the actual details of goods/services described above and
@@ -611,12 +711,14 @@ function DocumentRenderer({
 
               <div className="text-center">
                 <p className="text-[12px] font-bold">For {companyView.name}</p>
-                <p className="mt-3 text-[15px] font-semibold text-slate-600">
+
+                <p className="mt-2 text-[13px] font-semibold text-slate-600">
                   {companyView.authorizedSignatoryName ||
                     bankView.authorizedSignatoryName ||
                     "Authorized Signatory"}
                 </p>
-                <div className="mx-auto mt-3 h-px w-36 bg-slate-500 print:mt-8" />
+
+                <div className="mx-auto mt-3 h-px w-32 bg-slate-500 print:mt-7" />
               </div>
             </div>
           )}
@@ -635,6 +737,7 @@ function DocMeta({ label, value, capitalize = false }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-slate-200 py-1.5 text-[12px] last:border-b-0">
       <span className="font-semibold text-slate-500">{label}</span>
+
       <span
         className={`text-right font-bold text-slate-950 ${capitalize ? "capitalize" : ""}`}
       >
@@ -646,12 +749,16 @@ function DocMeta({ label, value, capitalize = false }) {
 
 function PartyBox({ title, name, companyName, address, gstin, email, phone }) {
   return (
-    <div className="min-h-[125px] border-r border-slate-200 px-6 py-4 last:border-r-0 print:min-h-0 print:px-4 print:py-3">
-      <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-blue-600">
+    <div className="min-w-0 border-b border-slate-200 px-5 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:px-6 sm:last:border-r-0 print:border-b-0 print:border-r print:px-5 print:py-3 print:last:border-r-0">
+      {/* Center-aligned heading */}
+
+      <p className="mb-2 text-center text-[15px] font-bold uppercase tracking-[0.12em] text-blue-600">
         {title}
       </p>
 
-      <div className="space-y-1">
+      {/* Left-aligned details */}
+
+      <div className="space-y-1 px-4">
         <h3 className="text-[14px] font-black uppercase tracking-wide text-slate-950">
           {name || "-"}
         </h3>
@@ -666,17 +773,26 @@ function PartyBox({ title, name, companyName, address, gstin, email, phone }) {
           <p className="text-[12px] font-bold text-slate-700">GSTIN: {gstin}</p>
         )}
 
-        {address && (
-          <p className="whitespace-pre-line text-[12px] leading-5 text-slate-600">
-            {address}
+        {/* Email first */}
+
+        {email && (
+          <p className="break-words text-[12px] leading-5 text-slate-600">
+            <span className="font-semibold text-slate-800">Email:</span> {email}
           </p>
         )}
 
-        {(phone || email) && (
-          <p className="break-all text-[12px] text-slate-600">
-            {phone ? `Phone: ${phone}` : ""}
-            {phone && email ? " · " : ""}
-            {email ? `Email: ${email}` : ""}
+        {/* Phone below email */}
+
+        {phone && (
+          <p className="text-[12px] leading-5 text-slate-600">
+            <span className="font-semibold text-slate-800">Phone:</span> {phone}
+          </p>
+        )}
+
+        {address && (
+          <p className="whitespace-pre-line text-[12px] leading-5 text-slate-600">
+            <span className="font-semibold text-slate-800">Address:</span>
+            {address}
           </p>
         )}
       </div>
@@ -687,7 +803,7 @@ function PartyBox({ title, name, companyName, address, gstin, email, phone }) {
 function PreviewTh({ children, className = "", last = false }) {
   return (
     <th
-      className={`border-r border-slate-700 px-2.5 py-2.5 text-[11px] font-black uppercase tracking-wide ${className} ${
+      className={`border-r border-slate-700 px-1 py-2 text-[12px] font-bold uppercase tracking-normal ${className} ${
         last ? "border-r-0" : ""
       }`}
     >
@@ -699,7 +815,7 @@ function PreviewTh({ children, className = "", last = false }) {
 function PreviewTd({ children, className = "", last = false }) {
   return (
     <td
-      className={`border-r border-slate-200 px-2.5 py-2.5 align-top text-[12px] ${className} ${
+      className={`border-r border-slate-300 px-1 py-2 align-top text-[13px] ${className} ${
         last ? "border-r-0" : ""
       }`}
     >
@@ -711,9 +827,10 @@ function PreviewTd({ children, className = "", last = false }) {
 function InfoCard({ title, children }) {
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-slate-700">
+      <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-700">
         {title}
       </div>
+
       <div className="px-3 py-2.5 text-[12px] leading-5 text-slate-600">
         {children}
       </div>
@@ -721,19 +838,11 @@ function InfoCard({ title, children }) {
   );
 }
 
-function SummaryMini({ label, value }) {
-  return (
-    <div className="flex justify-between gap-3 text-[12px]">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-bold text-slate-900">{value}</span>
-    </div>
-  );
-}
-
 function AmountLine({ label, value }) {
   return (
-    <div className="flex justify-between gap-4 border-b border-slate-100 px-4 py-2.5 text-[12px]">
+    <div className="flex justify-between gap-4 border-b border-slate-200 px-3 py-1.5 text-[12px]">
       <span className="font-semibold text-slate-500">{label}</span>
+
       <span className="font-bold text-slate-950">{value}</span>
     </div>
   );
@@ -741,8 +850,9 @@ function AmountLine({ label, value }) {
 
 function BankRow({ label, value }) {
   return (
-    <div className="min-w-0 text-[12px]">
+    <div className="min-w-0 break-words text-[12px]">
       <span className="font-semibold text-slate-500">{label}: </span>
+
       <span className="font-bold text-slate-900">{value || "-"}</span>
     </div>
   );

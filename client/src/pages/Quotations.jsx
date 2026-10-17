@@ -175,7 +175,7 @@ function Quotations() {
           </div>
         </div>
       ),
-      { duration: 6000 },
+      { duration: 4000 },
     );
   };
 
@@ -213,7 +213,6 @@ function Quotations() {
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
-
             <div>
               <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
                 <ReceiptText size={16} />
@@ -386,19 +385,19 @@ function Quotations() {
       </div>
 
       {showCreateModal && (
-  <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
-    <div className="flex max-h-[92vh] w-full max-w-[92vw] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-2xl dark:border-slate-700 dark:bg-slate-950">
-      <CreateQuotation
-        modalMode
-        onClose={() => setShowCreateModal(false)}
-        onCreated={() => {
-          setShowCreateModal(false);
-          fetchQuotations();
-        }}
-      />
-    </div>
-  </div>
-)}
+        <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
+          <div className="flex max-h-[92vh] w-full max-w-[92vw] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-2xl dark:border-slate-700 dark:bg-slate-950">
+            <CreateQuotation
+              modalMode
+              onClose={() => setShowCreateModal(false)}
+              onCreated={() => {
+                setShowCreateModal(false);
+                fetchQuotations();
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       <style>{`
         .input {
@@ -491,12 +490,13 @@ function QuotationTable({ quotations, canManageQuotation, onCancel }) {
                   : q.branch_name || "-"}
               </td>
 
-              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                <p className="font-semibold text-slate-800 dark:text-slate-100">
+              <td className="min-w-[130px] w-[160px] px-4 py-3 text-slate-600 dark:text-slate-300">
+                <p className="whitespace-nowrap font-semibold text-slate-800 dark:text-slate-100">
                   {q.customer_name || q.company_name || "-"}
                 </p>
+
                 {q.company_name && q.customer_name && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
                     {q.company_name}
                   </p>
                 )}

@@ -411,7 +411,8 @@ function Dashboard() {
           title: "Paid Invoices",
           value: summary.paid_invoices || 0,
           icon: <Wallet size={20} />,
-          color: "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300",
+          color:
+            "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300",
         },
       ];
 
@@ -443,7 +444,6 @@ function Dashboard() {
               setSelectedBranch={setSelectedBranch}
               formatBranchLabel={formatBranchLabel}
             />
-
           </div>
         </div>
       </div>
@@ -542,7 +542,7 @@ function BranchFilter({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-600"
+        className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-600"
       >
         <span className="truncate">
           {selectedBranch === "all"
@@ -922,7 +922,10 @@ function RevenueDetails({ summary, payments, invoices, formatBranchLabel }) {
       </div>
 
       <SectionTitle title="Revenue Source - Payments" />
-      <PaymentsTable payments={payments} formatBranchLabel={formatBranchLabel} />
+      <PaymentsTable
+        payments={payments}
+        formatBranchLabel={formatBranchLabel}
+      />
 
       <SectionTitle title="Paid Invoice Breakdown" />
       <InvoicesTable
@@ -969,7 +972,10 @@ function ExpenseDetails({ summary, expenses, formatBranchLabel }) {
       </div>
 
       <SectionTitle title="Expense List" />
-      <ExpensesTable expenses={expenses} formatBranchLabel={formatBranchLabel} />
+      <ExpensesTable
+        expenses={expenses}
+        formatBranchLabel={formatBranchLabel}
+      />
     </div>
   );
 }
@@ -1051,10 +1057,16 @@ function ProfitDetails({
       </div>
 
       <SectionTitle title="Revenue Records" />
-      <PaymentsTable payments={payments} formatBranchLabel={formatBranchLabel} />
+      <PaymentsTable
+        payments={payments}
+        formatBranchLabel={formatBranchLabel}
+      />
 
       <SectionTitle title="Expense Records" />
-      <ExpensesTable expenses={expenses} formatBranchLabel={formatBranchLabel} />
+      <ExpensesTable
+        expenses={expenses}
+        formatBranchLabel={formatBranchLabel}
+      />
     </div>
   );
 }
@@ -1083,7 +1095,9 @@ function InfoBox({ title, value }) {
 
 function AmountBox({ title, value, className }) {
   return (
-    <div className={`rounded-2xl border border-slate-200 p-4 dark:border-slate-800 ${className}`}>
+    <div
+      className={`rounded-2xl border border-slate-200 p-4 dark:border-slate-800 ${className}`}
+    >
       <p className="text-sm font-semibold">{title}</p>
 
       <h3 className="mt-1 text-xl font-bold text-slate-950 dark:text-white">
@@ -1360,7 +1374,9 @@ function InvoicesTable({ invoices, formatBranchLabel }) {
           <TableStrong>{item.invoice_number || "-"}</TableStrong>
           <TableCell>{item.customer_name || "-"}</TableCell>
           <TableCell>{formatBranchLabel(item)}</TableCell>
-          <TableStrong>₹ {Number(item.total_amount || 0).toFixed(2)}</TableStrong>
+          <TableStrong>
+            ₹ {Number(item.total_amount || 0).toFixed(2)}
+          </TableStrong>
           <td className="p-4">
             <StatusBadge status={item.status} />
           </td>
@@ -1431,7 +1447,9 @@ function QuotationsTable({ quotations, formatBranchLabel }) {
           <TableStrong>{item.quotation_number || "-"}</TableStrong>
           <TableCell>{item.customer_name || "-"}</TableCell>
           <TableCell>{formatBranchLabel(item)}</TableCell>
-          <TableStrong>₹ {Number(item.total_amount || 0).toFixed(2)}</TableStrong>
+          <TableStrong>
+            ₹ {Number(item.total_amount || 0).toFixed(2)}
+          </TableStrong>
           <td className="p-4">
             <StatusBadge status={item.status} />
           </td>
@@ -1442,11 +1460,7 @@ function QuotationsTable({ quotations, formatBranchLabel }) {
 }
 
 function TableCell({ children }) {
-  return (
-    <td className="p-4 text-slate-600 dark:text-slate-300">
-      {children}
-    </td>
-  );
+  return <td className="p-4 text-slate-600 dark:text-slate-300">{children}</td>;
 }
 
 function TableStrong({ children }) {
@@ -1551,7 +1565,14 @@ function RecentInvoices({ invoices, formatBranchLabel, onViewAll }) {
     >
       <table className="w-full min-w-[760px] text-sm">
         <TableHead
-          headers={["Invoice No.", "Customer", "Branch", "Amount", "Status", "Date"]}
+          headers={[
+            "Invoice No.",
+            "Customer",
+            "Branch",
+            "Amount",
+            "Status",
+            "Date",
+          ]}
         />
 
         <tbody>
@@ -1597,7 +1618,14 @@ function RecentPayments({ payments, formatBranchLabel, onViewAll }) {
     >
       <table className="w-full min-w-[760px] text-sm">
         <TableHead
-          headers={["Invoice No.", "Customer", "Branch", "Amount", "Date", "Method"]}
+          headers={[
+            "Invoice No.",
+            "Customer",
+            "Branch",
+            "Amount",
+            "Date",
+            "Method",
+          ]}
         />
 
         <tbody>
@@ -1609,7 +1637,9 @@ function RecentPayments({ payments, formatBranchLabel, onViewAll }) {
               <TableStrong>{payment.invoice_number || "-"}</TableStrong>
               <TableCell>{payment.customer_name || "-"}</TableCell>
               <TableCell>{formatBranchLabel(payment)}</TableCell>
-              <TableStrong>₹ {Number(payment.amount || 0).toFixed(2)}</TableStrong>
+              <TableStrong>
+                ₹ {Number(payment.amount || 0).toFixed(2)}
+              </TableStrong>
               <TableCell>
                 {payment.payment_date
                   ? String(payment.payment_date).slice(0, 10)
@@ -1683,24 +1713,19 @@ function TableHead({ headers }) {
 
 function StatusBadge({ status }) {
   const styles = {
-    draft:
-      "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-    sent:
-      "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
+    draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+    sent: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
     viewed:
       "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300",
     partial:
       "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/50 dark:text-yellow-300",
-    paid:
-      "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
-    overdue:
-      "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300",
+    paid: "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
+    overdue: "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300",
     cancelled:
       "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
     converted:
       "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
-    rejected:
-      "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300",
+    rejected: "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300",
     accepted:
       "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
   };
