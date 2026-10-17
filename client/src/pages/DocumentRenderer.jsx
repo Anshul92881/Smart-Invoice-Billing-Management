@@ -1,7 +1,4 @@
-const APP_ORIGIN =
-  import.meta.env?.VITE_API_ORIGIN ||
-  import.meta.env?.VITE_SERVER_URL ||
-  "http\://localhost:5000";
+const APP_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '');   
 
 const DEFAULT_TEMPLATE = {
   show_logo: true,
@@ -45,14 +42,12 @@ const formatDate = (date) => {
   });
 };
 
-const getLogoUrl = (logo) => {
-  if (!logo) return "";
-  const value = String(logo);
-  if (value.startsWith("http")) return value;
-  if (value.startsWith("/upload")) return `${APP_ORIGIN}${value}`;
-  if (value.startsWith("/uploads")) return `${APP_ORIGIN}${value}`;
-  return `${APP_ORIGIN}/upload/company-logos/${value}`;
-};
+  const getLogoUrl = (logo) => {
+    if (!logo) return "";
+    if (logo.startsWith("http")) return logo;
+    
+    return `${APP_URL}/upload/company-logos/${logo}`;
+  };
 
 const normalizeTemplate = (template = {}) => ({
   ...DEFAULT_TEMPLATE,
