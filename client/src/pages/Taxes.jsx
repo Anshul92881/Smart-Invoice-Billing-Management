@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
+import { createPortal } from "react-dom";
 
 import {
   Percent,
@@ -21,6 +22,7 @@ import {
   ChevronDown,
   CheckCircle2,
 } from "lucide-react";
+import { create } from "axios";
 
 const ALLOWED_TAX_TYPES = ["GST", "CGST_SGST", "IGST", "TDS", "TCS", "OTHER"];
 const HSN_SAC_REGEX = /^[0-9]{4,8}$/;
@@ -1288,10 +1290,10 @@ function TaxViewModal({ tax, sampleAmount, getTaxAmount, onClose }) {
   const totalTax = cgstAmount + sgstAmount + igstAmount + tcsAmount;
   const finalAmount = Number(sampleAmount || 0) + totalTax - tdsAmount;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex items-start justify-between border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
+  return createPortal(
+    <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
+      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
               <BadgePercent size={28} />
@@ -1310,7 +1312,7 @@ function TaxViewModal({ tax, sampleAmount, getTaxAmount, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={20} />
           </button>
@@ -1376,12 +1378,13 @@ function TaxViewModal({ tax, sampleAmount, getTaxAmount, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 function FormModal({ title, description, icon, onClose, children }) {
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
       <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -1409,11 +1412,12 @@ function FormModal({ title, description, icon, onClose, children }) {
           </button>
         </div>
 
-        <div className="overflow-auto bg-white p-5 dark:bg-slate-900">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white p-5 dark:bg-slate-900">
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

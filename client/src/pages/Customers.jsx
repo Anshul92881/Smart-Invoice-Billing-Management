@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
 import Papa from "papaparse";
@@ -23,7 +24,6 @@ import {
   Plus,
   X,
   Save,
-  Filter,
   GitBranch,
   CheckCircle2,
   XCircle,
@@ -1564,13 +1564,13 @@ function StatsCard({ title, value, icon, color }) {
 }
 
 function FormModal({ title, description, icon, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="max-h-[95vh] w-full max-w-6xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+  return createPortal(
+    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start gap-3">
             {icon && (
-              <div className="rounded-xl bg-blue-50 p-2 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
                 {icon}
               </div>
             )}
@@ -1589,24 +1589,27 @@ function FormModal({ title, description, icon, onClose, children }) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg bg-slate-100 p-2 text-slate-600 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="p-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/40 p-6 dark:bg-slate-950/20">
+          {children}
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 function CustomerViewModal({ customer, onClose }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <div>
+  return createPortal(
+    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+      <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
+          <div className="min-w-0">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">
               Customer Details
             </h2>
@@ -1618,13 +1621,13 @@ function CustomerViewModal({ customer, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg bg-slate-100 p-2 text-slate-600 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto bg-slate-50/40 p-6 dark:bg-slate-950/20 md:grid-cols-2">
           <ViewField label="Customer Name" value={customer.customer_name} />
           <ViewField label="Company Name" value={customer.company_name} />
           <ViewField
@@ -1666,7 +1669,8 @@ function CustomerViewModal({ customer, onClose }) {
           <ViewField label="Notes" value={customer.notes} full />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1794,7 +1798,7 @@ function CustomDropdown({ value, onChange, options, icon }) {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:bg-slate-50 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus:ring-blue-950/50"
       >
         <span className="flex min-w-0 items-center gap-2">
           {icon && <span className="text-slate-400">{icon}</span>}
@@ -1917,7 +1921,7 @@ function BranchSelect({ branches, value, onChange, canAddBranch = false }) {
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
+        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:bg-slate-50 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus:ring-blue-950/50"
       >
         <span className="min-w-0 truncate">
           {selectedBranch

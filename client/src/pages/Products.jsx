@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
-const APP_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '');   
+import { createPortal } from "react-dom";
+
+const APP_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, "");
 console.log(APP_URL);
 
 import {
@@ -293,7 +295,7 @@ function Products() {
     if (!image) return "";
     if (image.startsWith("http")) return image;
     if (image.startsWith("/upload")) return `${APP_URL}/${image}`;
-    console.log(`${APP_URL}/${image}`)
+    console.log(`${APP_URL}/${image}`);
     return `${APP_URL}/upload/product-images/${image}`;
   };
 
@@ -355,14 +357,26 @@ function Products() {
 
   const stats = useMemo(() => {
     const active = products.filter(
-      (p) => (p.status || "active") === "active",
+      (product) => (product.status || "active") === "active",
     ).length;
 
     const inactive = products.length - active;
 
-    const lowStock = products.filter(
-      (p) => Number(p.quantity || 0) <= 5,
-    ).length;
+    const lowStock = products.filter((product) => {
+      const isActive = (product.status || "active") === "active";
+
+      if (!isActive) {
+        return false;
+      }
+
+      const hasVariants = Number(product.variant_count || 0) > 0;
+
+      if (hasVariants) {
+        return Number(product.low_stock_variant_count || 0) > 0;
+      }
+
+      return Number(product.quantity || 0) <= 10;
+    }).length;
 
     return {
       total: products.length,
@@ -1756,7 +1770,7 @@ function Products() {
             onVariantModeChange={(value) => {
               if (!value && variants.some((v) => v.id)) {
                 setVariantMessage(
-                  "Deactivate saved variants individually before switching back to Simple Product.",
+                  "Deactivate saved variants individually before switching back to Single Product.",
                 );
                 return;
               }
@@ -2587,7 +2601,7 @@ function ProductForm({
               disabled={Boolean(loadingVariants) || saving}
               className="h-4 w-4 accent-blue-600"
             />
-            Simple Product
+            Single Product
           </label>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
             <input
@@ -2598,7 +2612,7 @@ function ProductForm({
               disabled={Boolean(loadingVariants) || saving}
               className="h-4 w-4 accent-blue-600"
             />
-            Add Variants
+            Add Variants Products
           </label>
         </div>
         {variantMessage && !variantMode && (
@@ -3162,10 +3176,10 @@ function ProductViewModal({ product, getImageUrl, onClose }) {
   const taxAmount = (taxableValue * Number(product.tax_rate || 0)) / 100;
   const finalValue = taxableValue + taxAmount;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+ return createPortal(
+  <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+    <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-2">
             <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
               {product.image ? (
@@ -3198,7 +3212,7 @@ function ProductViewModal({ product, getImageUrl, onClose }) {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto bg-slate-50/50 p-6 dark:bg-slate-950/20 md:grid-cols-2">
           <ViewField label="Product Name" value={product.product_name} />
           <ViewField label="Branch" value={product.branch_name || "-"} />
           <ViewField label="SKU" value={product.sku} />
@@ -3279,26 +3293,28 @@ function ProductViewModal({ product, getImageUrl, onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 function FormModal({ title, description, icon, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="max-h-[95vh] w-full max-w-6xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-3">
+  return createPortal(
+    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex min-w-0 items-center gap-3">
             {icon && (
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 shadow-sm dark:bg-blue-950/40 dark:text-blue-300">
                 {icon}
               </div>
             )}
 
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+            <div className="min-w-0">
+              <h2 className="truncate text-xl font-bold text-slate-900 dark:text-white">
                 {title}
               </h2>
+
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 {description}
               </p>
@@ -3308,15 +3324,18 @@ function FormModal({ title, description, icon, onClose, children }) {
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="p-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/50 p-6 dark:bg-slate-950/20">
+          {children}
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

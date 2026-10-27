@@ -5,10 +5,6 @@ import {
   RotateCcw,
   Lock,
   CheckCircle2,
-  AlertCircle,
-  UserCog,
-  Users,
-  Crown,
   Loader2,
   Info,
 } from "lucide-react";
@@ -25,12 +21,14 @@ const MODULES = [
   {
     key: "customers",
     label: "Customers",
-    description: "View customers by default. CRUD access when permission is enabled",
+    description:
+      "View customers by default. CRUD access when permission is enabled",
   },
   {
     key: "products",
     label: "Products",
-    description: "View products by default. CRUD access when permission is enabled",
+    description:
+      "View products by default. CRUD access when permission is enabled",
   },
   {
     key: "vendors",
@@ -231,7 +229,10 @@ function RolePermissions() {
       <div className="w-full min-w-0 space-y-5">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-3 text-sm font-bold text-slate-600 dark:text-slate-300">
-            <Loader2 size={18} className="animate-spin text-blue-600 dark:text-blue-400" />
+            <Loader2
+              size={18}
+              className="animate-spin text-blue-600 dark:text-blue-400"
+            />
             Loading role permissions...
           </div>
         </div>
@@ -286,32 +287,6 @@ function RolePermissions() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <SummaryCard
-          title="Company Admin"
-          value="Full Access"
-          subtitle="Locked owner authority"
-          icon={<Crown size={20} />}
-          color="bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-        />
-
-        <SummaryCard
-          title="Accountant"
-          value={`${stats.accountantCount}/${MODULES.length}`}
-          subtitle={`${stats.optionalAccountant} optional enabled`}
-          icon={<UserCog size={20} />}
-          color="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-        />
-
-        <SummaryCard
-          title="Sales User"
-          value={`${stats.salesCount}/${MODULES.length}`}
-          subtitle={`${stats.optionalSales} optional enabled`}
-          icon={<Users size={20} />}
-          color="bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300"
-        />
-      </div>
-
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-200 p-5 dark:border-slate-800">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -344,7 +319,6 @@ function RolePermissions() {
               />
             </div>
           </div>
-
         </div>
 
         <div className="w-full overflow-x-auto">
@@ -450,28 +424,6 @@ function RolePermissions() {
             )}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function SummaryCard({ title, value, subtitle, icon, color }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-slate-500 dark:text-slate-400">
-            {title}
-          </p>
-          <h2 className="mt-1 truncate text-2xl font-bold text-slate-900 dark:text-white">
-            {value}
-          </h2>
-          <p className="mt-1 truncate text-xs font-semibold text-slate-400 dark:text-slate-500">
-            {subtitle}
-          </p>
-        </div>
-
-        <div className={`shrink-0 rounded-xl p-3 ${color}`}>{icon}</div>
       </div>
     </div>
   );

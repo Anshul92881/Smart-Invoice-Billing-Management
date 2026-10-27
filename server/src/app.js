@@ -21,14 +21,20 @@ import branchRoutes from "./routes/branchRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import kycRoutes from "./routes/kycRoutes.js";
 import hsnSacRoutes from "./routes/hsnSacRoutes.js";
-import authMiddleware, {kycAccessMiddleware} from "./middlewares/authMiddleware.js";
+import greetingRoutes from "./routes/greetingRoutes.js";
+
+import authMiddleware, {
+  kycAccessMiddleware,
+} from "./middlewares/authMiddleware.js";
 
 const app = express();
 
 const uploadPath = path.join(process.cwd(), "upload");
+
 const uploadsPath = path.join(process.cwd(), "uploads");
 
 app.use("/upload", express.static(uploadPath));
+
 app.use("/uploads", express.static(uploadsPath));
 
 app.use(cors());
@@ -51,8 +57,15 @@ app.use("/api/superadmin", superAdminRoutes);
 
 /* ==========================================================
    GLOBAL AUTH + KYC CHECK
-   - GET requests => Allowed (View Only Mode)
-   - POST/PUT/PATCH/DELETE => KYC Required
+
+   GET requests:
+   Allowed in view-only mode.
+
+   POST/PUT/PATCH/DELETE:
+   KYC required for company users.
+
+   SuperAdmin:
+   Bypasses KYC restriction.
 ========================================================== */
 
 app.use("/api", authMiddleware, kycAccessMiddleware);
@@ -77,5 +90,6 @@ app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/branches", branchRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/hsn-sac", hsnSacRoutes);
+app.use("/api/greetings", greetingRoutes);
 
 export default app;

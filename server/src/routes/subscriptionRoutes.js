@@ -21,10 +21,6 @@ import {
   buySubscriptionPlan,
   deletePlan,
   downloadSubscriptionInvoice,
-  requestTrialExtension,
-getTrialExtensionRequests,
-approveTrialExtension,
-rejectTrialExtension,
 } from "../controllers/subscriptionController.js";
 
 import authMiddleware, {
@@ -67,13 +63,6 @@ router.get(
   "/my/payments/:id/receipt",
   allowCompanyBilling,
   downloadMyPaymentReceipt,
-);
-
-/* COMPANY SIDE - TRIAL EXTENSION */
-router.post(
-  "/my/trial-extension/request",
-  authorizeRoles("company_admin"),
-  requestTrialExtension,
 );
 
 /* SHARED */
@@ -124,22 +113,5 @@ router.post(
 /* SUPERADMIN - COMPANY SUBSCRIPTIONS */
 router.get("/", authorizeRoles("superadmin"), getCompanySubscriptions);
 router.post("/", authorizeRoles("superadmin"), assignSubscription);
-router.get(
-  "/trial-extension/requests",
-  authorizeRoles("superadmin"),
-  getTrialExtensionRequests,
-);
-
-router.patch(
-  "/trial-extension/:subscriptionId/approve",
-  authorizeRoles("superadmin"),
-  approveTrialExtension,
-);
-
-router.patch(
-  "/trial-extension/:subscriptionId/reject",
-  authorizeRoles("superadmin"),
-  rejectTrialExtension,
-);
 
 export default router;

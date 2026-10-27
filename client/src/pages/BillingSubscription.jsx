@@ -20,6 +20,63 @@ import {
   Send,
 } from "lucide-react";
 
+function isFreePlan(plan) {
+  return (
+    plan?.plan_type === "free" ||
+    plan?.is_free === 1 ||
+    Number(plan?.price || 0) === 0
+  );
+}
+
+function getPlanDuration(plan) {
+  const durationValue = Number(plan?.duration_value);
+  const durationUnit = String(plan?.duration_unit || "").toLowerCase();
+
+  if (durationValue > 0 && ["day", "month", "year"].includes(durationUnit)) {
+    return {
+      value: durationValue,
+      unit: durationUnit,
+    };
+  }
+
+  const legacyCycles = {
+    monthly: { value: 1, unit: "month" },
+    quarterly: { value: 3, unit: "month" },
+    half_yearly: { value: 6, unit: "month" },
+    yearly: { value: 1, unit: "year" },
+    "1_month": { value: 1, unit: "month" },
+    "3_months": { value: 3, unit: "month" },
+    "6_months": { value: 6, unit: "month" },
+    "1_year": { value: 1, unit: "year" },
+  };
+
+  const customDuration = String(plan?.billing_cycle || "").match(
+    /^(\d+)_(day|month|year)s?$/,
+  );
+
+  if (customDuration) {
+    return {
+      value: Number(customDuration[1]),
+      unit: customDuration[2],
+    };
+  }
+
+  if (legacyCycles[plan?.billing_cycle]) {
+    return legacyCycles[plan.billing_cycle];
+  }
+
+  return {
+    value: 1,
+    unit: "month",
+  };
+}
+
+const formatPlanDuration = (plan) => {
+  const { value, unit } = getPlanDuration(plan);
+
+  return `${value} ${unit}${value > 1 ? "s" : ""}`;
+};
+
 function BillingSubscription() {
   const [subscription, setSubscription] = useState(null);
   const [allSubscriptions, setAllSubscriptions] = useState([]);
@@ -45,8 +102,6 @@ function BillingSubscription() {
   const [subscriptionPage, setSubscriptionPage] = useState(1);
 
   const [buyingPlanId, setBuyingPlanId] = useState(null);
-
-  const [requestingExtension, setRequestingExtension] = useState(false);
 
   const modalLimit = 5;
 
@@ -96,27 +151,6 @@ function BillingSubscription() {
       month: "short",
       year: "numeric",
     });
-  };
-
-  const handleRequestTrialExtension = async () => {
-    try {
-      setRequestingExtension(true);
-
-      await api.post("/subscriptions/my/trial-extension/request");
-
-      toast.success(
-        "Trial extension request submitted successfully. Waiting for Super Admin approval.",
-      );
-
-      fetchBillingData();
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message ||
-          "Failed to submit trial extension request",
-      );
-    } finally {
-      setRequestingExtension(false);
-    }
   };
 
   const formatAmount = (amount) =>
@@ -278,27 +312,42 @@ function BillingSubscription() {
   };
 
   const handleBuyPlan = async (plan) => {
+    if (isFreePlan(plan)) {
+      toast.error("Free plan is assigned automatically after KYC approval");
+
+      return;
+    }
+
     setConfirmModal({
       type: "info",
       title: "Buy Subscription Plan?",
-      message: `Do you want to generate invoice for ${plan.plan_name}?`,
-      confirmText: "Generate Invoice",
+      message:
+        `Do you want to purchase ${plan.plan_name} for ` +
+        `₹${formatAmount(plan.price)}? ` +
+        "Branch and Duration will be add to your current Plan.",
+
+      confirmText: "Buy Plan",
       cancelText: "Cancel",
+
       onConfirm: async () => {
         try {
           setBuyingPlanId(plan.id);
 
-          await api.post("/subscriptions/my/buy-plan", {
+          const response = await api.post("/subscriptions/my/buy-plan", {
             plan_id: plan.id,
           });
 
-          toast.success("Subscription invoice generated successfully");
+          toast.success(
+            response.data?.message || "Subscription purchased successfully",
+          );
+
           await fetchBillingData();
+
           setShowPlansModal(false);
         } catch (error) {
           toast.error(
             error.response?.data?.message ||
-              "Failed to generate subscription invoice",
+              "Failed to purchase subscription plan",
           );
         } finally {
           setBuyingPlanId(null);
@@ -388,8 +437,6 @@ function BillingSubscription() {
             formatAmount={formatAmount}
             onManage={() => setShowPlansModal(true)}
             onToggleAutoRenewal={handleToggleAutoRenewal}
-            onRequestExtension={handleRequestTrialExtension}
-            requestingExtension={requestingExtension}
           />
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -645,7 +692,6 @@ function SubscriptionHistoryTable({
   );
 }
 
-
 function SubscriptionHero({
   subscription,
   pendingAmount,
@@ -656,48 +702,11 @@ function SubscriptionHero({
   formatAmount,
   onManage,
   onToggleAutoRenewal,
-  onRequestExtension,
-  requestingExtension,
 }) {
+  const freePlan = isFreePlan(subscription);
+
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-      {subscription?.status === "expired" && (
-        <div className="border-b border-red-200 bg-red-50 dark:bg-red-950/40 p-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h3 className="font-semibold text-red-700 dark:text-red-300">
-                Trial Plan Expired
-              </h3>
-
-              <p className="mt-1 text-sm text-red-600 dark:text-red-300">
-                Your 10-day trial has ended. Purchase a subscription plan or
-                request one-time 10 day extension.
-              </p>
-            </div>
-
-            {subscription?.trial_extension_used !== 1 &&
-              subscription?.trial_extension_status !== "pending" && (
-                <button
-                  type="button"
-                  onClick={onRequestExtension}
-                  disabled={requestingExtension}
-                  className="shrink-0 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
-                >
-                  {requestingExtension
-                    ? "Submitting..."
-                    : "Request 10 Day Extension"}
-                </button>
-              )}
-
-            {subscription?.trial_extension_status === "pending" && (
-              <span className="shrink-0 rounded-full bg-orange-100 px-4 py-2.5 text-sm font-semibold text-orange-700 dark:text-orange-300">
-                Extension Request Pending
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_.92fr_.92fr_.95fr_1.18fr]">
         {/* Current Plan */}
         <div className="flex items-center gap-4 px-6 py-6">
@@ -727,13 +736,15 @@ function SubscriptionHero({
         {/* Billing Cycle */}
         <HeroInfo
           icon={<RefreshCcw size={18} />}
-          title="Billing Cycle"
-          value={
-            billingCycleLabel[subscription.billing_cycle] ||
-            subscription.billing_cycle ||
-            "-"
+          title={freePlan ? "Plan Duration" : "Billing Cycle"}
+          value={formatPlanDuration(subscription)}
+          subtitle={
+            freePlan
+              ? "Free Plan"
+              : `₹ ${formatAmount(subscription.price)} per ${formatPlanDuration(
+                  subscription,
+                )}`
           }
-          subtitle={`₹ ${formatAmount(subscription.price)} / cycle`}
         />
 
         {/* Renewal Date */}
@@ -744,36 +755,58 @@ function SubscriptionHero({
           subtitle={`Started ${formatDate(subscription.start_date)}`}
         />
 
-        {/* Auto Renewal */}
         <div className="flex flex-col justify-center gap-2.5 border-t border-slate-100 px-6 py-6 dark:border-slate-800 lg:border-l lg:border-t-0">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
             Auto Renewal
           </p>
 
-          <button
-            type="button"
-            onClick={onToggleAutoRenewal}
-            className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-300 ${
-              subscription.auto_renewal
-                ? "bg-emerald-500"
-                : "bg-slate-300 dark:bg-slate-700"
-            }`}
-            title={
-              subscription.auto_renewal
-                ? "Disable Auto Renewal"
-                : "Enable Auto Renewal"
-            }
-          >
-            <span
-              className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 ${
-                subscription.auto_renewal ? "translate-x-6" : "translate-x-1"
-              }`}
-            />
-          </button>
+          {freePlan ? (
+            <>
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                <ShieldCheck
+                  size={19}
+                  className="text-blue-600 dark:text-blue-400"
+                />
 
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {subscription.auto_renewal ? "Will auto renew" : "Manual renewal"}
-          </p>
+                <span className="font-semibold">Not Applicable</span>
+              </div>
+
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Free Plan aren't renewable.
+              </p>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onToggleAutoRenewal}
+                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-300 ${
+                  subscription.auto_renewal
+                    ? "bg-emerald-500"
+                    : "bg-slate-300 dark:bg-slate-700"
+                }`}
+                title={
+                  subscription.auto_renewal
+                    ? "Disable Auto Renewal"
+                    : "Enable Auto Renewal"
+                }
+              >
+                <span
+                  className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 ${
+                    subscription.auto_renewal
+                      ? "translate-x-6"
+                      : "translate-x-1"
+                  }`}
+                />
+              </button>
+
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {subscription.auto_renewal
+                  ? "Automatic renewal enabled"
+                  : "Manual renewal"}
+              </p>
+            </>
+          )}
         </div>
 
         {/* Outstanding Amount */}
@@ -845,7 +878,6 @@ function SummaryBox({ title, value, icon }) {
 function PlansModalContent({
   plans,
   subscription,
-  billingCycleLabel,
   formatAmount,
   buyingPlanId,
   onBuy,
@@ -853,84 +885,133 @@ function PlansModalContent({
   const currentPlanId = Number(subscription?.plan_id);
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {plans.length === 0 ? (
-        <div className="col-span-full rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-8 text-center">
+        <div className="col-span-full rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center dark:border-slate-700 dark:bg-slate-800">
           <Crown
             className="mx-auto text-slate-400 dark:text-slate-500"
-            size={34}
+            size={30}
           />
-          <p className="mt-3 font-semibold text-slate-700 dark:text-slate-200">
+
+          <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
             No active plans available
           </p>
         </div>
       ) : (
         plans.map((plan) => {
-          const isCurrent = Number(plan.id) === currentPlanId;
+          const isCurrent =
+            Number(plan.id) === currentPlanId;
+
+          const freePlan = isFreePlan(plan);
 
           return (
             <div
               key={plan.id}
-              className={`rounded-2xl border p-5 shadow-sm ${
+              className={`flex flex-col rounded-xl border p-4 shadow-sm ${
                 isCurrent
-                  ? "border-blue-200 bg-blue-50 dark:bg-blue-950/40"
-                  : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+                  ? "border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40"
+                  : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                    {plan.plan_name}
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    {billingCycleLabel[plan.billing_cycle] ||
-                      plan.billing_cycle ||
-                      "-"}
-                  </p>
-                </div>
+              {/* Plan name and status */}
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="min-w-0 truncate text-base font-semibold text-slate-900 dark:text-white">
+                  {plan.plan_name}
+                </h3>
 
                 {isCurrent && (
-                  <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700 dark:text-blue-300">
+                  <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
                     Current
                   </span>
                 )}
               </div>
 
-              <div className="mt-4">
-                <span className="text-2xl font-semibold text-slate-900 dark:text-white">
-                  ₹ {formatAmount(plan.price)}
-                </span>
-                <span className="ml-1 text-sm text-slate-500 dark:text-slate-400">
-                  / cycle
-                </span>
+              {/* Price */}
+              <div className="mt-3">
+                {freePlan ? (
+                  <span className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+                    Free
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-lg font-semibold text-slate-900 dark:text-white">
+                      ₹ {formatAmount(plan.price)}
+                    </span>
+
+                    <span className="ml-1 text-xs text-slate-500 dark:text-slate-400">
+                      / {formatPlanDuration(plan)}
+                    </span>
+                  </>
+                )}
               </div>
 
-              <div className="mt-4 rounded-xl bg-slate-50 dark:bg-slate-800 p-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              {/* Duration and branches */}
+              <div className="mt-3 flex items-center divide-x divide-slate-200 rounded-lg border border-slate-200 bg-slate-50 py-2 dark:divide-slate-700 dark:border-slate-700 dark:bg-slate-800">
+                <div className="min-w-0 flex-1 px-2.5">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Duration
+                  </p>
+
+                  <p className="mt-0.5 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {formatPlanDuration(plan)}
+                  </p>
+                </div>
+
+                <div className="min-w-0 flex-1 px-2.5">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Branches
+                  </p>
+
+                  <p className="mt-0.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {Number(plan.max_branches || 1)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Features */}
+              <div className="mt-3 flex-1 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800">
+                <p className="text-xs font-medium text-slate-400 dark:text-slate-500">
                   Features
                 </p>
-                <p className="mt-1 line-clamp-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+
+                <p className="mt-0.5 line-clamp-2 text-sm leading-5 text-slate-600 dark:text-slate-300">
                   {plan.features || "No features added"}
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => onBuy(plan)}
-                disabled={buyingPlanId === plan.id}
-                className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold ${
-                  isCurrent
-                    ? "border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
-                    : "bg-blue-600 text-white hover:bg-blue-700"
-                } disabled:opacity-60`}
-              >
-                <Send size={15} />
-                {buyingPlanId === plan.id
-                  ? "Generating..."
-                  : isCurrent
-                    ? "Renew Plan"
-                    : "Buy Plan"}
-              </button>
+              {/* Action */}
+              {freePlan ? (
+                <button
+                  type="button"
+                  disabled
+                  className="mt-3 inline-flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                >
+                  <Crown size={14} />
+
+                  {isCurrent
+                    ? "Current Free Plan"
+                    : "Default Free Plan"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onBuy(plan)}
+                  disabled={buyingPlanId === plan.id}
+                  className={`mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold ${
+                    isCurrent
+                      ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <Send size={14} />
+
+                  {buyingPlanId === plan.id
+                    ? "Processing..."
+                    : isCurrent
+                      ? "Renew Plan"
+                      : "Buy Plan"}
+                </button>
+              )}
             </div>
           );
         })

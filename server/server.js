@@ -2,21 +2,24 @@ import http from "http";
 import { Server } from "socket.io";
 
 import app from "./src/app.js";
+
 import { setSocketIo } from "./src/utils/socketEvents.js";
+import { startNotificationCron } from "./src/cron/notificationCorn.js";
+import { startGreetingScheduler } from "./src/services/greetingScheduler.js";
 
 const PORT = Number(process.env.PORT) || 5000;
 
 const server = http.createServer(app);
 
 const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN
-      .split(",")
+  ? process.env.CORS_ORIGIN.split(",")
       .map((origin) => origin.trim())
       .filter(Boolean)
   : true;
 
 const io = new Server(server, {
   path: "/socket.io",
+
   cors: {
     origin: allowedOrigins,
     methods: ["GET", "POST"],
@@ -50,4 +53,7 @@ io.on("connection", (socket) => {
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
+
+  startNotificationCron(io);
+  startGreetingScheduler();
 });

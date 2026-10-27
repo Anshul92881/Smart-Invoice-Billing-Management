@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
 import CreateQuotation from "./CreateQuotation";
+import { createPortal } from "react-dom";
+
 import {
   ChevronDown,
   CheckCircle2,
@@ -384,20 +386,22 @@ function Quotations() {
         </div>
       </div>
 
-      {showCreateModal && (
-        <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
-          <div className="flex max-h-[92vh] w-full max-w-[92vw] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-2xl dark:border-slate-700 dark:bg-slate-950">
-            <CreateQuotation
-              modalMode
-              onClose={() => setShowCreateModal(false)}
-              onCreated={() => {
-                setShowCreateModal(false);
-                fetchQuotations();
-              }}
-            />
-          </div>
-        </div>
-      )}
+     {showCreateModal &&
+  createPortal(
+    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+      <div className="h-[92vh] w-[96vw] max-w-[1600px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.5)] dark:border-slate-700 dark:bg-slate-950">
+        <CreateQuotation
+          modalMode
+          onClose={() => setShowCreateModal(false)}
+          onCreated={() => {
+            setShowCreateModal(false);
+            fetchQuotations();
+          }}
+        />
+      </div>
+    </div>,
+    document.body,
+  )}
 
       <style>{`
         .input {

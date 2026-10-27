@@ -42,6 +42,7 @@ import Notifications from "./pages/Notifications";
 import RolePermissions from "./pages/RolePermissions";
 import CompanyKyc from "./pages/CompanyKyc";
 import ForgotPassword from "./pages/ForgotPassword";
+import Greetings from "./pages/Greetings";
 
 function App() {
   const [authChecked, setAuthChecked] = useState(false);
@@ -119,6 +120,15 @@ function App() {
           }
         >
           <Route index element={<Dashboard />} />
+
+          <Route
+            path="greetings"
+            element={
+              <PrivateRoute allowedRoles={["company_admin"]}>
+                <Greetings />
+              </PrivateRoute>
+            }
+          />
 
           <Route
             path="company"
@@ -404,6 +414,7 @@ function App() {
           <Route path="audit-logs" element={<AuditLogs />} />
           <Route path="inactive-companies" element={<InactiveCompanies />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="greetings" element={<Greetings />} />
           <Route path="profile" element={<Profile />} />
         </Route>
 

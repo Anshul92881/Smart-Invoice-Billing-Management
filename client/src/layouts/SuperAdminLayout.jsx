@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import api from "../services/api";
 
 import {
@@ -18,28 +18,84 @@ import {
   Moon,
   Sun,
   AlertTriangle,
-  WalletCards,
   FileText,
+  Mail,
+  Activity,
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL
-  ? import.meta.env.VITE_API_BASE_URL.replace("/api", "")
+  ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, "")
   : "http://localhost:5000";
+
+const MENU_ITEMS = [
+  {
+    name: "Dashboard",
+    path: "/superadmin/dashboard",
+    icon: <LayoutDashboard size={19} />,
+  },
+  {
+    name: "Greetings",
+    path: "/superadmin/greetings",
+    icon: <Mail size={19} />,
+  },
+  {
+    name: "Companies",
+    path: "/superadmin/companies",
+    icon: <Building2 size={19} />,
+  },
+  {
+    name: "Company Admins",
+    path: "/superadmin/admins",
+    icon: <Users size={19} />,
+  },
+  {
+    name: "Company KYC",
+    path: "/superadmin/company-kyc",
+    icon: <ShieldCheck size={19} />,
+  },
+  {
+    name: "Inactive Companies",
+    path: "/superadmin/inactive-companies",
+    icon: <AlertTriangle size={19} />,
+  },
+  {
+    name: "Subscriptions",
+    path: "/superadmin/subscriptions",
+    icon: <CreditCard size={19} />,
+  },
+  {
+    name: "Audit Logs",
+    path: "/superadmin/audit-logs",
+    icon: <Activity size={19} />,
+  },
+  {
+    name: "Notifications",
+    path: "/superadmin/notifications",
+    icon: <Bell size={19} />,
+  },
+  {
+    name: "Profile",
+    path: "/superadmin/profile",
+    icon: <UserCircle size={19} />,
+  },
+];
+
+const readStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user"));
+  } catch {
+    return null;
+  }
+};
 
 function SuperAdminLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
+
   const profileMenuRef = useRef(null);
   const notificationRef = useRef(null);
-  const sidebarNavRef = useRef(null);
-  const sidebarScrollRef = useRef(0);
 
-  const [user, setUser] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("user"));
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState(readStoredUser);
 
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -50,6 +106,14 @@ function SuperAdminLayout() {
     () => localStorage.getItem("theme") === "dark",
   );
 
+  // NO USER -> LOGIN
+  useEffect(() => {
+    if (!user) {
+      navigate("/", { replace: true });
+    }
+  }, [user, navigate]);
+
+  // THEME
   useEffect(() => {
     const root = document.documentElement;
 
@@ -66,31 +130,21 @@ function SuperAdminLayout() {
     setDarkMode((prev) => !prev);
   };
 
+  // USER REFRESH
+  // Profile page: localStorage update karke window.dispatchEvent(new Event("userUpdated"))
   useEffect(() => {
-    const handleUserUpdate = () => {
-      try {
-        setUser(JSON.parse(localStorage.getItem("user")));
-      } catch {
-        setUser(null);
-      }
-    };
+    const refreshUser = () => setUser(readStoredUser());
 
-    window.addEventListener("userUpdated", handleUserUpdate);
+    window.addEventListener("userUpdated", refreshUser);
+    window.addEventListener("storage", refreshUser);
 
     return () => {
-      window.removeEventListener("userUpdated", handleUserUpdate);
+      window.removeEventListener("userUpdated", refreshUser);
+      window.removeEventListener("storage", refreshUser);
     };
   }, []);
 
-  useEffect(() => {
-    const nav = sidebarNavRef.current;
-    if (!nav) return;
-
-    requestAnimationFrame(() => {
-      nav.scrollTop = sidebarScrollRef.current;
-    });
-  }, [location.pathname]);
-
+  // CLICK OUTSIDE (profile + notifications)
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -117,27 +171,18 @@ function SuperAdminLayout() {
 
   const fetchUnreadNotifications = async () => {
     try {
-      const countRes = await api.get("/notifications", {
-        params: {
-          page: 1,
-          limit: 1,
-          type: "all",
-          status: "unread",
-        },
-      });
+      const [countRes, allRes] = await Promise.all([
+        api.get("/notifications", {
+          params: { page: 1, limit: 1, type: "all", status: "unread" },
+        }),
+        api.get("/notifications", {
+          params: { page: 1, limit: 20, type: "all", status: "all" },
+        }),
+      ]);
 
-      const allRes = await api.get("/notifications", {
-        params: {
-          page: 1,
-          limit: 20,
-          type: "all",
-          status: "all",
-        },
-      });
+      const list = allRes.data.notifications || [];
 
-      const allNotifications = allRes.data.notifications || [];
-
-      const sortedNotifications = [...allNotifications].sort((a, b) => {
+      const sorted = [...list].sort((a, b) => {
         const readA = Number(a.is_read || 0);
         const readB = Number(b.is_read || 0);
 
@@ -147,12 +192,13 @@ function SuperAdminLayout() {
       });
 
       setUnreadCount(countRes.data.total || 0);
-      setNotifications(sortedNotifications);
+      setNotifications(sorted);
     } catch (error) {
       console.log(error.response?.data || error);
     }
   };
 
+  // NOTIFICATIONS (initial + event + 30s polling)
   useEffect(() => {
     fetchUnreadNotifications();
 
@@ -162,9 +208,7 @@ function SuperAdminLayout() {
 
     window.addEventListener("notificationsUpdated", handleNotificationsUpdated);
 
-    const interval = setInterval(() => {
-      fetchUnreadNotifications();
-    }, 30000);
+    const interval = setInterval(fetchUnreadNotifications, 30000);
 
     return () => {
       window.removeEventListener(
@@ -174,6 +218,43 @@ function SuperAdminLayout() {
       clearInterval(interval);
     };
   }, []);
+
+  const handleMarkAllRead = async () => {
+    try {
+      await api.patch("/notifications/read-all");
+      await fetchUnreadNotifications();
+      window.dispatchEvent(new Event("notificationsUpdated"));
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleNotificationClick = async (item) => {
+    if (Number(item.is_read) !== 0) return;
+
+    try {
+      await api.patch(`/notifications/${item.id}/read`);
+      await fetchUnreadNotifications();
+      window.dispatchEvent(new Event("notificationsUpdated"));
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.post("/auth/logout");
+    } catch (error) {
+      console.log(error);
+    } finally {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      localStorage.removeItem("pending_company_id");
+      window.location.href = "/";
+    }
+  };
+
+  const closeSidebar = () => setSidebarOpen(false);
 
   const initials =
     user?.name
@@ -197,94 +278,21 @@ function SuperAdminLayout() {
     return `${BASE_URL}/uploads/profiles/${image}`;
   })();
 
-  const menuItems = [
-    {
-      name: "Dashboard",
-      path: "/superadmin/dashboard",
-      icon: <LayoutDashboard size={19} />,
-    },
-    {
-      name: "Companies",
-      path: "/superadmin/companies",
-      icon: <Building2 size={19} />,
-    },
-    {
-      name: "Company Admins",
-      path: "/superadmin/admins",
-      icon: <Users size={19} />,
-    },
-    {
-      name: "Company KYC",
-      path: "/superadmin/company-kyc",
-      icon: <ShieldCheck size={19} />,
-    },
-    {
-      name: "Inactive Companies",
-      path: "/superadmin/inactive-companies",
-      icon: <AlertTriangle size={19} />,
-    },
-    {
-      name: "Subscriptions",
-      path: "/superadmin/subscriptions",
-      icon: <CreditCard size={19} />,
-    },
-    {
-      name: "Audit Logs",
-      path: "/superadmin/audit-logs",
-      icon: <ShieldCheck size={19} />,
-    },
-    {
-      name: "Notifications",
-      path: "/superadmin/notifications",
-      icon: <Bell size={19} />,
-    },
+  // AVATAR (JSX variable, component nahi: har render pe remount nahi hota)
+  const avatar = profileImageUrl ? (
+    <img
+      src={profileImageUrl}
+      alt={user?.name || "SuperAdmin"}
+      className="h-11 w-11 shrink-0 rounded-full border border-slate-200 object-cover shadow-sm dark:border-slate-700"
+    />
+  ) : (
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-blue-700 text-sm font-bold text-white shadow-sm">
+      {initials}
+    </div>
+  );
 
-    {
-      name: "Profile",
-      path: "/superadmin/profile",
-      icon: <UserCircle size={19} />,
-    },
-  ];
-
-  const handleLogout = async () => {
-    try {
-      await api.post("/auth/logout");
-    } catch (error) {
-      console.log(error);
-    } finally {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/";
-    }
-  };
-
-  const handleCloseSidebar = () => {
-    if (sidebarNavRef.current) {
-      sidebarScrollRef.current = sidebarNavRef.current.scrollTop;
-    }
-
-    setSidebarOpen(false);
-  };
-
-  const Avatar = () => {
-    if (profileImageUrl) {
-      return (
-        <img
-          src={profileImageUrl}
-          alt={user?.name || "SuperAdmin"}
-          className="h-11 w-11 shrink-0 rounded-full border border-slate-200 object-cover shadow-sm dark:border-slate-700"
-        />
-      );
-    }
-
-    return (
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-blue-700 text-sm font-bold text-white shadow-sm">
-        {initials}
-      </div>
-    );
-  };
-
-  const SidebarContent = () => (
+  // SIDEBAR (JSX variable, component nahi: remount nahi hota, scroll自动 bana rehta hai)
+  const sidebarContent = (
     <div className="flex h-full flex-col">
       <div className="flex h-[73px] shrink-0 items-center border-b border-slate-800/80 px-6 dark:border-slate-800">
         <div className="flex w-full items-center justify-between gap-3">
@@ -305,7 +313,8 @@ function SuperAdminLayout() {
 
           <button
             type="button"
-            onClick={handleCloseSidebar}
+            onClick={closeSidebar}
+            aria-label="Close sidebar"
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-300 transition hover:bg-slate-700 hover:text-white lg:hidden"
           >
             <X size={18} />
@@ -313,14 +322,8 @@ function SuperAdminLayout() {
         </div>
       </div>
 
-      <nav
-        ref={sidebarNavRef}
-        onScroll={(e) => {
-          sidebarScrollRef.current = e.currentTarget.scrollTop;
-        }}
-        className="sidebar-scroll flex-1 space-y-1 overflow-y-auto p-4"
-      >
-        {menuItems.map((item) => {
+      <nav className="sidebar-scroll flex-1 space-y-1 overflow-y-auto p-4">
+        {MENU_ITEMS.map((item) => {
           const isActive =
             location.pathname === item.path ||
             location.pathname.startsWith(`${item.path}/`);
@@ -329,7 +332,7 @@ function SuperAdminLayout() {
             <Link
               key={item.name}
               to={item.path}
-              onClick={handleCloseSidebar}
+              onClick={closeSidebar}
               className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
                 isActive
                   ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
@@ -345,12 +348,14 @@ function SuperAdminLayout() {
     </div>
   );
 
+  if (!user) return null;
+
   return (
     <div className="h-screen overflow-hidden bg-slate-100 text-slate-800 transition-colors dark:bg-slate-950 dark:text-slate-100">
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden"
-          onClick={handleCloseSidebar}
+          onClick={closeSidebar}
         />
       )}
 
@@ -359,16 +364,18 @@ function SuperAdminLayout() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <SidebarContent />
+        {sidebarContent}
       </aside>
 
       <section className="flex h-screen flex-col overflow-hidden lg:pl-72">
         <header className="flex h-[73px] shrink-0 items-center border-b border-slate-200 bg-white px-4 transition-colors dark:border-slate-800 dark:bg-slate-900 sm:px-6 lg:px-8">
           <div className="flex w-full items-center justify-between gap-4">
+            {/* LEFT SIDE */}
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
+                aria-label="Open sidebar"
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-700 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 lg:hidden"
               >
                 <Menu size={21} />
@@ -385,11 +392,17 @@ function SuperAdminLayout() {
               </div>
             </div>
 
+            {/* RIGHT SIDE */}
             <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+              {/* NOTIFICATIONS */}
               <div ref={notificationRef} className="relative">
                 <button
                   type="button"
-                  onClick={() => setNotificationOpen((prev) => !prev)}
+                  onClick={() => {
+                    setNotificationOpen((prev) => !prev);
+                    setProfileMenuOpen(false);
+                  }}
+                  aria-label="Open notifications"
                   className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
                 >
                   <Bell size={19} />
@@ -402,7 +415,7 @@ function SuperAdminLayout() {
                 </button>
 
                 {notificationOpen && (
-                  <div className="absolute right-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-96 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                  <div className="absolute right-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-[24rem] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
                     <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-700">
                       <div>
                         <h3 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -417,19 +430,7 @@ function SuperAdminLayout() {
                         {unreadCount > 0 && (
                           <button
                             type="button"
-                            onClick={async () => {
-                              try {
-                                await api.patch("/notifications/read-all");
-
-                                await fetchUnreadNotifications();
-
-                                window.dispatchEvent(
-                                  new Event("notificationsUpdated"),
-                                );
-                              } catch (error) {
-                                console.log(error);
-                              }
-                            }}
+                            onClick={handleMarkAllRead}
                             className="text-xs font-semibold text-emerald-600 transition hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
                           >
                             Mark all read
@@ -448,73 +449,59 @@ function SuperAdminLayout() {
 
                     <div className="max-h-[420px] overflow-y-auto">
                       {notifications.length > 0 ? (
-                        notifications.map((item) => (
-                          <div
-                            key={item.id}
-                            onClick={async () => {
-                              if (Number(item.is_read) === 0) {
-                                try {
-                                  await api.patch(
-                                    `/notifications/${item.id}/read`,
-                                  );
+                        notifications.map((item) => {
+                          const unread = Number(item.is_read) === 0;
 
-                                  await fetchUnreadNotifications();
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => handleNotificationClick(item)}
+                              className={`cursor-pointer border-b border-slate-100 px-4 py-3 transition last:border-b-0 dark:border-slate-700 ${
+                                unread
+                                  ? "bg-blue-50/70 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-950/50"
+                                  : "bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800"
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="mt-1 flex w-3 justify-center">
+                                  {unread && (
+                                    <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                                  )}
+                                </div>
 
-                                  window.dispatchEvent(
-                                    new Event("notificationsUpdated"),
-                                  );
-                                } catch (error) {
-                                  console.log(error);
-                                }
-                              }
-                            }}
-                            className={`cursor-pointer border-b border-slate-100 px-4 py-3 transition last:border-b-0 dark:border-slate-700 ${
-                              Number(item.is_read) === 0
-                                ? "bg-blue-50/70 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-950/50"
-                                : "bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800"
-                            }`}
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className="mt-1 flex w-3 justify-center">
-                                {Number(item.is_read) === 0 && (
-                                  <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                                )}
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-                                <p
-                                  className={`truncate text-sm text-slate-900 dark:text-white ${
-                                    Number(item.is_read) === 0
-                                      ? "font-bold"
-                                      : "font-semibold"
-                                  }`}
-                                >
-                                  {item.title || "-"}
-                                </p>
-
-                                <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-                                  {item.message || "-"}
-                                </p>
-
-                                <div className="mt-2 flex items-center justify-between gap-2">
-                                  <p className="truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                                    {item.created_at
-                                      ? new Date(
-                                          item.created_at,
-                                        ).toLocaleString()
-                                      : "-"}
+                                <div className="min-w-0 flex-1">
+                                  <p
+                                    className={`truncate text-sm text-slate-900 dark:text-white ${
+                                      unread ? "font-bold" : "font-semibold"
+                                    }`}
+                                  >
+                                    {item.title || "-"}
                                   </p>
 
-                                  {Number(item.is_read) === 0 && (
-                                    <span className="shrink-0 text-[11px] font-bold text-blue-600 dark:text-blue-400">
-                                      New
-                                    </span>
-                                  )}
+                                  <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                    {item.message || "-"}
+                                  </p>
+
+                                  <div className="mt-2 flex items-center justify-between gap-2">
+                                    <p className="truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                                      {item.created_at
+                                        ? new Date(
+                                            item.created_at,
+                                          ).toLocaleString()
+                                        : "-"}
+                                    </p>
+
+                                    {unread && (
+                                      <span className="shrink-0 text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                                        New
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <div className="px-4 py-8 text-center">
                           <Bell
@@ -522,7 +509,7 @@ function SuperAdminLayout() {
                             size={30}
                           />
                           <p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                            No unread notifications
+                            No notifications found
                           </p>
                         </div>
                       )}
@@ -531,6 +518,7 @@ function SuperAdminLayout() {
                 )}
               </div>
 
+              {/* THEME */}
               <button
                 type="button"
                 onClick={toggleTheme}
@@ -538,20 +526,28 @@ function SuperAdminLayout() {
                 title={
                   darkMode ? "Switch to light mode" : "Switch to dark mode"
                 }
+                aria-label={
+                  darkMode ? "Switch to light mode" : "Switch to dark mode"
+                }
               >
                 {darkMode ? <Sun size={19} /> : <Moon size={19} />}
               </button>
 
+              {/* PROFILE */}
               <div ref={profileMenuRef} className="relative">
                 <button
                   type="button"
-                  onClick={() => setProfileMenuOpen((prev) => !prev)}
+                  onClick={() => {
+                    setProfileMenuOpen((prev) => !prev);
+                    setNotificationOpen(false);
+                  }}
+                  aria-label="Open profile menu"
                   className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1.5 shadow-sm transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 md:px-3"
                 >
-                  <Avatar />
+                  {avatar}
 
                   <div className="hidden min-w-0 text-left md:block">
-                    <p className="max-w-40 truncate text-sm font-semibold text-slate-900 dark:text-white">
+                    <p className="max-w-[10rem] truncate text-sm font-semibold text-slate-900 dark:text-white">
                       {user?.name || "SuperAdmin"}
                     </p>
 

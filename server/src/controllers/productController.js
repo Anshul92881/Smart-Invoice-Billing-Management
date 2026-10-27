@@ -438,7 +438,9 @@ export const getProducts = async (req, res) => {
     const company_id = req.user.company_id;
 
     if (!company_id) {
-      return res.status(400).json({ message: "Company id missing" });
+      return res.status(400).json({
+        message: "Company id missing",
+      });
     }
 
     const page = clampPagination(req.query.page, 1, 100000);
@@ -478,6 +480,7 @@ export const getProducts = async (req, res) => {
       `;
 
       const keyword = `%${search}%`;
+
       params.push(
         keyword,
         keyword,
@@ -497,15 +500,18 @@ export const getProducts = async (req, res) => {
 
     const [countRows] = await db.query(
       `
-      SELECT COUNT(*) AS total
-      FROM tbl_products p
-      LEFT JOIN tbl_company_branches b
-        ON p.branch_id = b.id
-        AND b.company_id = p.company_id
-      LEFT JOIN tbl_taxes t
-        ON p.tax_id = t.id
-        AND t.company_id = p.company_id
-      ${whereClause}
+        SELECT COUNT(*) AS total
+        FROM tbl_products p
+
+        LEFT JOIN tbl_company_branches b
+          ON p.branch_id = b.id
+          AND b.company_id = p.company_id
+
+        LEFT JOIN tbl_taxes t
+          ON p.tax_id = t.id
+          AND t.company_id = p.company_id
+
+        ${whereClause}
       `,
       params,
     );
@@ -515,28 +521,76 @@ export const getProducts = async (req, res) => {
 
     const [products] = await db.query(
       `
-      SELECT
-        p.*,
-        b.branch_name,
-        b.branch_code,
-        t.tax_name,
-        t.tax_type,
-        t.cgst_percentage,
-        t.sgst_percentage,
-        t.igst_percentage,
-        t.tds_percentage,
-        t.tcs_percentage,
-        t.reverse_charge
-      FROM tbl_products p
-      LEFT JOIN tbl_company_branches b
-        ON p.branch_id = b.id
-        AND b.company_id = p.company_id
-      LEFT JOIN tbl_taxes t
-        ON p.tax_id = t.id
-        AND t.company_id = p.company_id
-      ${whereClause}
-      ORDER BY p.id DESC
-      LIMIT ? OFFSET ?
+        SELECT
+          p.*,
+
+          COALESCE(variant_summary.variant_count, 0)
+            AS variant_count,
+
+          COALESCE(variant_summary.variant_stock, 0)
+            AS variant_stock,
+
+          COALESCE(variant_summary.low_stock_variant_count, 0)
+            AS low_stock_variant_count,
+
+          b.branch_name,
+          b.branch_code,
+
+          t.tax_name,
+          t.tax_type,
+          t.cgst_percentage,
+          t.sgst_percentage,
+          t.igst_percentage,
+          t.tds_percentage,
+          t.tcs_percentage,
+          t.reverse_charge
+
+        FROM tbl_products p
+
+        LEFT JOIN tbl_company_branches b
+          ON p.branch_id = b.id
+          AND b.company_id = p.company_id
+
+        LEFT JOIN tbl_taxes t
+          ON p.tax_id = t.id
+          AND t.company_id = p.company_id
+
+        LEFT JOIN (
+          SELECT
+            company_id,
+            product_id,
+
+            COUNT(*) AS variant_count,
+
+            SUM(
+              CASE
+                WHEN status = 'active'
+                THEN quantity
+                ELSE 0
+              END
+            ) AS variant_stock,
+
+            SUM(
+              CASE
+                WHEN status = 'active'
+                  AND quantity <= 10
+                THEN 1
+                ELSE 0
+              END
+            ) AS low_stock_variant_count
+
+          FROM tbl_product_variants
+
+          GROUP BY company_id, product_id
+        ) AS variant_summary
+          ON variant_summary.company_id = p.company_id
+          AND variant_summary.product_id = p.id
+
+        ${whereClause}
+
+        ORDER BY p.id DESC
+
+        LIMIT ? OFFSET ?
       `,
       [...params, limit, offset],
     );
@@ -549,6 +603,8 @@ export const getProducts = async (req, res) => {
       totalPages,
     });
   } catch (error) {
+    console.error("GET PRODUCTS ERROR:", error);
+
     return res.status(500).json({
       message: "Get products error",
       error: error.message,

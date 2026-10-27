@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
+import { createPortal } from "react-dom";
 
 import {
   Pencil,
@@ -966,10 +967,10 @@ function BranchForm({
 }
 
 function SalesUserViewModal({ user, formatBranchLabel, onClose }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.45)] outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex items-start justify-between border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
+  return createPortal(
+    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
               <ShieldCheck size={28} />
@@ -979,6 +980,7 @@ function SalesUserViewModal({ user, formatBranchLabel, onClose }) {
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">
                 {user.name || "-"}
               </h2>
+
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Sales user profile details
               </p>
@@ -994,29 +996,35 @@ function SalesUserViewModal({ user, formatBranchLabel, onClose }) {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 bg-white p-5 dark:bg-slate-900 md:grid-cols-2">
-          <ViewField label="Name" value={user.name} />
-          <ViewField label="Email" value={user.email} />
-          <ViewField
-            label="Role"
-            value={user.role?.replace("_", " ") || "sales user"}
-          />
-          <ViewField
-            label="Status"
-            value={<StatusBadge status={user.status} />}
-          />
-          <ViewField label="Branch" value={formatBranchLabel(user)} />
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white dark:bg-slate-900">
+          <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+            <ViewField label="Name" value={user.name} />
+            <ViewField label="Email" value={user.email} />
+
+            <ViewField
+              label="Role"
+              value={user.role?.replace("_", " ") || "sales user"}
+            />
+
+            <ViewField
+              label="Status"
+              value={<StatusBadge status={user.status} />}
+            />
+
+            <ViewField label="Branch" value={formatBranchLabel(user)} />
+          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 function FormModal({ title, description, icon, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.45)] outline-none ring-0 focus:outline-none focus:ring-0 dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+  return createPortal(
+    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
               {icon}
@@ -1026,6 +1034,7 @@ function FormModal({ title, description, icon, onClose, children }) {
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">
                 {title}
               </h2>
+
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 {description}
               </p>
@@ -1041,11 +1050,12 @@ function FormModal({ title, description, icon, onClose, children }) {
           </button>
         </div>
 
-        <div className="overflow-auto bg-white p-5 dark:bg-slate-900">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white p-5 dark:bg-slate-900">
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
+import { createPortal } from "react-dom";
 
 import {
   FileText,
@@ -44,6 +45,30 @@ const NAME_REGEX = /^[a-zA-Z0-9\s.&'(),-]+$/;
 const PRODUCT_NAME_REGEX = /^[a-zA-Z0-9\s.&'(),/_-]+$/;
 const SKU_REGEX = /^[a-zA-Z0-9_-]{2,50}$/;
 const BRANCH_CODE_REGEX = /^[a-zA-Z0-9_-]{2,20}$/;
+
+const makeAttribute = () => ({
+  name: "",
+  values: "",
+});
+
+const makeVariant = (attributes, existing = {}) => ({
+  id: existing.id || null,
+  attributes,
+  sku: existing.sku || "",
+  unit_price: existing.unit_price == null ? "" : String(existing.unit_price),
+  quantity: existing.quantity == null ? "0" : String(existing.quantity),
+  status: existing.status || "active",
+});
+
+const canonicalAttributes = (attributes) =>
+  JSON.stringify(
+    Object.entries(attributes)
+      .map(([key, value]) => [
+        key.trim().toLowerCase(),
+        String(value).trim().toLowerCase(),
+      ])
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
 
 const ALLOWED_UNIT_TYPES = [
   "pcs",
@@ -96,7 +121,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
 
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
-  // Loaded per product. A failed lookup must never be treated as a simple product.
+  // Loaded per product. A failed lookup must never be treated as a single product.
   const [variantLookup, setVariantLookup] = useState({});
   const [branches, setBranches] = useState([]);
 
@@ -152,11 +177,22 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
     hsn_sac_code: "",
     description: "",
     unit_price: "",
+    tax_id: "",
     tax_rate: "",
     quantity: "",
     unit_type: "pcs",
     category: "",
     status: "active",
+  };
+
+  const initialTaxForm = {
+    tax_name: "",
+    tax_type: "GST",
+    hsn_sac_code: "",
+    tax_percentage: "",
+    reverse_charge: false,
+    is_active: true,
+    description: "",
   };
 
   const initialForm = {
@@ -182,6 +218,32 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
     ],
   };
 
+  const [taxes, setTaxes] = useState([]);
+
+  const [showTaxModal, setShowTaxModal] = useState(false);
+
+  const [productErrors, setProductErrors] = useState({});
+  const [taxErrors, setTaxErrors] = useState({});
+
+  const [taxForm, setTaxForm] = useState(initialTaxForm);
+  const [taxLoading, setTaxLoading] = useState(false);
+
+  const [variantMode, setVariantMode] = useState(false);
+  const [attributes, setAttributes] = useState([makeAttribute()]);
+  const [newProductVariants, setNewProductVariants] = useState([]);
+  const [variantMessage, setVariantMessage] = useState("");
+  const [pendingProductId, setPendingProductId] = useState(null);
+  const [productSaving, setProductSaving] = useState(false);
+
+  const [hsnSuggestions, setHsnSuggestions] = useState([]);
+  const [hsnLoading, setHsnLoading] = useState(false);
+  const [hsnError, setHsnError] = useState("");
+  const [hsnSearched, setHsnSearched] = useState(false);
+  const [hsnSelected, setHsnSelected] = useState(false);
+  const [selectedHsnDetails, setSelectedHsnDetails] = useState(null);
+
+  const autoFilledGstRef = useRef(false);
+
   const [branchForm, setBranchForm] = useState(initialBranchForm);
   const [customerForm, setCustomerForm] = useState(initialCustomerForm);
   const [productForm, setProductForm] = useState(initialProductForm);
@@ -205,6 +267,11 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
     user?.role === "sales_user" ||
     Boolean(rolePermissions?.[user?.role]?.customers);
 
+  const canManageTaxes =
+    user?.role === "company_admin" ||
+    user?.role === "accountant" ||
+    Boolean(rolePermissions?.[user?.role]?.taxes);
+
   const getList = (data, key) => {
     if (Array.isArray(data)) return data;
     return data?.[key] || [];
@@ -212,15 +279,37 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
 
   const fetchDropdownData = async () => {
     try {
-      const [customerRes, productRes, branchRes] = await Promise.all([
+      const taxEndpoint =
+        user?.role === "sales_user" ? "/taxes/dropdown" : "/taxes";
+
+      const [customerRes, productRes, branchRes, taxRes] = await Promise.all([
         api.get("/customers/dropdown"),
         api.get("/products/dropdown").catch(() => api.get("/products")),
         api.get("/branches/dropdown").catch(() => api.get("/branches")),
+        api.get(taxEndpoint, {
+          params: {
+            status: "active",
+            limit: 1000,
+          },
+        }),
       ]);
 
       setCustomers(getList(customerRes.data, "customers"));
       setProducts(getList(productRes.data, "products"));
       setBranches(getList(branchRes.data, "branches"));
+
+      const taxList = Array.isArray(taxRes.data)
+        ? taxRes.data
+        : taxRes.data?.taxes || [];
+
+      setTaxes(
+        taxList.filter(
+          (tax) =>
+            tax.is_active === true ||
+            Number(tax.is_active) === 1 ||
+            tax.status === "active",
+        ),
+      );
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load data");
     }
@@ -295,7 +384,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
     );
   }, [products]);
 
-  // Products with zero parent quantity are either out-of-stock simple products
+  // Products with zero parent quantity are either out-of-stock Single Products
   // or variant products (parent quantity is always 0 for them). Check which.
   const [stockKinds, setStockKinds] = useState({});
   const stockCheckRef = useRef(new Set());
@@ -450,13 +539,593 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
     setCustomerForm((prev) => ({ ...prev, [name]: nextValue }));
   };
 
+  const clearProductError = (name) => {
+    if (!productErrors[name]) return;
+
+    setProductErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
+  };
+
+  useEffect(() => {
+    if (!showProductModal || hsnSelected) {
+      setHsnSuggestions([]);
+      setHsnError("");
+      setHsnSearched(false);
+      return;
+    }
+
+    const productName = cleanString(productForm.product_name);
+
+    if (productName.length < 3) {
+      setHsnSuggestions([]);
+      setHsnError("");
+      setHsnLoading(false);
+      setHsnSearched(false);
+      return;
+    }
+
+    let active = true;
+
+    setHsnLoading(true);
+    setHsnSuggestions([]);
+    setHsnError("");
+    setHsnSearched(false);
+
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await api.get("/hsn-sac/suggest", {
+          params: {
+            product_name: productName,
+            limit: 20,
+          },
+        });
+
+        if (!active) return;
+
+        setHsnSuggestions(
+          Array.isArray(data?.suggestions)
+            ? data.suggestions
+            : Array.isArray(data)
+              ? data
+              : [],
+        );
+
+        setHsnSearched(true);
+      } catch (error) {
+        if (!active) return;
+
+        setHsnSuggestions([]);
+        setHsnError(
+          error.response?.data?.message || "HSN/SAC suggestions unavailable",
+        );
+        setHsnSearched(true);
+      } finally {
+        if (active) setHsnLoading(false);
+      }
+    }, 450);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [productForm.product_name, showProductModal, hsnSelected]);
+
+  const selectProductHsn = (item) => {
+    const code = String(item?.code ?? "");
+
+    if (!HSN_SAC_REGEX.test(code)) return;
+
+    const hasGstRate =
+      item?.gst_rate !== null &&
+      item?.gst_rate !== undefined &&
+      item?.gst_rate !== "" &&
+      Number.isFinite(Number(item.gst_rate));
+
+    setSelectedHsnDetails(item);
+    setHsnSelected(true);
+    setHsnSuggestions([]);
+
+    setProductForm((prev) => {
+      const shouldFillGst =
+        hasGstRate &&
+        !prev.tax_id &&
+        (prev.tax_rate === "" || autoFilledGstRef.current);
+
+      const clearOldAutoGst =
+        autoFilledGstRef.current && !prev.tax_id && !shouldFillGst;
+
+      autoFilledGstRef.current = Boolean(shouldFillGst);
+
+      return {
+        ...prev,
+        hsn_sac_code: code,
+        ...(shouldFillGst
+          ? { tax_rate: String(Number(item.gst_rate)) }
+          : clearOldAutoGst
+            ? { tax_rate: "" }
+            : {}),
+      };
+    });
+
+    setProductErrors((prev) => ({
+      ...prev,
+      hsn_sac_code: "",
+      tax_rate: "",
+    }));
+  };
+
+  const hasMappedGst = Boolean(
+    selectedHsnDetails &&
+    selectedHsnDetails.gst_rate !== null &&
+    selectedHsnDetails.gst_rate !== undefined &&
+    selectedHsnDetails.gst_rate !== "" &&
+    Number.isFinite(Number(selectedHsnDetails.gst_rate)),
+  );
+
+  const selectedTaxOption = productForm.tax_id
+    ? String(productForm.tax_id)
+    : hasMappedGst && autoFilledGstRef.current
+      ? "__hsn_mapped__"
+      : "";
+
+  const getSelectedTax = (taxId) =>
+    taxes.find((tax) => Number(tax.id) === Number(taxId));
+
+  const handleTaxRuleSelection = (value) => {
+    if (value === "__add_tax__") {
+      if (!canManageTaxes) {
+        toast.error("Tax permission required");
+        return;
+      }
+
+      setTaxErrors({});
+      setShowTaxModal(true);
+      return;
+    }
+
+    if (value === "__hsn_mapped__") {
+      if (!hasMappedGst) return;
+
+      autoFilledGstRef.current = true;
+
+      setProductForm((prev) => ({
+        ...prev,
+        tax_id: "",
+        tax_rate: String(Number(selectedHsnDetails.gst_rate)),
+      }));
+
+      setProductErrors((prev) => ({
+        ...prev,
+        tax_id: "",
+        tax_rate: "",
+      }));
+
+      return;
+    }
+
+    if (value === "") {
+      autoFilledGstRef.current = false;
+
+      setProductForm((prev) => ({
+        ...prev,
+        tax_id: "",
+        tax_rate: "",
+      }));
+
+      return;
+    }
+
+    const selectedTax = getSelectedTax(value);
+
+    autoFilledGstRef.current = false;
+
+    setProductForm((prev) => ({
+      ...prev,
+      tax_id: value,
+      tax_rate: selectedTax?.tax_percentage ?? "",
+    }));
+
+    setProductErrors((prev) => ({
+      ...prev,
+      tax_id: "",
+      tax_rate: "",
+    }));
+  };
+
+  const resetProductHsnState = () => {
+    setHsnSuggestions([]);
+    setHsnLoading(false);
+    setHsnError("");
+    setHsnSearched(false);
+    setHsnSelected(false);
+    setSelectedHsnDetails(null);
+    autoFilledGstRef.current = false;
+  };
+
   const handleProductFormChange = (e) => {
     const { name, value } = e.target;
+
+    if (name === "tax_id") {
+      handleTaxRuleSelection(value);
+      return;
+    }
+
+    if (name === "product_name" && value !== productForm.product_name) {
+      const clearAutoFilledGst =
+        autoFilledGstRef.current && !productForm.tax_id;
+
+      resetProductHsnState();
+
+      setProductForm((prev) => ({
+        ...prev,
+        product_name: value,
+        hsn_sac_code: "",
+        ...(clearAutoFilledGst ? { tax_rate: "" } : {}),
+      }));
+
+      clearProductError("product_name");
+      return;
+    }
 
     const nextValue =
       name === "sku" || name === "hsn_sac_code" ? normalizeUpper(value) : value;
 
-    setProductForm((prev) => ({ ...prev, [name]: nextValue }));
+    if (name === "tax_rate") {
+      autoFilledGstRef.current = false;
+    }
+
+    setProductForm((prev) => ({
+      ...prev,
+      [name]: nextValue,
+    }));
+
+    clearProductError(name);
+  };
+
+  const handleTaxChange = (event) => {
+    const { name, value, type, checked } = event.target;
+
+    const nextValue =
+      name === "hsn_sac_code"
+        ? normalizeUpper(value)
+        : type === "checkbox"
+          ? checked
+          : value;
+
+    setTaxForm((prev) => ({
+      ...prev,
+      [name]: nextValue,
+    }));
+
+    if (taxErrors[name]) {
+      setTaxErrors((prev) => ({
+        ...prev,
+        [name]: "",
+      }));
+    }
+  };
+
+  const resetTaxForm = () => {
+    setTaxForm(initialTaxForm);
+    setTaxErrors({});
+  };
+
+  const validateTaxForm = () => {
+    const nextErrors = {};
+
+    const taxName = cleanString(taxForm.tax_name);
+    const taxType = cleanString(taxForm.tax_type);
+    const hsnSacCode = normalizeUpper(taxForm.hsn_sac_code);
+    const taxPercentage = toNumber(taxForm.tax_percentage, NaN);
+    const description = cleanString(taxForm.description);
+
+    if (!taxName) {
+      nextErrors.tax_name = "Tax name is required";
+    } else if (taxName.length < 2 || taxName.length > 100) {
+      nextErrors.tax_name = "Tax name must be between 2 and 100 characters";
+    }
+
+    if (
+      !["GST", "CGST_SGST", "IGST", "TDS", "TCS", "OTHER"].includes(taxType)
+    ) {
+      nextErrors.tax_type = "Valid tax type is required";
+    }
+
+    if (Number.isNaN(taxPercentage)) {
+      nextErrors.tax_percentage = "Tax percentage must be a valid number";
+    } else if (taxPercentage < 0 || taxPercentage > 100) {
+      nextErrors.tax_percentage = "Tax percentage must be between 0 and 100";
+    }
+
+    if (hsnSacCode && !HSN_SAC_REGEX.test(hsnSacCode)) {
+      nextErrors.hsn_sac_code = "HSN/SAC code must be 4 to 8 digits";
+    }
+
+    if (description.length > 500) {
+      nextErrors.description = "Description must be less than 500 characters";
+    }
+
+    setTaxErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const getTaxSplitPayload = () => {
+    const taxType = cleanString(taxForm.tax_type) || "GST";
+    const taxPercentage = Number(taxForm.tax_percentage || 0);
+
+    if (taxType === "GST" || taxType === "CGST_SGST") {
+      return {
+        cgst_percentage: taxPercentage / 2,
+        sgst_percentage: taxPercentage / 2,
+        igst_percentage: 0,
+        tds_percentage: 0,
+        tcs_percentage: 0,
+      };
+    }
+
+    if (taxType === "IGST") {
+      return {
+        cgst_percentage: 0,
+        sgst_percentage: 0,
+        igst_percentage: taxPercentage,
+        tds_percentage: 0,
+        tcs_percentage: 0,
+      };
+    }
+
+    if (taxType === "TDS") {
+      return {
+        cgst_percentage: 0,
+        sgst_percentage: 0,
+        igst_percentage: 0,
+        tds_percentage: taxPercentage,
+        tcs_percentage: 0,
+      };
+    }
+
+    if (taxType === "TCS") {
+      return {
+        cgst_percentage: 0,
+        sgst_percentage: 0,
+        igst_percentage: 0,
+        tds_percentage: 0,
+        tcs_percentage: taxPercentage,
+      };
+    }
+
+    return {
+      cgst_percentage: 0,
+      sgst_percentage: 0,
+      igst_percentage: 0,
+      tds_percentage: 0,
+      tcs_percentage: 0,
+    };
+  };
+
+  const handleCreateTax = async () => {
+    if (!canManageTaxes) {
+      toast.error("Tax permission required");
+      return;
+    }
+
+    if (taxLoading || !validateTaxForm()) return;
+
+    try {
+      setTaxLoading(true);
+
+      const payload = {
+        tax_name: cleanString(taxForm.tax_name),
+        tax_type: cleanString(taxForm.tax_type) || "GST",
+        hsn_sac_code: normalizeUpper(taxForm.hsn_sac_code),
+        tax_percentage: Number(taxForm.tax_percentage || 0),
+        ...getTaxSplitPayload(),
+        reverse_charge: Boolean(taxForm.reverse_charge),
+        is_active: Boolean(taxForm.is_active),
+        description: cleanString(taxForm.description),
+      };
+
+      const response = await api.post("/taxes", payload);
+      const createdTax = response.data?.tax || response.data;
+
+      const taxEndpoint =
+        user?.role === "sales_user" ? "/taxes/dropdown" : "/taxes";
+
+      const taxResponse = await api.get(taxEndpoint, {
+        params: {
+          status: "active",
+          limit: 1000,
+        },
+      });
+
+      const taxList = Array.isArray(taxResponse.data)
+        ? taxResponse.data
+        : taxResponse.data?.taxes || [];
+
+      const updatedTaxes = taxList.filter(
+        (tax) =>
+          tax.is_active === true ||
+          Number(tax.is_active) === 1 ||
+          tax.status === "active",
+      );
+
+      setTaxes(updatedTaxes);
+
+      const selectedTaxId =
+        createdTax?.id ||
+        createdTax?.tax_id ||
+        updatedTaxes.find(
+          (tax) =>
+            tax.tax_name?.toLowerCase() === payload.tax_name.toLowerCase(),
+        )?.id;
+
+      const selectedTax =
+        updatedTaxes.find((tax) => String(tax.id) === String(selectedTaxId)) ||
+        createdTax;
+
+      if (selectedTaxId) {
+        autoFilledGstRef.current = false;
+
+        setProductForm((prev) => ({
+          ...prev,
+          tax_id: String(selectedTaxId),
+          tax_rate: selectedTax?.tax_percentage ?? payload.tax_percentage,
+        }));
+      }
+
+      resetTaxForm();
+      setShowTaxModal(false);
+      toast.success("Tax rule added successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Tax create failed");
+    } finally {
+      setTaxLoading(false);
+    }
+  };
+
+  const resetProductVariantState = () => {
+    setVariantMode(false);
+    setAttributes([makeAttribute()]);
+    setNewProductVariants([]);
+    setVariantMessage("");
+    setPendingProductId(null);
+    setProductSaving(false);
+  };
+
+  const generateProductVariants = () => {
+    setVariantMessage("");
+
+    if (!attributes.length || attributes.length > 10) {
+      setVariantMessage("Add 1–10 attributes.");
+      return;
+    }
+
+    const parsedAttributes = [];
+    const attributeNames = new Set();
+
+    for (const attribute of attributes) {
+      const name = cleanString(attribute.name);
+
+      const values = [
+        ...new Set(
+          String(attribute.values)
+            .split(",")
+            .map((value) => cleanString(value))
+            .filter(Boolean),
+        ),
+      ];
+
+      if (
+        !name ||
+        name.length > 50 ||
+        !values.length ||
+        values.some((value) => value.length > 100)
+      ) {
+        setVariantMessage(
+          "Enter each attribute name and comma-separated values.",
+        );
+        return;
+      }
+
+      if (attributeNames.has(name.toLowerCase())) {
+        setVariantMessage("Attribute names must be unique.");
+        return;
+      }
+
+      attributeNames.add(name.toLowerCase());
+
+      parsedAttributes.push({
+        name,
+        values,
+      });
+    }
+
+    let combinations = [{}];
+
+    for (const attribute of parsedAttributes) {
+      combinations = combinations.flatMap((entry) =>
+        attribute.values.map((value) => ({
+          ...entry,
+          [attribute.name]: value,
+        })),
+      );
+
+      if (combinations.length > 60) {
+        setVariantMessage("Maximum 60 combinations per product.");
+        return;
+      }
+    }
+
+    const existingVariants = new Map(
+      newProductVariants.map((variant) => [
+        canonicalAttributes(variant.attributes),
+        variant,
+      ]),
+    );
+
+    setNewProductVariants(
+      combinations.map(
+        (combination) =>
+          existingVariants.get(canonicalAttributes(combination)) ||
+          makeVariant(combination),
+      ),
+    );
+  };
+
+  const validateProductVariants = () => {
+    if (!variantMode) return true;
+
+    if (!newProductVariants.length) {
+      setVariantMessage("Generate at least one variant.");
+      return false;
+    }
+
+    const usedSkus = new Set();
+
+    for (const variant of newProductVariants) {
+      const sku = normalizeUpper(variant.sku);
+      const price = Number(variant.unit_price);
+      const quantity = Number(variant.quantity);
+
+      if (!SKU_REGEX.test(sku)) {
+        setVariantMessage(
+          "Each variant needs a unique valid SKU (2–50 characters).",
+        );
+        return false;
+      }
+
+      if (usedSkus.has(sku) || sku === normalizeUpper(productForm.sku)) {
+        setVariantMessage("Duplicate SKU found in variants or parent product.");
+        return false;
+      }
+
+      if (
+        !Number.isFinite(price) ||
+        price <= 0 ||
+        price > 99999999.99 ||
+        !/^\d+(\.\d{1,2})?$/.test(String(variant.unit_price))
+      ) {
+        setVariantMessage(
+          `Invalid price for ${sku}. Use a positive amount with up to 2 decimals.`,
+        );
+        return false;
+      }
+
+      if (
+        !Number.isSafeInteger(quantity) ||
+        quantity < 0 ||
+        String(variant.quantity).trim() === ""
+      ) {
+        setVariantMessage(`Invalid stock for ${sku}.`);
+        return false;
+      }
+
+      usedSkus.add(sku);
+    }
+
+    setVariantMessage("");
+    return true;
   };
 
   const resetBranchForm = () => setBranchForm(initialBranchForm);
@@ -473,12 +1142,22 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
       ...initialProductForm,
       branch_id: formData.branch_id || "",
     });
+
+    setProductErrors({});
     setProductImageFile(null);
     setProductItemIndex(null);
+
+    resetProductHsnState();
+    resetProductVariantState();
 
     if (productImageInputRef.current) {
       productImageInputRef.current.value = "";
     }
+  };
+
+  const closeProductModal = () => {
+    resetProductForm();
+    setShowProductModal(false);
   };
 
   const resetForm = () => {
@@ -845,10 +1524,12 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
   };
 
   const validateProductForm = () => {
+    const nextErrors = {};
+
     const productName = cleanString(productForm.product_name);
     const sku = normalizeUpper(productForm.sku);
     const hsnSac = normalizeUpper(productForm.hsn_sac_code);
-    const unitPrice = toNumber(productForm.unit_price, NaN);
+    const unitPrice = toNumber(productForm.unit_price, variantMode ? 0 : NaN);
     const taxRate = toNumber(productForm.tax_rate, 0);
     const quantity = toNumber(productForm.quantity, 0);
     const unitType = cleanString(productForm.unit_type).toLowerCase();
@@ -856,116 +1537,196 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
     const description = cleanString(productForm.description);
 
     if (!productForm.branch_id && !formData.branch_id) {
-      toast.error("Please select branch");
-      return false;
+      nextErrors.branch_id = "Please select branch";
     }
 
     if (!productName) {
-      toast.error("Product name is required");
-      return false;
-    }
-
-    if (productName.length < 2 || productName.length > 120) {
-      toast.error("Product name must be between 2 and 120 characters");
-      return false;
-    }
-
-    if (!PRODUCT_NAME_REGEX.test(productName)) {
-      toast.error("Product name contains invalid characters");
-      return false;
+      nextErrors.product_name = "Product name is required";
+    } else if (productName.length < 2 || productName.length > 120) {
+      nextErrors.product_name =
+        "Product name must be between 2 and 120 characters";
+    } else if (!PRODUCT_NAME_REGEX.test(productName)) {
+      nextErrors.product_name = "Product name contains invalid characters";
     }
 
     if (sku && !SKU_REGEX.test(sku)) {
-      toast.error(
-        "SKU must be 2-50 characters and can contain letters, numbers, underscore or hyphen",
-      );
-      return false;
+      nextErrors.sku =
+        "SKU must be 2-50 characters and can contain letters, numbers, underscore or hyphen";
     }
 
     if (hsnSac && !HSN_SAC_REGEX.test(hsnSac)) {
-      toast.error("HSN/SAC code must be 4 to 8 digits");
-      return false;
+      nextErrors.hsn_sac_code = "HSN/SAC code must be 4 to 8 digits";
     }
 
     if (Number.isNaN(unitPrice)) {
-      toast.error("Valid unit price is required");
-      return false;
-    }
-
-    if (unitPrice <= 0) {
-      toast.error("Unit price must be greater than 0");
-      return false;
+      nextErrors.unit_price = "Valid unit price is required";
+    } else if (!variantMode && unitPrice <= 0) {
+      nextErrors.unit_price = "Unit price must be greater than 0";
     }
 
     if (Number.isNaN(taxRate) || taxRate < 0 || taxRate > 100) {
-      toast.error("GST must be between 0 and 100");
-      return false;
+      nextErrors.tax_rate = "GST must be between 0 and 100";
     }
 
     if (Number.isNaN(quantity) || quantity < 0) {
-      toast.error("Quantity cannot be negative");
-      return false;
-    }
-
-    if (quantity && !Number.isInteger(quantity)) {
-      toast.error("Quantity must be a whole number");
-      return false;
+      nextErrors.quantity = "Quantity cannot be negative";
+    } else if (!Number.isInteger(quantity)) {
+      nextErrors.quantity = "Quantity must be a whole number";
     }
 
     if (!ALLOWED_UNIT_TYPES.includes(unitType)) {
-      toast.error(`Unit type must be one of: ${ALLOWED_UNIT_TYPES.join(", ")}`);
+      nextErrors.unit_type = `Unit type must be one of: ${ALLOWED_UNIT_TYPES.join(
+        ", ",
+      )}`;
+    }
+
+    if (category.length > 80) {
+      nextErrors.category = "Category must be less than 80 characters";
+    }
+
+    if (description.length > 500) {
+      nextErrors.description = "Description must be less than 500 characters";
+    }
+
+    if (productImageFile) {
+      const allowedTypes = [
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/webp",
+      ];
+
+      if (!allowedTypes.includes(productImageFile.type)) {
+        nextErrors.image = "Only JPG, PNG or WEBP product images are allowed";
+      } else if (productImageFile.size > 2 * 1024 * 1024) {
+        nextErrors.image = "Product image size must be less than 2MB";
+      }
+    }
+
+    if (variantMode && productForm.status !== "active") {
+      setVariantMessage("Create variants for an active product first.");
       return false;
     }
 
-    if (category && category.length > 80) {
-      toast.error("Category must be less than 80 characters");
-      return false;
-    }
+    setProductErrors(nextErrors);
 
-    if (description && description.length > 500) {
-      toast.error("Description must be less than 500 characters");
-      return false;
-    }
-
-    return validateProductImage();
+    return Object.keys(nextErrors).length === 0 && validateProductVariants();
   };
 
-  const handleCreateProduct = async () => {
+  const handleCreateProduct = async (event) => {
+    event?.preventDefault();
+
     if (!canAddProduct) {
       toast.error("Product permission required");
       return;
     }
 
-    if (!validateProductForm()) return;
+    if (productSaving || !validateProductForm()) return;
+
+    let savedProductId = pendingProductId;
+    let parentProductSaved = Boolean(pendingProductId);
+
+    let syncedVariants = newProductVariants.filter(
+      (variant) => variant.id,
+    ).length;
 
     try {
       const payload = {
         branch_id: productForm.branch_id || formData.branch_id || null,
+
         product_name: cleanString(productForm.product_name),
         sku: normalizeUpper(productForm.sku),
         hsn_sac_code: normalizeUpper(productForm.hsn_sac_code),
         description: cleanString(productForm.description),
-        unit_price: Number(productForm.unit_price || 0),
+
+        unit_price: variantMode
+          ? Math.min(
+              ...newProductVariants.map((variant) =>
+                Number(variant.unit_price),
+              ),
+            )
+          : Number(productForm.unit_price || 0),
+
+        tax_id: productForm.tax_id || "",
         tax_rate: Number(productForm.tax_rate || 0),
-        quantity:
-          productForm.quantity === "" ? 0 : Number(productForm.quantity),
+
+        quantity: variantMode
+          ? 0
+          : productForm.quantity === ""
+            ? 0
+            : Number(productForm.quantity),
+
         unit_type: cleanString(productForm.unit_type).toLowerCase() || "pcs",
+
         category: cleanString(productForm.category),
         status: cleanString(productForm.status).toLowerCase() || "active",
       };
 
-      const res = await api.post("/products", payload);
-      const createdProductId =
-        res.data?.product_id || res.data?.id || res.data?.product?.id;
+      setProductSaving(true);
 
-      await uploadProductImage(createdProductId);
+      let createdProduct = null;
 
-      const productRes = await api.get("/products");
+      if (!savedProductId) {
+        const response = await api.post("/products", payload);
+
+        savedProductId =
+          response.data?.product_id ||
+          response.data?.id ||
+          response.data?.product?.id;
+
+        if (!savedProductId) {
+          throw new Error("Product created but ID missing from API response");
+        }
+
+        createdProduct = response.data?.product || response.data;
+        parentProductSaved = true;
+        setPendingProductId(savedProductId);
+      }
+
+      if (variantMode) {
+        for (let index = 0; index < newProductVariants.length; index += 1) {
+          const variant = newProductVariants[index];
+
+          if (variant.id) continue;
+
+          const { data } = await api.post(
+            `/products/${savedProductId}/variants`,
+            {
+              sku: normalizeUpper(variant.sku),
+              attributes: variant.attributes,
+              unit_price: Number(variant.unit_price),
+              quantity: Number(variant.quantity),
+              status: variant.status,
+            },
+          );
+
+          const createdVariantId =
+            data?.variant_id || data?.id || data?.variant?.id;
+
+          newProductVariants[index] = {
+            ...variant,
+            id: createdVariantId,
+          };
+
+          syncedVariants += 1;
+          setNewProductVariants([...newProductVariants]);
+        }
+      }
+
+      await uploadProductImage(savedProductId);
+
+      const productRes = await api
+        .get("/products/dropdown")
+        .catch(() => api.get("/products"));
+
       const updatedProducts = getList(productRes.data, "products");
+
       setProducts(updatedProducts);
 
       const selectedProductId =
-        createdProductId ||
+        savedProductId ||
+        createdProduct?.id ||
+        createdProduct?.product_id ||
         updatedProducts.find(
           (product) =>
             product.product_name?.toLowerCase() ===
@@ -977,38 +1738,109 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
       );
 
       if (selectedProduct && productItemIndex !== null) {
-        const updatedItems = [...formData.items];
+        setFormData((prev) => {
+          const updatedItems = [...prev.items];
 
-        updatedItems[productItemIndex] = {
-          ...updatedItems[productItemIndex],
-          product_id: selectedProduct.id,
-          product_name: selectedProduct.product_name || "",
-          description: selectedProduct.description || "",
-          hsn_sac_code: selectedProduct.hsn_sac_code || "",
-          price: selectedProduct.unit_price || 0,
-          tax_rate: selectedProduct.tax_rate || 0,
-          cgst_percentage: selectedProduct.cgst_percentage || 0,
-          sgst_percentage: selectedProduct.sgst_percentage || 0,
-          igst_percentage: selectedProduct.igst_percentage || 0,
-        };
+          updatedItems[productItemIndex] = {
+            ...updatedItems[productItemIndex],
+            product_id: selectedProduct.id,
+            variant_id: null,
+            product_name:
+              selectedProduct.product_name || selectedProduct.name || "",
+            description: selectedProduct.description || "",
+            hsn_sac_code: selectedProduct.hsn_sac_code || "",
+            price:
+              selectedProduct.unit_price ||
+              selectedProduct.price ||
+              selectedProduct.selling_price ||
+              0,
+            tax_rate: selectedProduct.tax_rate || 0,
+            cgst_percentage: selectedProduct.cgst_percentage || 0,
+            sgst_percentage: selectedProduct.sgst_percentage || 0,
+            igst_percentage: selectedProduct.igst_percentage || 0,
+          };
 
-        setFormData((prev) => ({
-          ...prev,
-          items: updatedItems,
-        }));
+          return {
+            ...prev,
+            items: updatedItems,
+          };
+        });
+
+        const { data: productDetails } = await api.get(
+          `/products/${selectedProduct.id}`,
+        );
+
+        const savedVariants = Array.isArray(productDetails?.variants)
+          ? productDetails.variants
+          : Array.isArray(productDetails?.product?.variants)
+            ? productDetails.product.variants
+            : [];
+
         setVariantLookup((prev) => ({
           ...prev,
-          [String(selectedProduct.id)]: { state: "ready", variants: [] },
+          [String(selectedProduct.id)]: {
+            state: "ready",
+            variants: savedVariants,
+          },
         }));
       }
 
       resetProductForm();
       setShowProductModal(false);
+
       toast.success("Product added successfully");
     } catch (error) {
-      toast.error(error.response?.data?.message || "Product create failed");
+      if (parentProductSaved) {
+        toast.error(
+          `Product saved, but variant sync stopped after ${syncedVariants} item(s). ${
+            error.response?.data?.message || error.message || "Please retry."
+          }`,
+          { duration: 8000 },
+        );
+
+        setVariantMessage(
+          "Partial save: keep this modal open and retry. Saved variants will not be created again.",
+        );
+      } else {
+        toast.error(
+          error.response?.data?.message ||
+            error.message ||
+            "Product create failed",
+        );
+      }
+    } finally {
+      setProductSaving(false);
     }
   };
+
+  const variantBasePrice = newProductVariants.length
+    ? Math.min(
+        ...newProductVariants.map((variant) => Number(variant.unit_price) || 0),
+      )
+    : 0;
+
+  const variantStock = newProductVariants.reduce(
+    (total, variant) =>
+      total + (variant.status === "active" ? Number(variant.quantity) || 0 : 0),
+    0,
+  );
+
+  const productTaxableValue = variantMode
+    ? newProductVariants.reduce(
+        (total, variant) =>
+          total +
+          (variant.status === "active"
+            ? (Number(variant.unit_price) || 0) *
+              (Number(variant.quantity) || 0)
+            : 0),
+        0,
+      )
+    : Number(productForm.unit_price || 0) * Number(productForm.quantity || 0);
+
+  const productTaxAmount =
+    (productTaxableValue * Number(productForm.tax_rate || 0)) / 100;
+
+  const productFinalValue = productTaxableValue + productTaxAmount;
 
   const addItem = () => {
     setFormData((prev) => ({
@@ -1079,11 +1911,16 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
         toast.error("Product permission required");
         return;
       }
+
+      resetProductForm();
+
       setProductItemIndex(index);
+
       setProductForm({
         ...initialProductForm,
         branch_id: formData.branch_id || "",
       });
+
       setShowProductModal(true);
       return;
     }
@@ -1885,23 +2722,136 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
 
       {showProductModal && (
         <Modal
-          title="Add New Product"
-          description="Add product with image without leaving invoice page."
-          icon={<Package size={21} />}
-          onClose={() => {
-            resetProductForm();
-            setShowProductModal(false);
-          }}
+          title="Add Product"
+          description="Fill product details, image, GST mapping and stock information."
+          icon={<Package size={22} />}
+          onClose={closeProductModal}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <Input
-              icon={<Package size={16} />}
-              label="Product Name"
-              name="product_name"
-              value={productForm.product_name}
-              onChange={handleProductFormChange}
-              required
-            />
+          <div className="mb-5 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950">
+            <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+              Product Type
+            </span>
+
+            <div
+              role="radiogroup"
+              aria-label="Product Type"
+              className="flex flex-wrap gap-x-6 gap-y-2"
+            >
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <input
+                  type="radio"
+                  name="product_type"
+                  checked={!variantMode}
+                  disabled={productSaving}
+                  onChange={() => {
+                    if (newProductVariants.some((variant) => variant.id)) {
+                      setVariantMessage(
+                        "Saved variants exist. Product type cannot be changed.",
+                      );
+                      return;
+                    }
+
+                    setVariantMode(false);
+                    setVariantMessage("");
+                  }}
+                  className="h-4 w-4 accent-blue-600"
+                />
+                Single Product
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <input
+                  type="radio"
+                  name="product_type"
+                  checked={variantMode}
+                  disabled={productSaving}
+                  onChange={() => {
+                    setVariantMode(true);
+                    setVariantMessage("");
+                  }}
+                  className="h-4 w-4 accent-blue-600"
+                />
+                Add Variants Products
+              </label>
+            </div>
+          </div>
+
+          <Section title="Basic Product Details">
+            <div className="relative min-w-0">
+              <Input
+                icon={<Package size={16} />}
+                label="Product Name"
+                name="product_name"
+                value={productForm.product_name}
+                onChange={handleProductFormChange}
+                error={productErrors.product_name}
+                required
+              />
+
+              {!hsnSelected && productForm.product_name.trim().length >= 3 && (
+                <div className="mt-1.5">
+                  {hsnLoading && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      Finding matching HSN/SAC codes...
+                    </p>
+                  )}
+
+                  {hsnError && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      {hsnError}
+                    </p>
+                  )}
+
+                  {hsnSuggestions.length > 0 && (
+                    <div className="relative z-30 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      <p className="sticky top-0 border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        Suggested HSN/SAC — select correct classification
+                      </p>
+
+                      {hsnSuggestions.map((item) => {
+                        const validCode = /^\d{4,8}$/.test(String(item.code));
+
+                        return (
+                          <button
+                            key={
+                              item.id ??
+                              `${item.type}-${item.code}-${item.description}`
+                            }
+                            type="button"
+                            disabled={!validCode}
+                            onClick={() => selectProductHsn(item)}
+                            className="flex w-full items-start gap-2 border-b border-slate-100 px-3 py-2 text-left text-xs hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
+                          >
+                            <span className="shrink-0 font-semibold text-blue-700 dark:text-blue-300">
+                              {item.type} {item.code}
+                            </span>
+
+                            <span>
+                              {item.description}
+
+                              <span className="ml-2 whitespace-nowrap font-medium text-emerald-700 dark:text-emerald-300">
+                                {item.gst_rate == null || item.gst_rate === ""
+                                  ? "GST not mapped"
+                                  : `GST ${Number(item.gst_rate)}%`}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {hsnSearched &&
+                    !hsnLoading &&
+                    !hsnError &&
+                    hsnSuggestions.length === 0 && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        No HSN matches. Search HSN/SAC manually below.
+                      </p>
+                    )}
+                </div>
+              )}
+            </div>
 
             <Input
               icon={<Barcode size={16} />}
@@ -1909,81 +2859,14 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
               name="sku"
               value={productForm.sku}
               onChange={handleProductFormChange}
+              error={productErrors.sku}
             />
 
-            <Input
-              icon={<FileText size={16} />}
-              label="HSN/SAC Code"
-              name="hsn_sac_code"
-              value={productForm.hsn_sac_code}
-              onChange={handleProductFormChange}
-            />
-
-            <Input
-              icon={<IndianRupee size={16} />}
-              label="Unit Price"
-              name="unit_price"
-              type="number"
-              value={productForm.unit_price}
-              onChange={handleProductFormChange}
-              required
-            />
-
-            <Input
-              icon={<Percent size={16} />}
-              label="GST %"
-              name="tax_rate"
-              type="number"
-              value={productForm.tax_rate}
-              onChange={handleProductFormChange}
-            />
-
-            <Input
-              icon={<Boxes size={16} />}
-              label="Quantity"
-              name="quantity"
-              type="number"
-              value={productForm.quantity}
-              onChange={handleProductFormChange}
-            />
-
-            <Field icon={<Tag size={16} />} label="Unit Type">
-              <CustomDropdown
-                value={productForm.unit_type}
-                onChange={(value) =>
-                  handleProductFormChange({
-                    target: {
-                      name: "unit_type",
-                      value,
-                    },
-                  })
-                }
-                icon={<Tag size={16} />}
-                options={[
-                  { value: "pcs", label: "Pcs" },
-                  { value: "kg", label: "Kg" },
-                  { value: "g", label: "G" },
-                  { value: "ltr", label: "Ltr" },
-                  { value: "ml", label: "Ml" },
-                  { value: "box", label: "Box" },
-                  { value: "pack", label: "Pack" },
-                  { value: "meter", label: "Meter" },
-                  { value: "hour", label: "Hour" },
-                  { value: "day", label: "Day" },
-                  { value: "service", label: "Service" },
-                ]}
-              />
-            </Field>
-
-            <Input
-              icon={<Tag size={16} />}
-              label="Category"
-              name="category"
-              value={productForm.category}
-              onChange={handleProductFormChange}
-            />
-
-            <Field icon={<Building2 size={16} />} label="Branch">
+            <Field
+              icon={<Building2 size={16} />}
+              label="Branch"
+              error={productErrors.branch_id}
+            >
               <BranchSelect
                 branches={activeBranches}
                 value={productForm.branch_id}
@@ -1996,21 +2879,583 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                   }
 
                   handleProductFormChange({
-                    target: { name: "branch_id", value },
+                    target: {
+                      name: "branch_id",
+                      value,
+                    },
                   });
                 }}
               />
             </Field>
 
-            <Field icon={<CheckCircle2 size={16} />} label="Status">
+            <Input
+              icon={<Tag size={16} />}
+              label="Category"
+              name="category"
+              value={productForm.category}
+              onChange={handleProductFormChange}
+              error={productErrors.category}
+            />
+
+            <Field
+              icon={<CheckCircle2 size={16} />}
+              label="Status"
+              error={productErrors.status}
+            >
               <CustomDropdown
                 value={productForm.status}
                 onChange={(value) =>
                   handleProductFormChange({
-                    target: { name: "status", value },
+                    target: {
+                      name: "status",
+                      value,
+                    },
                   })
                 }
-                icon={<CheckCircle2 size={16} />}
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+              />
+            </Field>
+          </Section>
+
+          {variantMode && (
+            <div className="mt-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Product Variants
+                </h3>
+
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Add attributes such as Size or Color and generate
+                  combinations.
+                </p>
+              </div>
+
+              {attributes.map((attribute, attributeIndex) => (
+                <div
+                  key={attributeIndex}
+                  className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto]"
+                >
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Attribute (Size, Color...)"
+                    value={attribute.name}
+                    onChange={(event) =>
+                      setAttributes((prev) =>
+                        prev.map((item, index) =>
+                          index === attributeIndex
+                            ? {
+                                ...item,
+                                name: event.target.value,
+                              }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Values, comma separated: S, M, L"
+                    value={attribute.values}
+                    onChange={(event) =>
+                      setAttributes((prev) =>
+                        prev.map((item, index) =>
+                          index === attributeIndex
+                            ? {
+                                ...item,
+                                values: event.target.value,
+                              }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+
+                  <button
+                    type="button"
+                    disabled={attributes.length === 1}
+                    onClick={() =>
+                      setAttributes((prev) =>
+                        prev.filter((_, index) => index !== attributeIndex),
+                      )
+                    }
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={attributes.length >= 10}
+                  onClick={() =>
+                    setAttributes((prev) => [...prev, makeAttribute()])
+                  }
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  + Attribute
+                </button>
+
+                <button
+                  type="button"
+                  onClick={generateProductVariants}
+                  className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                >
+                  Generate Combinations
+                </button>
+              </div>
+
+              {variantMessage && (
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                  {variantMessage}
+                </p>
+              )}
+
+              {newProductVariants.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[680px] text-sm">
+                    <thead className="border-b border-slate-200 dark:border-slate-700 dark:text-white">
+                      <tr>
+                        <th className="p-2 text-left">Combination</th>
+                        <th className="p-2 text-left">SKU</th>
+                        <th className="p-2 text-left">Price</th>
+                        <th className="p-2 text-left">Stock</th>
+                        <th className="p-2 text-left">Status</th>
+                        <th className="p-2 text-center">Remove</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {newProductVariants.map((variant, variantIndex) => (
+                        <tr
+                          key={
+                            variant.id ||
+                            canonicalAttributes(variant.attributes)
+                          }
+                          className="border-b border-slate-200 dark:border-slate-700"
+                        >
+                          <td className="p-2 text-xs text-slate-700 dark:text-slate-200">
+                            {Object.entries(variant.attributes)
+                              .map(([key, value]) => `${key}: ${value}`)
+                              .join(" / ")}
+                          </td>
+
+                          <td className="p-1">
+                            <input
+                              type="text"
+                              className="input"
+                              value={variant.sku}
+                              onChange={(event) =>
+                                setNewProductVariants((prev) =>
+                                  prev.map((item, index) =>
+                                    index === variantIndex
+                                      ? {
+                                          ...item,
+                                          sku: event.target.value,
+                                        }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />
+                          </td>
+
+                          <td className="p-1">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              className="input"
+                              value={variant.unit_price}
+                              onChange={(event) =>
+                                setNewProductVariants((prev) =>
+                                  prev.map((item, index) =>
+                                    index === variantIndex
+                                      ? {
+                                          ...item,
+                                          unit_price: event.target.value,
+                                        }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />
+                          </td>
+
+                          <td className="p-1">
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              className="input"
+                              value={variant.quantity}
+                              onChange={(event) =>
+                                setNewProductVariants((prev) =>
+                                  prev.map((item, index) =>
+                                    index === variantIndex
+                                      ? {
+                                          ...item,
+                                          quantity: event.target.value,
+                                        }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />
+                          </td>
+
+                          <td className="p-1">
+                            <select
+                              className="input"
+                              value={variant.status}
+                              onChange={(event) =>
+                                setNewProductVariants((prev) =>
+                                  prev.map((item, index) =>
+                                    index === variantIndex
+                                      ? {
+                                          ...item,
+                                          status: event.target.value,
+                                        }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            >
+                              <option value="active">Active</option>
+                              <option value="inactive">Inactive</option>
+                            </select>
+                          </td>
+
+                          <td className="p-1 text-center">
+                            <button
+                              type="button"
+                              disabled={Boolean(variant.id)}
+                              onClick={() =>
+                                setNewProductVariants((prev) =>
+                                  prev.filter(
+                                    (_, index) => index !== variantIndex,
+                                  ),
+                                )
+                              }
+                              className="text-lg font-bold text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
+                            >
+                              ×
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-5">
+            <Section title="Pricing & Tax Details">
+              <Field
+                icon={<Percent size={16} />}
+                label="GST / Tax Rule"
+                error={productErrors.tax_id}
+              >
+                <CustomDropdown
+                  value={selectedTaxOption}
+                  onChange={handleTaxRuleSelection}
+                  icon={<Percent size={16} />}
+                  options={[
+                    {
+                      value: "",
+                      label: "Select Tax Rule",
+                    },
+
+                    ...(hasMappedGst
+                      ? [
+                          {
+                            value: "__hsn_mapped__",
+                            label: `HSN Mapped GST — ${Number(
+                              selectedHsnDetails.gst_rate,
+                            )}%`,
+                          },
+                        ]
+                      : []),
+
+                    ...taxes.map((tax) => ({
+                      value: String(tax.id),
+                      label: `${tax.tax_name} - ${tax.tax_percentage}%`,
+                    })),
+
+                    ...(canManageTaxes
+                      ? [
+                          {
+                            value: "__add_tax__",
+                            label: "+ Add New Tax Rule",
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </Field>
+
+              <ProductHsnSacPicker
+                value={productForm.hsn_sac_code}
+                onChange={selectProductHsn}
+                error={productErrors.hsn_sac_code}
+                suggestions={hsnSuggestions}
+                suggestionLoading={hsnLoading}
+                suggestionError={hsnError}
+              />
+
+              <Input
+                icon={<IndianRupee size={16} />}
+                label={
+                  variantMode
+                    ? "Base Price (lowest variant price)"
+                    : "Unit Price"
+                }
+                name="unit_price"
+                type="number"
+                disabled={variantMode}
+                value={
+                  variantMode
+                    ? newProductVariants.length
+                      ? String(variantBasePrice)
+                      : ""
+                    : productForm.unit_price
+                }
+                onChange={handleProductFormChange}
+                error={productErrors.unit_price}
+                required
+              />
+
+              <Input
+                icon={<Percent size={16} />}
+                label="Tax Rate %"
+                name="tax_rate"
+                type="number"
+                value={productForm.tax_rate}
+                onChange={handleProductFormChange}
+                error={productErrors.tax_rate}
+              />
+
+              <Input
+                icon={<Boxes size={16} />}
+                label={variantMode ? "Total Active Variant Stock" : "Quantity"}
+                name="quantity"
+                type="number"
+                disabled={variantMode}
+                value={
+                  variantMode ? String(variantStock) : productForm.quantity
+                }
+                onChange={handleProductFormChange}
+                error={productErrors.quantity}
+              />
+
+              <Field
+                icon={<Tag size={16} />}
+                label="Unit Type"
+                error={productErrors.unit_type}
+              >
+                <CustomDropdown
+                  value={productForm.unit_type}
+                  onChange={(value) =>
+                    handleProductFormChange({
+                      target: {
+                        name: "unit_type",
+                        value,
+                      },
+                    })
+                  }
+                  options={[
+                    { value: "pcs", label: "Pcs" },
+                    { value: "kg", label: "Kg" },
+                    { value: "g", label: "G" },
+                    { value: "ltr", label: "Ltr" },
+                    { value: "ml", label: "Ml" },
+                    { value: "box", label: "Box" },
+                    { value: "pack", label: "Pack" },
+                    { value: "meter", label: "Meter" },
+                    { value: "hour", label: "Hour" },
+                    { value: "day", label: "Day" },
+                    { value: "service", label: "Service" },
+                  ]}
+                />
+              </Field>
+            </Section>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <AmountBox title="Taxable Value" value={productTaxableValue} />
+
+              <AmountBox title="Tax Amount" value={productTaxAmount} />
+
+              <AmountBox title="Final Value" value={productFinalValue} />
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+            <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <Image size={16} />
+              Product Image
+            </label>
+
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                {productImageFile ? (
+                  <img
+                    src={URL.createObjectURL(productImageFile)}
+                    alt="Product preview"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <Image size={26} className="text-slate-400" />
+                )}
+              </div>
+
+              <div className="flex-1">
+                <input
+                  ref={productImageInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  onChange={(event) => {
+                    setProductImageFile(event.target.files?.[0] || null);
+                    clearProductError("image");
+                  }}
+                  className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800 dark:text-slate-300"
+                />
+
+                {productErrors.image ? (
+                  <p className="mt-2 text-xs font-semibold text-red-600 dark:text-red-400">
+                    {productErrors.image}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Upload PNG, JPG or WebP image. Max size 2MB.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+            <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <FileText size={16} />
+              Description
+            </label>
+
+            <textarea
+              name="description"
+              value={productForm.description}
+              onChange={handleProductFormChange}
+              rows="3"
+              className={`input ${
+                productErrors.description ? "input-error" : ""
+              }`}
+            />
+
+            {productErrors.description && (
+              <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                {productErrors.description}
+              </p>
+            )}
+          </div>
+
+          <ModalActions
+            onCancel={closeProductModal}
+            onSave={handleCreateProduct}
+            saveText={productSaving ? "Saving..." : "Add Product"}
+            disabled={productSaving}
+          />
+        </Modal>
+      )}
+
+      {showTaxModal && (
+        <Modal
+          title="Add New Tax Rule"
+          description="Create GST / Tax rule without leaving product form."
+          icon={<BadgePercent size={22} />}
+          onClose={() => {
+            setShowTaxModal(false);
+            resetTaxForm();
+          }}
+        >
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <Input
+              icon={<BadgePercent size={16} />}
+              label="Tax Name"
+              name="tax_name"
+              value={taxForm.tax_name}
+              onChange={handleTaxChange}
+              error={taxErrors.tax_name}
+              required
+            />
+
+            <Field
+              icon={<Percent size={16} />}
+              label="Tax Type"
+              error={taxErrors.tax_type}
+            >
+              <CustomDropdown
+                value={taxForm.tax_type}
+                onChange={(value) =>
+                  handleTaxChange({
+                    target: {
+                      name: "tax_type",
+                      value,
+                    },
+                  })
+                }
+                options={[
+                  { value: "GST", label: "GST" },
+                  {
+                    value: "CGST_SGST",
+                    label: "CGST + SGST",
+                  },
+                  { value: "IGST", label: "IGST" },
+                  { value: "TDS", label: "TDS" },
+                  { value: "TCS", label: "TCS" },
+                  { value: "OTHER", label: "Other" },
+                ]}
+              />
+            </Field>
+
+            <Input
+              icon={<Percent size={16} />}
+              label="Tax Percentage"
+              name="tax_percentage"
+              type="number"
+              value={taxForm.tax_percentage}
+              onChange={handleTaxChange}
+              error={taxErrors.tax_percentage}
+              required
+            />
+
+            <Input
+              icon={<Hash size={16} />}
+              label="HSN / SAC Code"
+              name="hsn_sac_code"
+              value={taxForm.hsn_sac_code}
+              onChange={handleTaxChange}
+              error={taxErrors.hsn_sac_code}
+            />
+
+            <Field icon={<CheckCircle2 size={16} />} label="Status">
+              <CustomDropdown
+                value={taxForm.is_active ? "active" : "inactive"}
+                onChange={(value) =>
+                  handleTaxChange({
+                    target: {
+                      name: "is_active",
+                      type: "checkbox",
+                      checked: value === "active",
+                    },
+                  })
+                }
                 options={[
                   { value: "active", label: "Active" },
                   { value: "inactive", label: "Inactive" },
@@ -2018,64 +3463,49 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
               />
             </Field>
 
-            <div className="md:col-span-2 xl:col-span-3">
-              <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                <Image size={16} />
-                Product Image
-              </label>
-
-              <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-center">
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                  {productImageFile ? (
-                    <img
-                      src={URL.createObjectURL(productImageFile)}
-                      alt="Preview"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <Image size={26} className="text-slate-400" />
-                  )}
-                </div>
-
-                <div className="flex-1">
-                  <input
-                    ref={productImageInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/webp"
-                    onChange={(e) =>
-                      setProductImageFile(e.target.files?.[0] || null)
-                    }
-                    className="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800"
-                  />
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Upload PNG, JPG or WebP image.
-                  </p>
-                </div>
-              </div>
-            </div>
+            <label className="mt-7 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <input
+                type="checkbox"
+                name="reverse_charge"
+                checked={Boolean(taxForm.reverse_charge)}
+                onChange={handleTaxChange}
+                className="h-4 w-4 accent-blue-600"
+              />
+              Reverse Charge
+            </label>
 
             <div className="md:col-span-2 xl:col-span-3">
               <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
                 <FileText size={16} />
                 Description
               </label>
+
               <textarea
                 name="description"
-                value={productForm.description}
-                onChange={handleProductFormChange}
+                value={taxForm.description}
+                onChange={handleTaxChange}
                 rows="3"
-                className="input"
+                className={`input ${
+                  taxErrors.description ? "input-error" : ""
+                }`}
               />
+
+              {taxErrors.description && (
+                <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                  {taxErrors.description}
+                </p>
+              )}
             </div>
           </div>
 
           <ModalActions
-            onSave={handleCreateProduct}
             onCancel={() => {
-              resetProductForm();
-              setShowProductModal(false);
+              setShowTaxModal(false);
+              resetTaxForm();
             }}
-            saveText="Save Product"
+            onSave={handleCreateTax}
+            saveText={taxLoading ? "Saving..." : "Save Tax Rule"}
+            disabled={taxLoading}
           />
         </Modal>
       )}
@@ -2254,6 +3684,19 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
           box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.35);
         }
 
+        .input-error {
+  border-color: #f87171 !important;
+}
+
+.input-error:focus {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px #fee2e2 !important;
+}
+
+.dark .input-error {
+  border-color: #f87171 !important;
+}
+
         .input:disabled {
           background: #f8fafc;
           cursor: not-allowed;
@@ -2269,13 +3712,186 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
   return content;
 }
 
-function Modal({ title, description, icon, onClose, children }) {
+function ProductHsnSacPicker({
+  value = "",
+  onChange,
+  error,
+  suggestions = [],
+  suggestionLoading = false,
+  suggestionError = "",
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [focused, setFocused] = useState(false);
+
+  const requestId = useRef(0);
+
+  useEffect(() => {
+    if (!focused || query.trim().length < 2) {
+      setResults([]);
+      setLoading(false);
+      setSearchError("");
+      return;
+    }
+
+    let active = true;
+    const currentRequestId = ++requestId.current;
+
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      setSearchError("");
+
+      try {
+        const { data } = await api.get("/hsn-sac/search", {
+          params: {
+            q: query.trim(),
+            limit: 12,
+          },
+        });
+
+        if (!active || currentRequestId !== requestId.current) {
+          return;
+        }
+
+        const list = Array.isArray(data) ? data : data?.results;
+
+        setResults(Array.isArray(list) ? list : []);
+      } catch (error) {
+        if (!active || currentRequestId !== requestId.current) {
+          return;
+        }
+
+        setResults([]);
+
+        setSearchError(
+          error.response?.data?.message || "HSN/SAC search unavailable",
+        );
+      } finally {
+        if (active && currentRequestId === requestId.current) {
+          setLoading(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [focused, query]);
+
+  const handleSelect = (item) => {
+    onChange(item);
+    setQuery("");
+    setResults([]);
+    setFocused(false);
+  };
+
+  const manuallySearching = query.trim().length >= 2;
+
+  const visibleItems = (manuallySearching ? results : suggestions).filter(
+    (item) => /^\d{4,8}$/.test(String(item?.code ?? "")),
+  );
+
+  const busy = manuallySearching ? loading : suggestionLoading;
+
+  const issue = manuallySearching ? searchError : suggestionError;
+
   return (
-    <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900">
+    <div className="relative z-20 min-w-0">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+        <Hash size={16} />
+        HSN / SAC Code
+      </label>
+
+      <input
+        type="text"
+        autoComplete="off"
+        value={focused ? query : value || ""}
+        placeholder="Type HSN code or description..."
+        onFocus={() => {
+          setQuery("");
+          setFocused(true);
+        }}
+        onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setFocused(false);
+          }
+        }}
+        onBlur={() => {
+          setTimeout(() => {
+            setFocused(false);
+          }, 180);
+        }}
+        className={`input ${error ? "input-error" : ""}`}
+      />
+
+      {error && (
+        <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+
+      {focused &&
+        (manuallySearching || busy || issue || visibleItems.length > 0) && (
+          <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-[100] max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+            {busy && (
+              <p className="p-3 text-xs text-blue-600 dark:text-blue-400">
+                Searching HSN/SAC...
+              </p>
+            )}
+
+            {issue && (
+              <p className="p-3 text-xs text-amber-600 dark:text-amber-400">
+                {issue}
+              </p>
+            )}
+
+            {!busy && !issue && visibleItems.length === 0 && (
+              <p className="p-3 text-xs text-slate-500 dark:text-slate-400">
+                No matches found. Try another code or description.
+              </p>
+            )}
+
+            {!busy &&
+              visibleItems.map((item) => (
+                <button
+                  key={
+                    item.id ?? `${item.type}-${item.code}-${item.description}`
+                  }
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => handleSelect(item)}
+                  className="flex w-full items-start gap-2 border-b border-slate-100 px-3 py-2 text-left text-xs hover:bg-blue-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <span className="shrink-0 font-semibold text-blue-700 dark:text-blue-300">
+                    {item.type} {item.code}
+                  </span>
+
+                  <span className="min-w-0 flex-1">{item.description}</span>
+
+                  <span className="shrink-0 font-medium text-emerald-700 dark:text-emerald-300">
+                    {item.gst_rate == null || item.gst_rate === ""
+                      ? "GST —"
+                      : `GST ${Number(item.gst_rate)}%`}
+                  </span>
+                </button>
+              ))}
+          </div>
+        )}
+    </div>
+  );
+}
+
+function Modal({ title, description, icon, onClose, children }) {
+  return createPortal(
+    <div className="fixed inset-0 z-[60000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
               {icon || <FileText size={21} />}
             </div>
 
@@ -2283,48 +3899,30 @@ function Modal({ title, description, icon, onClose, children }) {
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 {title}
               </h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {description}
-              </p>
+
+              {description && (
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  {description}
+                </p>
+              )}
             </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="p-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/60 p-5 dark:bg-slate-950/40">
+          {children}
+        </div>
       </div>
-    </div>
-  );
-}
-
-function ModalActions({ onSave, onCancel, saveText }) {
-  return (
-    <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-      <button
-        type="button"
-        onClick={onCancel}
-        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-      >
-        <X size={16} />
-        Cancel
-      </button>
-
-      <button
-        type="button"
-        onClick={onSave}
-        className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-      >
-        <Save size={16} />
-        {saveText}
-      </button>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -2354,6 +3952,8 @@ function Input({
   required = false,
   min,
   readOnly = false,
+  disabled = false,
+  error = "",
 }) {
   return (
     <div className="min-w-0">
@@ -2371,26 +3971,68 @@ function Input({
         onChange={onChange}
         min={min}
         readOnly={readOnly}
-        className={`input ${readOnly ? "cursor-default bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200" : ""}`}
+        disabled={disabled}
+        className={`input ${error ? "input-error" : ""} ${
+          readOnly
+            ? "cursor-default bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            : ""
+        }`}
       />
 
-      {helper && (
+      {error ? (
+        <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      ) : helper ? (
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           {helper}
         </p>
-      )}
+      ) : null}
     </div>
   );
 }
 
-function Field({ icon, label, children }) {
+function Field({ icon, label, children, error }) {
   return (
     <div className="min-w-0">
       <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
         {icon}
         {label}
       </label>
+
       {children}
+
+      {error && (
+        <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ModalActions({ onSave, onCancel, saveText, disabled = false }) {
+  return (
+    <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={disabled}
+        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+      >
+        <X size={16} />
+        Cancel
+      </button>
+
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={disabled}
+        className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <Save size={16} />
+        {saveText}
+      </button>
     </div>
   );
 }
@@ -2513,7 +4155,7 @@ function ProductSelect({
       // Keep the currently selected product visible.
       if (String(product.id) === String(value)) return true;
 
-      // Zero stock: hide simple products, keep variant products.
+      // Zero stock: hide Single Products, keep variant products.
       const kind = stockKinds[String(product.id)];
       return kind === "variant" || kind === "error";
     })
@@ -2760,30 +4402,47 @@ function CustomDropdown({ value, onChange, options, icon }) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  const selected = options.find(
+  const addTaxOption = options.find((option) => option.value === "__add_tax__");
+
+  const regularOptions = options.filter(
+    (option) => option.value !== "__add_tax__",
+  );
+
+  const selected = regularOptions.find(
     (option) => String(option.value) === String(value),
   );
 
   useEffect(() => {
-    const closeDropdown = (event) => {
+    const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setOpen(false);
       }
     };
 
-    document.addEventListener("mousedown", closeDropdown);
-    return () => document.removeEventListener("mousedown", closeDropdown);
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const handleSelect = (nextValue) => {
+    onChange(nextValue);
+    setOpen(false);
+  };
+
   return (
-    <div ref={dropdownRef} className="relative">
+    <div ref={dropdownRef} className="relative min-w-0">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-blue-950/50"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
       >
         <span className="flex min-w-0 items-center gap-2">
-          {icon && <span className="text-slate-400">{icon}</span>}
+          {icon && (
+            <span className="shrink-0 text-slate-400 dark:text-slate-500">
+              {icon}
+            </span>
+          )}
+
           <span className="truncate">{selected?.label || "Select"}</span>
         </span>
 
@@ -2796,28 +4455,43 @@ function CustomDropdown({ value, onChange, options, icon }) {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 ${
-                String(value) === String(option.value)
-                  ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-                  : "text-slate-700 dark:text-slate-200"
-              }`}
-            >
-              <span className="truncate">{option.label}</span>
+        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+          <div className="max-h-60 overflow-y-auto">
+            {regularOptions.map((option) => {
+              const active = String(value) === String(option.value);
 
-              {String(value) === String(option.value) && (
-                <CheckCircle2 size={16} className="shrink-0" />
-              )}
-            </button>
-          ))}
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleSelect(option.value)}
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 ${
+                    active
+                      ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                      : "text-slate-700 dark:text-slate-200"
+                  }`}
+                >
+                  <span className="truncate">{option.label}</span>
+
+                  {active && <CheckCircle2 size={16} className="shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+
+          {addTaxOption && (
+            <div className="border-t border-slate-100 p-2 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => handleSelect(addTaxOption.value)}
+                className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
+              >
+                <Plus size={16} />
+
+                {addTaxOption.label.replace(/^\+\s*/, "")}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

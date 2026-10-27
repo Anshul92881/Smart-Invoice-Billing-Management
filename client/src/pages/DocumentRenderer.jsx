@@ -1,4 +1,4 @@
-const APP_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '');   
+const APP_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, "");
 
 const DEFAULT_TEMPLATE = {
   show_logo: true,
@@ -42,12 +42,12 @@ const formatDate = (date) => {
   });
 };
 
-  const getLogoUrl = (logo) => {
-    if (!logo) return "";
-    if (logo.startsWith("http")) return logo;
-    
-    return `${APP_URL}/upload/company-logos/${logo}`;
-  };
+const getLogoUrl = (logo) => {
+  if (!logo) return "";
+  if (logo.startsWith("http")) return logo;
+
+  return `${APP_URL}/upload/company-logos/${logo}`;
+};
 
 const normalizeTemplate = (template = {}) => ({
   ...DEFAULT_TEMPLATE,
@@ -288,6 +288,10 @@ function DocumentRenderer({
     itemRows.reduce((sum, item) => sum + Number(item.lineTotal || 0), 0) -
       discount +
       docView.roundOff;
+
+  const balanceDue = isInvoice
+    ? Math.max(grandTotal - Number(docView.paidAmount || 0), 0)
+    : 0;
 
   const cgst = totalTax / 2;
   const sgst = totalTax / 2;
@@ -649,22 +653,34 @@ function DocumentRenderer({
                 />
               )}
 
-              {isInvoice && docView.paidAmount > 0 && (
-                <AmountLine
-                  label="Paid"
-                  value={formatMoney(docView.paidAmount, currency)}
-                />
-              )}
-
-              <div className="flex items-center justify-between gap-2 bg-blue-600 px-3 py-2 text-white">
+              <div className="flex items-center justify-between gap-2 bg-blue-600 px-3 py-1 text-white">
                 <span className="text-[11px] font-black uppercase tracking-wide">
                   Grand Total
                 </span>
 
-                <span className="text-[15px] font-black">
+                <span className="text-[13px] font-black">
                   {formatMoney(grandTotal, currency)}
                 </span>
               </div>
+
+              {isInvoice && docView.paidAmount > 0 && balanceDue > 0 && (
+                <>
+                  <AmountLine
+                    label="Paid"
+                    value={formatMoney(docView.paidAmount, currency)}
+                  />
+
+                  <div className="flex items-center justify-between gap-2 bg-blue-600 px-3 py-1 text-white">
+                    <span className="text-[11px] font-black uppercase tracking-wide">
+                      Balance Due
+                    </span>
+
+                    <span className="text-[13px] font-black">
+                      {formatMoney(balanceDue, currency)}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

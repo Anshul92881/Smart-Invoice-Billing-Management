@@ -18,6 +18,15 @@ const toNumber = (value, fallback = 0) => {
   return Number.isFinite(number) ? number : fallback;
 };
 
+const allowedPlanTypes = ["free", "paid"];
+const allowedDurationUnits = ["day", "month", "year"];
+const allowedPlanStatuses = ["active", "inactive"];
+
+const buildBillingCycle = (durationValue, durationUnit) => {
+  const pluralSuffix = durationValue === 1 ? "" : "s";
+  return `${durationValue}_${durationUnit}${pluralSuffix}`;
+};
+
 const formatAmount = (amount) => {
   return Number(amount || 0).toFixed(2);
 };
@@ -294,90 +303,200 @@ const drawSubscriptionInvoicePdf = ({ doc, invoice }) => {
     );
 };
 
-// GET ALL PLANS
+// GET SUBSCRIPTION PLANS
 export const getPlans = async (req, res) => {
   try {
-    const [plans] = await db.query(`
-      SELECT *
+    const isSuperAdmin = req.user?.role === "superadmin";
+
+    let query = `
+      SELECT
+        id,
+        plan_name,
+        plan_type,
+        price,
+        billing_cycle,
+        duration_value,
+        duration_unit,
+        is_default,
+        max_companies,
+        max_users,
+        max_invoices,
+        max_branches,
+        features,
+        status,
+        created_at
       FROM tbl_subscription_plans
-      ORDER BY price ASC
-    `);
+    `;
+
+    const params = [];
+
+    // Company Admin ko sirf active plans dikhne chahiye
+    if (!isSuperAdmin) {
+      query += ` WHERE status = ? `;
+      params.push("active");
+    }
+
+    query += `
+      ORDER BY
+        is_default DESC,
+        CASE WHEN plan_type = 'free' THEN 1 ELSE 2 END,
+        price ASC,
+        id DESC
+    `;
+
+    const [plans] = await db.query(query, params);
 
     return res.status(200).json(plans);
   } catch (error) {
-    console.log("GET PLANS ERROR:", error);
-    return res.status(500).json({ message: "Failed to fetch plans" });
+    console.error("GET PLANS ERROR:", error);
+
+    return res.status(500).json({
+      message: "Failed to fetch plans",
+      error: error.message,
+    });
   }
 };
 
 // CREATE PLAN
+
 export const createPlan = async (req, res) => {
+  let connection;
+
   try {
     const {
       plan_name,
-      price,
-      billing_cycle = "3_months",
-      trial_days = 0,
-      features,
-      max_branches = 2,
+      plan_type = "paid",
+      price = 0,
+      duration_value = 1,
+      duration_unit = "month",
+      features = "",
+      max_branches = 1,
     } = req.body;
 
-    const finalPrice = toNumber(price);
-    const finalTrialDays = toNumber(trial_days);
-    const finalMaxBranches = toNumber(max_branches, 2);
+    const finalPlanName = String(plan_name || "").trim();
+    const finalPlanType = String(plan_type || "")
+      .toLowerCase()
+      .trim();
+    const finalDurationUnit = String(duration_unit || "")
+      .toLowerCase()
+      .trim();
 
-    if (!plan_name?.trim()) {
-      return res.status(400).json({ message: "Plan name is required" });
-    }
+    const finalDurationValue = Number(duration_value);
+    const finalMaxBranches = Number(max_branches);
+    const requestedPrice = Number(price);
 
-    if (finalPrice <= 0) {
+    if (!finalPlanName) {
       return res.status(400).json({
-        message: "Plan price must be greater than 0",
+        message: "Plan name is required",
       });
     }
 
-    if (!validateBillingCycle(billing_cycle)) {
-      return res.status(400).json({ message: "Invalid billing cycle" });
-    }
-
-    if (finalTrialDays < 0) {
-      return res.status(400).json({ message: "Trial days cannot be negative" });
-    }
-
-    if (finalMaxBranches <= 0) {
+    if (!allowedPlanTypes.includes(finalPlanType)) {
       return res.status(400).json({
-        message: "Max branches must be greater than 0",
+        message: "Plan type must be free or paid",
       });
     }
 
-    const [planResult] = await db.query(
+    if (!Number.isInteger(finalDurationValue) || finalDurationValue <= 0) {
+      return res.status(400).json({
+        message: "Plan duration must be a positive whole number",
+      });
+    }
+
+    if (!allowedDurationUnits.includes(finalDurationUnit)) {
+      return res.status(400).json({
+        message: "Duration unit must be day, month or year",
+      });
+    }
+
+    if (!Number.isInteger(finalMaxBranches) || finalMaxBranches <= 0) {
+      return res.status(400).json({
+        message: "Max branches must be a positive whole number",
+      });
+    }
+
+    if (!Number.isFinite(requestedPrice) || requestedPrice < 0) {
+      return res.status(400).json({
+        message: "Invalid plan price",
+      });
+    }
+
+    if (finalPlanType === "paid" && requestedPrice <= 0) {
+      return res.status(400).json({
+        message: "Paid plan price must be greater than 0",
+      });
+    }
+
+    const finalPrice = finalPlanType === "free" ? 0 : requestedPrice;
+    const finalIsDefault = finalPlanType === "free" ? 1 : 0;
+
+    // Old column ko filhaal compatibility ke liye maintain kar rahe hain
+    const finalBillingCycle = buildBillingCycle(
+      finalDurationValue,
+      finalDurationUnit,
+    );
+
+    const finalFeatures = Array.isArray(features)
+      ? features.filter(Boolean).join(", ")
+      : String(features || "").trim();
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    /*
+     * Ek time par sirf ek Free Plan default rahega.
+     * Naya Free Plan create karte hi purana default remove ho jayega.
+     */
+    if (finalPlanType === "free") {
+      await connection.query(
+        `
+        UPDATE tbl_subscription_plans
+        SET is_default = 0
+        WHERE is_default = 1
+        `,
+      );
+    }
+
+    const [planResult] = await connection.query(
       `
       INSERT INTO tbl_subscription_plans
       (
         plan_name,
+        plan_type,
         price,
         billing_cycle,
+        duration_value,
+        duration_unit,
+        is_default,
         trial_days,
         max_companies,
         max_users,
         max_invoices,
         max_branches,
-        features
+        features,
+        status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
-        plan_name.trim(),
+        finalPlanName,
+        finalPlanType,
         finalPrice,
-        billing_cycle,
-        finalTrialDays,
+        finalBillingCycle,
+        finalDurationValue,
+        finalDurationUnit,
+        finalIsDefault,
+        0,
         1,
         1,
         999999,
         finalMaxBranches,
-        features || "",
+        finalFeatures,
+        "active",
       ],
     );
+
+    await connection.commit();
 
     await createAuditLog({
       company_id: null,
@@ -385,75 +504,189 @@ export const createPlan = async (req, res) => {
       action: "CREATE",
       module_name: "Subscription Plan",
       record_id: planResult.insertId,
-      description: `Subscription plan ${plan_name.trim()} created`,
+      description: `Subscription plan ${finalPlanName} created`,
       ip_address: req.ip,
     });
 
-    return res.status(201).json({ message: "Plan created successfully" });
+    return res.status(201).json({
+      message: "Plan created successfully",
+      plan_id: planResult.insertId,
+    });
   } catch (error) {
+    if (connection) {
+      await connection.rollback();
+    }
+
     console.log("CREATE PLAN ERROR:", error);
 
     if (error.code === "ER_DUP_ENTRY") {
-      return res.status(400).json({ message: "Plan already exists" });
+      return res.status(400).json({
+        message: "A plan with this name already exists",
+      });
     }
 
     return res.status(500).json({
       message: "Failed to create plan",
       error: error.message,
     });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 };
 
 // UPDATE PLAN
+// UPDATE PLAN
+
 export const updatePlan = async (req, res) => {
+  let connection;
+
   try {
     const { id } = req.params;
 
     const {
       plan_name,
-      price,
-      billing_cycle = "3_months",
-      trial_days = 0,
-      features,
+      plan_type = "paid",
+      price = 0,
+      duration_value = 1,
+      duration_unit = "month",
+      features = "",
       status = "active",
-      max_branches = 2,
+      max_branches = 1,
     } = req.body;
 
-    const finalPrice = toNumber(price);
-    const finalTrialDays = toNumber(trial_days);
-    const finalMaxBranches = toNumber(max_branches, 2);
+    const planId = Number(id);
+    const finalPlanName = String(plan_name || "").trim();
+    const finalPlanType = String(plan_type || "")
+      .toLowerCase()
+      .trim();
+    const finalDurationUnit = String(duration_unit || "")
+      .toLowerCase()
+      .trim();
+    const finalStatus = String(status || "active")
+      .toLowerCase()
+      .trim();
 
-    if (!plan_name?.trim()) {
-      return res.status(400).json({ message: "Plan name is required" });
-    }
+    const finalDurationValue = Number(duration_value);
+    const finalMaxBranches = Number(max_branches);
+    const requestedPrice = Number(price);
 
-    if (finalPrice <= 0) {
+    if (!Number.isInteger(planId) || planId <= 0) {
       return res.status(400).json({
-        message: "Plan price must be greater than 0",
+        message: "Invalid plan ID",
       });
     }
 
-    if (!validateBillingCycle(billing_cycle)) {
-      return res.status(400).json({ message: "Invalid billing cycle" });
-    }
-
-    if (finalTrialDays < 0) {
-      return res.status(400).json({ message: "Trial days cannot be negative" });
-    }
-
-    if (finalMaxBranches <= 0) {
+    if (!finalPlanName) {
       return res.status(400).json({
-        message: "Max branches must be greater than 0",
+        message: "Plan name is required",
       });
     }
 
-    const [result] = await db.query(
+    if (!allowedPlanTypes.includes(finalPlanType)) {
+      return res.status(400).json({
+        message: "Plan type must be free or paid",
+      });
+    }
+
+    if (!Number.isInteger(finalDurationValue) || finalDurationValue <= 0) {
+      return res.status(400).json({
+        message: "Plan duration must be a positive whole number",
+      });
+    }
+
+    if (!allowedDurationUnits.includes(finalDurationUnit)) {
+      return res.status(400).json({
+        message: "Duration unit must be day, month or year",
+      });
+    }
+
+    if (!Number.isInteger(finalMaxBranches) || finalMaxBranches <= 0) {
+      return res.status(400).json({
+        message: "Max branches must be a positive whole number",
+      });
+    }
+
+    if (!allowedPlanStatuses.includes(finalStatus)) {
+      return res.status(400).json({
+        message: "Plan status must be active or inactive",
+      });
+    }
+
+    if (!Number.isFinite(requestedPrice) || requestedPrice < 0) {
+      return res.status(400).json({
+        message: "Invalid plan price",
+      });
+    }
+
+    if (finalPlanType === "paid" && requestedPrice <= 0) {
+      return res.status(400).json({
+        message: "Paid plan price must be greater than 0",
+      });
+    }
+
+    const finalPrice = finalPlanType === "free" ? 0 : requestedPrice;
+    const finalIsDefault = finalPlanType === "free" ? 1 : 0;
+
+    const finalBillingCycle = buildBillingCycle(
+      finalDurationValue,
+      finalDurationUnit,
+    );
+
+    const finalFeatures = Array.isArray(features)
+      ? features.filter(Boolean).join(", ")
+      : String(features || "").trim();
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [existingPlans] = await connection.query(
+      `
+      SELECT id
+      FROM tbl_subscription_plans
+      WHERE id = ?
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [planId],
+    );
+
+    if (existingPlans.length === 0) {
+      await connection.rollback();
+
+      return res.status(404).json({
+        message: "Plan not found",
+      });
+    }
+
+    /*
+     * Agar plan ko Free banaya ja raha hai to doosre plan ka
+     * default status remove kar diya jayega.
+     */
+    if (finalPlanType === "free") {
+      await connection.query(
+        `
+        UPDATE tbl_subscription_plans
+        SET is_default = 0
+        WHERE id <> ?
+          AND is_default = 1
+        `,
+        [planId],
+      );
+    }
+
+    await connection.query(
       `
       UPDATE tbl_subscription_plans
       SET
         plan_name = ?,
+        plan_type = ?,
         price = ?,
         billing_cycle = ?,
+        duration_value = ?,
+        duration_unit = ?,
+        is_default = ?,
         trial_days = ?,
         max_branches = ?,
         features = ?,
@@ -461,38 +694,57 @@ export const updatePlan = async (req, res) => {
       WHERE id = ?
       `,
       [
-        plan_name.trim(),
+        finalPlanName,
+        finalPlanType,
         finalPrice,
-        billing_cycle,
-        finalTrialDays,
+        finalBillingCycle,
+        finalDurationValue,
+        finalDurationUnit,
+        finalIsDefault,
+        0,
         finalMaxBranches,
-        features || "",
-        status || "active",
-        id,
+        finalFeatures,
+        finalStatus,
+        planId,
       ],
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Plan not found" });
-    }
+    await connection.commit();
 
     await createAuditLog({
       company_id: null,
       user_id: req.user?.id || null,
       action: "UPDATE",
       module_name: "Subscription Plan",
-      record_id: id,
-      description: `Subscription plan ${plan_name.trim()} updated`,
+      record_id: planId,
+      description: `Subscription plan ${finalPlanName} updated`,
       ip_address: req.ip,
     });
 
-    return res.status(200).json({ message: "Plan updated successfully" });
+    return res.status(200).json({
+      message: "Plan updated successfully",
+    });
   } catch (error) {
+    if (connection) {
+      await connection.rollback();
+    }
+
     console.log("UPDATE PLAN ERROR:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(400).json({
+        message: "A plan with this name already exists",
+      });
+    }
+
     return res.status(500).json({
       message: "Failed to update plan",
       error: error.message,
     });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 };
 
@@ -528,12 +780,15 @@ export const getCompanySubscriptions = async (req, res) => {
   }
 };
 
+// COMPANY SIDE: GET COMPLETE SUBSCRIPTION HISTORY
 export const getMyAllSubscriptions = async (req, res) => {
   try {
     const companyId = req.user.company_id;
 
     if (!companyId) {
-      return res.status(400).json({ message: "Company ID missing" });
+      return res.status(400).json({
+        message: "Company ID missing",
+      });
     }
 
     const [rows] = await db.query(
@@ -542,7 +797,15 @@ export const getMyAllSubscriptions = async (req, res) => {
         cs.id,
         cs.company_id,
         cs.plan_id,
-        cs.status,
+
+        CASE
+          WHEN cs.status = 'active'
+            AND cs.renewal_date IS NOT NULL
+            AND cs.renewal_date < CURDATE()
+          THEN 'expired'
+          ELSE cs.status
+        END AS status,
+
         cs.start_date,
         cs.trial_end_date,
         cs.renewal_date,
@@ -550,10 +813,25 @@ export const getMyAllSubscriptions = async (req, res) => {
         cs.created_at,
 
         sp.plan_name,
+        sp.plan_type,
         sp.price,
         sp.billing_cycle,
+        sp.duration_value,
+        sp.duration_unit,
+        sp.is_default,
         sp.features,
-        sp.max_branches,
+        sp.max_users,
+        sp.max_invoices,
+
+        GREATEST(
+          COALESCE(c.branch_limit, 0),
+          COALESCE(sp.max_branches, 0)
+        ) AS max_branches,
+
+        CASE
+          WHEN cs.renewal_date IS NULL THEN NULL
+          ELSE GREATEST(DATEDIFF(cs.renewal_date, CURDATE()), 0)
+        END AS remaining_days,
 
         latest_invoice.id AS latest_invoice_id,
         latest_invoice.invoice_number AS latest_invoice_number,
@@ -562,23 +840,49 @@ export const getMyAllSubscriptions = async (req, res) => {
         latest_invoice.due_date AS latest_invoice_due_date,
 
         CASE
-          WHEN cs.status = 'pending_payment' THEN 'Waiting for payment'
-          WHEN cs.status = 'active' THEN 'Current active plan'
-          WHEN cs.status = 'trial' THEN 'Trial plan'
-          WHEN cs.status = 'cancelled' THEN 'Previous plan'
-          WHEN cs.status = 'expired' THEN 'Expired plan'
+          WHEN cs.status = 'pending_payment'
+          THEN 'Waiting for payment'
+
+          WHEN cs.status = 'active'
+            AND cs.start_date > CURDATE()
+          THEN 'Upcoming plan'
+
+          WHEN cs.status = 'active'
+            AND cs.renewal_date IS NOT NULL
+            AND cs.renewal_date < CURDATE()
+          THEN 'Expired plan'
+
+          WHEN cs.status = 'active'
+          THEN 'Current active plan'
+
+          WHEN cs.status = 'trial'
+          THEN 'Trial plan'
+
+          WHEN cs.status = 'cancelled'
+          THEN 'Previous plan'
+
+          WHEN cs.status = 'expired'
+          THEN 'Expired plan'
+
           ELSE cs.status
         END AS display_status
+
       FROM tbl_company_subscriptions cs
+
       JOIN tbl_subscription_plans sp
         ON cs.plan_id = sp.id
 
+      JOIN tbl_companies c
+        ON cs.company_id = c.id
+
       LEFT JOIN (
-        SELECT
-          si1.*
+        SELECT si1.*
         FROM tbl_subscription_invoices si1
+
         INNER JOIN (
-          SELECT subscription_id, MAX(id) AS max_invoice_id
+          SELECT
+            subscription_id,
+            MAX(id) AS max_invoice_id
           FROM tbl_subscription_invoices
           GROUP BY subscription_id
         ) si2
@@ -587,14 +891,17 @@ export const getMyAllSubscriptions = async (req, res) => {
         ON latest_invoice.subscription_id = cs.id
 
       WHERE cs.company_id = ?
-      ORDER BY cs.id DESC
+
+      ORDER BY
+        cs.id DESC
       `,
       [companyId],
     );
 
     return res.status(200).json(rows);
   } catch (error) {
-    console.log("GET MY ALL SUBSCRIPTIONS ERROR:", error);
+    console.error("GET MY ALL SUBSCRIPTIONS ERROR:", error);
+
     return res.status(500).json({
       message: "Failed to fetch subscriptions",
       error: error.message,
@@ -643,77 +950,230 @@ export const deletePlan = async (req, res) => {
 export const buySubscriptionPlan = async (req, res) => {
   const connection = await db.getConnection();
 
+  let transactionCommitted = false;
+
   try {
     const companyId = req.user.company_id;
     const { plan_id } = req.body;
 
     if (!companyId) {
-      return res.status(400).json({ message: "Company ID missing" });
+      return res.status(400).json({
+        message: "Company ID missing",
+      });
     }
 
     if (!plan_id) {
-      return res.status(400).json({ message: "Plan is required" });
+      return res.status(400).json({
+        message: "Plan is required",
+      });
     }
 
     await connection.beginTransaction();
 
-    const [unpaidInvoices] = await connection.query(
+    /*
+    |--------------------------------------------------------------------------
+    | 1. COMPANY LOCK
+    |--------------------------------------------------------------------------
+    | Same company ke multiple purchase requests ko simultaneously process
+    | hone se rokega.
+    */
+
+    const [companyRows] = await connection.query(
       `
-      SELECT id
-      FROM tbl_subscription_invoices
-      WHERE company_id = ?
-      AND invoice_status != 'paid'
+      SELECT
+        id,
+        name,
+        branch_limit
+      FROM tbl_companies
+      WHERE id = ?
       LIMIT 1
+      FOR UPDATE
       `,
       [companyId],
     );
 
-    if (unpaidInvoices.length > 0) {
+    if (!companyRows.length) {
       await connection.rollback();
-      return res.status(400).json({
-        message: "Please pay existing subscription invoice first",
+
+      return res.status(404).json({
+        message: "Company not found",
       });
     }
 
-    const [plans] = await connection.query(
+    /*
+    |--------------------------------------------------------------------------
+    | 2. SELECTED PAID PLAN
+    |--------------------------------------------------------------------------
+    */
+
+    const [planRows] = await connection.query(
       `
-      SELECT *
+      SELECT
+        id,
+        plan_name,
+        plan_type,
+        price,
+        billing_cycle,
+        duration_value,
+        duration_unit,
+        max_branches,
+        status
       FROM tbl_subscription_plans
       WHERE id = ?
-      AND status = 'active'
+        AND status = 'active'
       LIMIT 1
       `,
       [plan_id],
     );
 
-    if (plans.length === 0) {
+    if (!planRows.length) {
       await connection.rollback();
-      return res.status(404).json({ message: "Active plan not found" });
-    }
 
-    const plan = plans[0];
-
-    const [existingPending] = await connection.query(
-      `
-      SELECT cs.id, si.invoice_number
-      FROM tbl_company_subscriptions cs
-      LEFT JOIN tbl_subscription_invoices si
-        ON si.subscription_id = cs.id
-        AND si.invoice_status != 'paid'
-      WHERE cs.company_id = ?
-      AND cs.plan_id = ?
-      AND cs.status = 'pending_payment'
-      LIMIT 1
-      `,
-      [companyId, plan_id],
-    );
-
-    if (existingPending.length > 0) {
-      await connection.rollback();
-      return res.status(400).json({
-        message: "An unpaid invoice for this plan already exists",
+      return res.status(404).json({
+        message: "Active subscription plan not found",
       });
     }
+
+    const plan = planRows[0];
+
+    if (plan.plan_type !== "paid") {
+      await connection.rollback();
+
+      return res.status(400).json({
+        message: "Only paid plans can be purchased",
+      });
+    }
+
+    const planPrice = Number(plan.price || 0);
+    const durationValue = Number(plan.duration_value || 0);
+    const purchasedBranches = Number(plan.max_branches || 0);
+
+    if (planPrice <= 0) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        message: "Paid plan price must be greater than zero",
+      });
+    }
+
+    if (durationValue <= 0) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        message: "Plan duration is invalid",
+      });
+    }
+
+    const allowedDurationUnits = {
+      day: "DAY",
+      month: "MONTH",
+      year: "YEAR",
+    };
+
+    const intervalUnit = allowedDurationUnits[plan.duration_unit];
+
+    if (!intervalUnit) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        message: "Plan duration unit is invalid",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 3. CALCULATE PAID PLAN START DATE
+    |--------------------------------------------------------------------------
+    | Agar current free/paid plan ki validity baaki hai to new paid plan
+    | current validity ke end se start hoga.
+    |
+    | Example:
+    | Current free expiry: 22 Nov
+    | Paid duration: 3 months
+    | Paid start: 22 Nov
+    | Paid renewal: 22 Feb
+    */
+
+    const [baseDateRows] = await connection.query(
+      `
+      SELECT
+        DATE_FORMAT(
+          CASE
+            WHEN MAX(renewal_date) IS NOT NULL
+              AND MAX(renewal_date) > CURDATE()
+            THEN MAX(renewal_date)
+            ELSE CURDATE()
+          END,
+          '%Y-%m-%d'
+        ) AS start_date
+      FROM tbl_company_subscriptions
+      WHERE company_id = ?
+        AND status = 'active'
+      `,
+      [companyId],
+    );
+
+    const startDate = baseDateRows[0]?.start_date;
+
+    const [renewalDateRows] = await connection.query(
+      `
+      SELECT DATE_FORMAT(
+        DATE_ADD(
+          ?,
+          INTERVAL ? ${intervalUnit}
+        ),
+        '%Y-%m-%d'
+      ) AS renewal_date
+      `,
+      [startDate, durationValue],
+    );
+
+    const renewalDate = renewalDateRows[0]?.renewal_date;
+
+    if (!startDate || !renewalDate) {
+      throw new Error("Unable to calculate subscription validity");
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 4. CURRENT EFFECTIVE BRANCH LIMIT
+    |--------------------------------------------------------------------------
+    | Existing company branch_limit aur active plan limit me jo bada hai
+    | usko current limit maana jayega.
+    */
+
+    const [activePlanLimitRows] = await connection.query(
+      `
+      SELECT
+        COALESCE(MAX(sp.max_branches), 0) AS active_plan_branches
+      FROM tbl_company_subscriptions cs
+      JOIN tbl_subscription_plans sp
+        ON cs.plan_id = sp.id
+      WHERE cs.company_id = ?
+        AND cs.status = 'active'
+      `,
+      [companyId],
+    );
+
+    const companyBranchLimit = Number(companyRows[0].branch_limit || 0);
+
+    const activePlanBranchLimit = Number(
+      activePlanLimitRows[0]?.active_plan_branches || 0,
+    );
+
+    const existingBranchLimit = Math.max(
+      companyBranchLimit,
+      activePlanBranchLimit,
+    );
+
+    const updatedBranchLimit = existingBranchLimit + purchasedBranches;
+
+    /*
+    |--------------------------------------------------------------------------
+    | 5. CREATE ACTIVE PAID SUBSCRIPTION
+    |--------------------------------------------------------------------------
+    | Payment demo mode mein direct paid hai isliye pending_payment nahi hoga.
+    */
 
     const [subscriptionResult] = await connection.query(
       `
@@ -727,13 +1187,20 @@ export const buySubscriptionPlan = async (req, res) => {
         renewal_date,
         auto_renewal
       )
-      VALUES (?, ?, 'pending_payment', CURDATE(), NULL, NULL, 1)
+      VALUES (?, ?, 'active', ?, NULL, ?, 1)
       `,
-      [companyId, plan_id],
+      [companyId, plan.id, startDate, renewalDate],
     );
 
     const subscriptionId = subscriptionResult.insertId;
-    const invoiceNumber = `SUB-INV-${Date.now()}`;
+
+    /*
+    |--------------------------------------------------------------------------
+    | 6. GENERATE PAID SUBSCRIPTION INVOICE
+    |--------------------------------------------------------------------------
+    */
+
+    const invoiceNumber = `SUB-INV-${Date.now()}-${companyId}`;
 
     const [invoiceResult] = await connection.query(
       `
@@ -747,42 +1214,145 @@ export const buySubscriptionPlan = async (req, res) => {
         invoice_date,
         due_date
       )
-      VALUES (?, ?, ?, ?, 'generated', CURDATE(), DATE_ADD(CURDATE(), INTERVAL 7 DAY))
+      VALUES (?, ?, ?, ?, 'paid', CURDATE(), CURDATE())
       `,
-      [subscriptionId, companyId, invoiceNumber, plan.price],
+      [subscriptionId, companyId, invoiceNumber, planPrice],
     );
 
-    await createAuditLog({
-      company_id: companyId,
-      user_id: req.user?.id || null,
-      action: "CREATE",
-      module_name: "Subscription",
-      record_id: subscriptionId,
-      description: `Pending payment subscription created for ${plan.plan_name}. Invoice ${invoiceNumber} generated`,
-      ip_address: req.ip,
-    });
+    const invoiceId = invoiceResult.insertId;
 
-    await notifyCompanyAdmins({
-      company_id: companyId,
-      exclude_user_id: req.user.id,
-      type: "subscription",
-      severity: "medium",
-      title: "Subscription Invoice Generated",
-      message: `Invoice generated for ${plan.plan_name}.`,
-    });
+    /*
+    |--------------------------------------------------------------------------
+    | 7. CREATE DEMO PAID PAYMENT
+    |--------------------------------------------------------------------------
+    */
+
+    const transactionId = `DEMO-${Date.now()}-${companyId}`;
+
+    const [paymentResult] = await connection.query(
+      `
+      INSERT INTO tbl_subscription_payments
+      (
+        subscription_id,
+        company_id,
+        amount,
+        payment_status,
+        payment_method,
+        transaction_id,
+        payment_date
+      )
+      VALUES (?, ?, ?, 'paid', 'demo', ?, CURDATE())
+      `,
+      [subscriptionId, companyId, planPrice, transactionId],
+    );
+
+    /*
+    |--------------------------------------------------------------------------
+    | 8. INCREASE COMPANY BRANCH LIMIT
+    |--------------------------------------------------------------------------
+    */
+
+    await connection.query(
+      `
+      UPDATE tbl_companies
+      SET branch_limit = ?
+      WHERE id = ?
+      `,
+      [updatedBranchLimit, companyId],
+    );
 
     await connection.commit();
+    transactionCommitted = true;
+
+    /*
+    |--------------------------------------------------------------------------
+    | 9. AUDIT LOG
+    |--------------------------------------------------------------------------
+    | Audit fail hone par successful purchase rollback nahi hoga.
+    */
+
+    try {
+      await createAuditLog({
+        company_id: companyId,
+        user_id: req.user?.id || null,
+        action: "CREATE",
+        module_name: "Subscription",
+        record_id: subscriptionId,
+        description:
+          `${plan.plan_name} purchased. ` +
+          `Valid from ${startDate} to ${renewalDate}. ` +
+          `Invoice ${invoiceNumber} paid through demo payment.`,
+        ip_address: req.ip,
+      });
+    } catch (auditError) {
+      console.error("SUBSCRIPTION PURCHASE AUDIT ERROR:", auditError);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 10. NOTIFICATION
+    |--------------------------------------------------------------------------
+    */
+
+    try {
+      await notifyCompanyAdmins({
+        company_id: companyId,
+        exclude_user_id: req.user.id,
+        type: "subscription",
+        severity: "medium",
+        title: "Subscription Purchased",
+        message:
+          `${plan.plan_name} purchased successfully. ` +
+          `Valid from ${startDate} to ${renewalDate}.`,
+      });
+    } catch (notificationError) {
+      console.error(
+        "SUBSCRIPTION PURCHASE NOTIFICATION ERROR:",
+        notificationError,
+      );
+    }
 
     return res.status(201).json({
-      message: "Subscription invoice generated successfully",
-      subscription_id: subscriptionId,
-      invoice_id: invoiceResult.insertId,
-      invoice_number: invoiceNumber,
+      message: "Subscription purchased successfully",
+
+      subscription: {
+        id: subscriptionId,
+        plan_id: plan.id,
+        plan_name: plan.plan_name,
+        plan_type: plan.plan_type,
+        start_date: startDate,
+        renewal_date: renewalDate,
+        auto_renewal: true,
+        status: "active",
+      },
+
+      invoice: {
+        id: invoiceId,
+        invoice_number: invoiceNumber,
+        amount: planPrice,
+        invoice_status: "paid",
+      },
+
+      payment: {
+        id: paymentResult.insertId,
+        amount: planPrice,
+        payment_status: "paid",
+        payment_method: "demo",
+        transaction_id: transactionId,
+      },
+
+      branches: {
+        previous_limit: existingBranchLimit,
+        purchased_branches: purchasedBranches,
+        updated_limit: updatedBranchLimit,
+      },
     });
   } catch (error) {
-    await connection.rollback();
+    if (!transactionCommitted) {
+      await connection.rollback();
+    }
 
-    console.log("BUY SUBSCRIPTION PLAN ERROR:", error);
+    console.error("BUY SUBSCRIPTION PLAN ERROR:", error);
 
     return res.status(500).json({
       message: "Failed to buy subscription plan",
@@ -792,6 +1362,7 @@ export const buySubscriptionPlan = async (req, res) => {
     connection.release();
   }
 };
+
 export const downloadMySubscriptionInvoice = async (req, res) => {
   try {
     const companyId = req.user.company_id;
@@ -999,6 +1570,7 @@ export const downloadMyPaymentReceipt = async (req, res) => {
 };
 
 // ASSIGN SUBSCRIPTION
+// ASSIGN SUBSCRIPTION
 export const assignSubscription = async (req, res) => {
   try {
     const { company_id, plan_id, auto_renewal } = req.body;
@@ -1009,23 +1581,62 @@ export const assignSubscription = async (req, res) => {
       });
     }
 
-    const [plans] = await db.query(
+    /*
+    |--------------------------------------------------------------------------
+    | ACTIVE PLAN CHECK
+    |--------------------------------------------------------------------------
+    */
+
+    const [planRows] = await db.query(
       `
-      SELECT *
+      SELECT
+        id,
+        plan_name,
+        plan_type,
+        status
       FROM tbl_subscription_plans
       WHERE id = ?
+        AND status = 'active'
       LIMIT 1
       `,
       [plan_id],
     );
 
-    if (plans.length === 0) {
-      return res.status(404).json({ message: "Plan not found" });
+    if (planRows.length === 0) {
+      return res.status(404).json({
+        message: "Active plan not found",
+      });
     }
+
+    const plan = planRows[0];
+
+    /*
+    |--------------------------------------------------------------------------
+    | FREE PLAN BLOCK
+    |--------------------------------------------------------------------------
+    |
+    | Free Plan KYC approve hone ke baad automatically assign hota hai.
+    | Is manual assignment function se sirf Paid Plan assign hoga.
+    |
+    */
+
+    if (plan.plan_type === "free") {
+      return res.status(400).json({
+        message: "Free Plan is automatically assigned after KYC approval.",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | COMPANY CHECK
+    |--------------------------------------------------------------------------
+    */
 
     const [companyRows] = await db.query(
       `
-      SELECT id, name
+      SELECT
+        id,
+        name
       FROM tbl_companies
       WHERE id = ?
       LIMIT 1
@@ -1034,51 +1645,76 @@ export const assignSubscription = async (req, res) => {
     );
 
     if (companyRows.length === 0) {
-      return res.status(404).json({ message: "Company not found" });
+      return res.status(404).json({
+        message: "Company not found",
+      });
     }
 
-    const [existing] = await db.query(
+    /*
+    |--------------------------------------------------------------------------
+    | DUPLICATE SUBSCRIPTION CHECK
+    |--------------------------------------------------------------------------
+    |
+    | Trial compatibility abhi rakhi gayi hai.
+    |
+    */
+
+    const [existingRows] = await db.query(
       `
       SELECT id
       FROM tbl_company_subscriptions
       WHERE company_id = ?
-      AND status IN ('trial', 'active')
+        AND status IN (
+          'trial',
+          'active',
+          'pending_payment'
+        )
       LIMIT 1
       `,
       [company_id],
     );
 
-    if (existing.length > 0) {
+    if (existingRows.length > 0) {
       return res.status(400).json({
-        message: "Company already has an active subscription",
+        message: "Company already has an active or pending subscription.",
       });
     }
 
-    const plan = plans[0];
+    /*
+    |--------------------------------------------------------------------------
+    | CREATE PENDING PAID SUBSCRIPTION
+    |--------------------------------------------------------------------------
+    |
+    | Payment hone ke baad subscription active hogi.
+    |
+    */
+
+    const finalAutoRenewal = Number(auto_renewal) === 0 ? 0 : 1;
 
     const [subscriptionResult] = await db.query(
       `
-  INSERT INTO tbl_company_subscriptions
-  (
-    company_id,
-    plan_id,
-    status,
-    start_date,
-    trial_end_date,
-    renewal_date,
-    auto_renewal
-  )
-  VALUES
-  (
-    ?, ?,
-    'pending_payment',
-    CURDATE(),
-    NULL,
-    NULL,
-    ?
-  )
-  `,
-      [company_id, plan_id, Number(auto_renewal) === 0 ? 0 : 1],
+      INSERT INTO tbl_company_subscriptions
+      (
+        company_id,
+        plan_id,
+        status,
+        start_date,
+        trial_end_date,
+        renewal_date,
+        auto_renewal
+      )
+      VALUES
+      (
+        ?,
+        ?,
+        'pending_payment',
+        CURDATE(),
+        NULL,
+        NULL,
+        ?
+      )
+      `,
+      [company_id, plan.id, finalAutoRenewal],
     );
 
     await createAuditLog({
@@ -1087,41 +1723,83 @@ export const assignSubscription = async (req, res) => {
       action: "CREATE",
       module_name: "Subscription",
       record_id: subscriptionResult.insertId,
-      description: `Subscription ${plan.plan_name} assigned to ${companyRows[0].name}`,
+      description: `${plan.plan_name} assigned to ` + `${companyRows[0].name}`,
       ip_address: req.ip,
     });
 
     return res.status(201).json({
       message: "Subscription assigned. Generate invoice to activate.",
+
+      subscription: {
+        id: subscriptionResult.insertId,
+        company_id: Number(company_id),
+        plan_id: plan.id,
+        plan_name: plan.plan_name,
+        plan_type: plan.plan_type,
+        status: "pending_payment",
+        auto_renewal: finalAutoRenewal,
+      },
     });
   } catch (error) {
-    console.log("ASSIGN SUBSCRIPTION ERROR:", error);
-    return res.status(500).json({ message: "Failed to assign subscription" });
+    console.error("ASSIGN SUBSCRIPTION ERROR:", error);
+
+    return res.status(500).json({
+      message: "Failed to assign subscription",
+      error: error.message,
+    });
   }
 };
 
 // CHANGE PLAN
+// CHANGE SUBSCRIPTION PLAN
 export const changeSubscriptionPlan = async (req, res) => {
   try {
     const { id } = req.params;
     const { plan_id } = req.body;
 
     if (!plan_id) {
-      return res.status(400).json({ message: "Plan is required" });
+      return res.status(400).json({
+        message: "Plan is required",
+      });
     }
 
-    const [plans] = await db.query(
+    const [planRows] = await db.query(
       `
-      SELECT *
+      SELECT
+        id,
+        plan_name,
+        plan_type,
+        duration_value,
+        duration_unit,
+        status
       FROM tbl_subscription_plans
       WHERE id = ?
+        AND status = 'active'
       LIMIT 1
       `,
       [plan_id],
     );
 
-    if (plans.length === 0) {
-      return res.status(404).json({ message: "Plan not found" });
+    if (planRows.length === 0) {
+      return res.status(404).json({
+        message: "Active plan not found",
+      });
+    }
+
+    const plan = planRows[0];
+
+    const durationValue = Number(plan.duration_value);
+
+    const durationUnit = String(plan.duration_unit || "").toLowerCase();
+
+    if (
+      !Number.isInteger(durationValue) ||
+      durationValue <= 0 ||
+      !["day", "month", "year"].includes(durationUnit)
+    ) {
+      return res.status(400).json({
+        message: "Plan duration configuration is invalid",
+      });
     }
 
     const [subscriptionRows] = await db.query(
@@ -1132,85 +1810,8 @@ export const changeSubscriptionPlan = async (req, res) => {
         c.name AS company_name,
         sp.plan_name AS old_plan_name
       FROM tbl_company_subscriptions cs
-      JOIN tbl_companies c ON cs.company_id = c.id
-      JOIN tbl_subscription_plans sp ON cs.plan_id = sp.id
-      WHERE cs.id = ?
-      LIMIT 1
-      `,
-      [id],
-    );
-
-    if (subscriptionRows.length === 0) {
-      return res.status(404).json({ message: "Subscription not found" });
-    }
-
-    const plan = plans[0];
-    const subscription = subscriptionRows[0];
-
-    const [result] = await db.query(
-      `
-      UPDATE tbl_company_subscriptions
-      SET
-        plan_id = ?,
-        status = 'active',
-        renewal_date = CASE
-          WHEN ? = '1_month' THEN DATE_ADD(CURDATE(), INTERVAL 1 MONTH)
-          WHEN ? = '3_months' THEN DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
-          WHEN ? = '6_months' THEN DATE_ADD(CURDATE(), INTERVAL 6 MONTH)
-          WHEN ? = '1_year' THEN DATE_ADD(CURDATE(), INTERVAL 1 YEAR)
-          ELSE renewal_date
-        END
-      WHERE id = ?
-      `,
-      [
-        plan_id,
-        plan.billing_cycle,
-        plan.billing_cycle,
-        plan.billing_cycle,
-        plan.billing_cycle,
-        id,
-      ],
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Subscription not found" });
-    }
-
-    await createAuditLog({
-      company_id: subscription.company_id,
-      user_id: req.user?.id || null,
-      action: "UPDATE",
-      module_name: "Subscription",
-      record_id: id,
-      description: `Subscription plan changed from ${subscription.old_plan_name} to ${plan.plan_name}`,
-      ip_address: req.ip,
-    });
-
-    return res.status(200).json({
-      message: "Subscription plan changed successfully",
-    });
-  } catch (error) {
-    console.log("CHANGE PLAN ERROR:", error);
-    return res.status(500).json({
-      message: "Failed to change subscription plan",
-      error: error.message,
-    });
-  }
-};
-
-// TOGGLE AUTO RENEWAL
-export const toggleAutoRenewal = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { auto_renewal } = req.body;
-
-    const [subscriptionRows] = await db.query(
-      `
-      SELECT
-        cs.id,
-        cs.company_id,
-        sp.plan_name
-      FROM tbl_company_subscriptions cs
+      JOIN tbl_companies c
+        ON cs.company_id = c.id
       JOIN tbl_subscription_plans sp
         ON cs.plan_id = sp.id
       WHERE cs.id = ?
@@ -1227,25 +1828,55 @@ export const toggleAutoRenewal = async (req, res) => {
 
     const subscription = subscriptionRows[0];
 
-    // SECURITY CHECK
-    if (
-      req.user.role !== "superadmin" &&
-      subscription.company_id !== req.user.company_id
-    ) {
-      return res.status(403).json({
-        message: "Access denied",
-      });
-    }
-
-    const newAutoRenewal = Number(auto_renewal) === 1 ? 1 : 0;
-
     const [result] = await db.query(
       `
       UPDATE tbl_company_subscriptions
-      SET auto_renewal = ?
+      SET
+        plan_id = ?,
+        status = 'active',
+
+        renewal_date = CASE
+          WHEN ? = 'day'
+            THEN DATE_ADD(
+              CURDATE(),
+              INTERVAL ? DAY
+            )
+
+          WHEN ? = 'month'
+            THEN DATE_ADD(
+              CURDATE(),
+              INTERVAL ? MONTH
+            )
+
+          WHEN ? = 'year'
+            THEN DATE_ADD(
+              CURDATE(),
+              INTERVAL ? YEAR
+            )
+        END,
+
+        auto_renewal = CASE
+          WHEN ? = 'free' THEN 0
+          ELSE auto_renewal
+        END
+
       WHERE id = ?
       `,
-      [newAutoRenewal, id],
+      [
+        plan.id,
+
+        durationUnit,
+        durationValue,
+
+        durationUnit,
+        durationValue,
+
+        durationUnit,
+        durationValue,
+
+        plan.plan_type,
+        id,
+      ],
     );
 
     if (result.affectedRows === 0) {
@@ -1260,6 +1891,131 @@ export const toggleAutoRenewal = async (req, res) => {
       action: "UPDATE",
       module_name: "Subscription",
       record_id: id,
+      description:
+        `Subscription plan changed from ` +
+        `${subscription.old_plan_name} to ` +
+        `${plan.plan_name}`,
+      ip_address: req.ip,
+    });
+
+    return res.status(200).json({
+      message: "Subscription plan changed successfully",
+    });
+  } catch (error) {
+    console.error("CHANGE PLAN ERROR:", error);
+
+    return res.status(500).json({
+      message: "Failed to change subscription plan",
+      error: error.message,
+    });
+  }
+};
+
+// TOGGLE AUTO RENEWAL
+export const toggleAutoRenewal = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { auto_renewal } = req.body;
+
+    if (![0, 1, "0", "1"].includes(auto_renewal)) {
+      return res.status(400).json({
+        message: "Auto renewal value must be 0 or 1",
+      });
+    }
+
+    const [subscriptionRows] = await db.query(
+      `
+      SELECT
+        cs.id,
+        cs.company_id,
+        cs.status,
+        cs.auto_renewal,
+        sp.plan_name,
+        sp.plan_type
+      FROM tbl_company_subscriptions cs
+      JOIN tbl_subscription_plans sp
+        ON sp.id = cs.plan_id
+      WHERE cs.id = ?
+      LIMIT 1
+      `,
+      [id],
+    );
+
+    if (subscriptionRows.length === 0) {
+      return res.status(404).json({
+        message: "Subscription not found",
+      });
+    }
+
+    const subscription = subscriptionRows[0];
+
+    /*
+    |--------------------------------------------------------------------------
+    | COMPANY SECURITY CHECK
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+      req.user.role !== "superadmin" &&
+      Number(subscription.company_id) !== Number(req.user.company_id)
+    ) {
+      return res.status(403).json({
+        message: "Access denied",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | FREE PLAN AUTO RENEWAL BLOCK
+    |--------------------------------------------------------------------------
+    */
+
+    if (subscription.plan_type === "free") {
+      // Safety: Free plan hamesha auto-renewal OFF rahega
+      await db.query(
+        `
+        UPDATE tbl_company_subscriptions
+        SET auto_renewal = 0
+        WHERE id = ?
+        `,
+        [id],
+      );
+
+      return res.status(400).json({
+        message: "Auto renewal is not available for the Free plan.",
+        auto_renewal: 0,
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | ONLY ACTIVE PAID PLAN
+    |--------------------------------------------------------------------------
+    */
+
+    if (subscription.status !== "active") {
+      return res.status(400).json({
+        message: "Auto renewal can only be changed for an active subscription.",
+      });
+    }
+
+    const newAutoRenewal = Number(auto_renewal) === 1 ? 1 : 0;
+
+    await db.query(
+      `
+      UPDATE tbl_company_subscriptions
+      SET auto_renewal = ?
+      WHERE id = ?
+      `,
+      [newAutoRenewal, id],
+    );
+
+    await createAuditLog({
+      company_id: subscription.company_id,
+      user_id: req.user?.id || null,
+      action: "UPDATE",
+      module_name: "Subscription",
+      record_id: id,
       description: `Auto renewal ${
         newAutoRenewal ? "enabled" : "disabled"
       } for ${subscription.plan_name}`,
@@ -1267,18 +2023,23 @@ export const toggleAutoRenewal = async (req, res) => {
     });
 
     return res.status(200).json({
-      message: "Auto renewal updated successfully",
+      message: newAutoRenewal
+        ? "Auto renewal enabled successfully"
+        : "Auto renewal disabled successfully",
+      auto_renewal: newAutoRenewal,
     });
   } catch (error) {
     console.log("AUTO RENEWAL ERROR:", error);
 
     return res.status(500).json({
       message: "Failed to update auto renewal",
+      error: error.message,
     });
   }
 };
 
 // RECORD PAYMENT
+// RECORD SUBSCRIPTION PAYMENT
 export const recordSubscriptionPayment = async (req, res) => {
   try {
     const {
@@ -1311,20 +2072,44 @@ export const recordSubscriptionPayment = async (req, res) => {
         cs.company_id,
         c.name AS company_name,
         sp.plan_name,
-        sp.billing_cycle
+        sp.plan_type,
+        sp.duration_value,
+        sp.duration_unit
       FROM tbl_company_subscriptions cs
-      JOIN tbl_companies c ON cs.company_id = c.id
-      JOIN tbl_subscription_plans sp ON cs.plan_id = sp.id
+      JOIN tbl_companies c
+        ON cs.company_id = c.id
+      JOIN tbl_subscription_plans sp
+        ON cs.plan_id = sp.id
       WHERE cs.id = ?
-      AND cs.company_id = ?
+        AND cs.company_id = ?
       LIMIT 1
       `,
       [subscription_id, company_id],
     );
 
     if (subscriptionRows.length === 0) {
-      return res.status(404).json({ message: "Subscription not found" });
+      return res.status(404).json({
+        message: "Subscription not found",
+      });
     }
+
+    const subscription = subscriptionRows[0];
+
+    const durationValue = Number(subscription.duration_value);
+
+    const durationUnit = String(subscription.duration_unit || "").toLowerCase();
+
+    if (
+      !Number.isInteger(durationValue) ||
+      durationValue <= 0 ||
+      !["day", "month", "year"].includes(durationUnit)
+    ) {
+      return res.status(400).json({
+        message: "Plan duration configuration is invalid",
+      });
+    }
+
+    const finalPaymentStatus = payment_status || "paid";
 
     const [paymentResult] = await db.query(
       `
@@ -1338,34 +2123,82 @@ export const recordSubscriptionPayment = async (req, res) => {
         transaction_id,
         payment_date
       )
-      VALUES (?, ?, ?, ?, ?, ?, CURDATE())
+      VALUES
+      (
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        CURDATE()
+      )
       `,
       [
         subscription_id,
         company_id,
         finalAmount,
-        payment_status || "paid",
+        finalPaymentStatus,
         payment_method || "manual",
         transaction_id || null,
       ],
     );
 
-    if (!payment_status || payment_status === "paid") {
+    /*
+    |--------------------------------------------------------------------------
+    | ACTIVATE SUBSCRIPTION AFTER PAID PAYMENT
+    |--------------------------------------------------------------------------
+    */
+
+    if (finalPaymentStatus === "paid") {
       await db.query(
         `
-        UPDATE tbl_company_subscriptions cs
-        JOIN tbl_subscription_plans sp ON cs.plan_id = sp.id
-        SET cs.status = 'active',
-            cs.renewal_date = CASE
-              WHEN sp.billing_cycle = '1_month' THEN DATE_ADD(CURDATE(), INTERVAL 1 MONTH)
-              WHEN sp.billing_cycle = '3_months' THEN DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
-              WHEN sp.billing_cycle = '6_months' THEN DATE_ADD(CURDATE(), INTERVAL 6 MONTH)
-              WHEN sp.billing_cycle = '1_year' THEN DATE_ADD(CURDATE(), INTERVAL 1 YEAR)
-              ELSE cs.renewal_date
-            END
-        WHERE cs.id = ?
+        UPDATE tbl_company_subscriptions
+        SET
+          status = 'active',
+
+          renewal_date = CASE
+            WHEN ? = 'day'
+              THEN DATE_ADD(
+                CURDATE(),
+                INTERVAL ? DAY
+              )
+
+            WHEN ? = 'month'
+              THEN DATE_ADD(
+                CURDATE(),
+                INTERVAL ? MONTH
+              )
+
+            WHEN ? = 'year'
+              THEN DATE_ADD(
+                CURDATE(),
+                INTERVAL ? YEAR
+              )
+          END,
+
+          auto_renewal = CASE
+            WHEN ? = 'free' THEN 0
+            ELSE auto_renewal
+          END
+
+        WHERE id = ?
+          AND company_id = ?
         `,
-        [subscription_id],
+        [
+          durationUnit,
+          durationValue,
+
+          durationUnit,
+          durationValue,
+
+          durationUnit,
+          durationValue,
+
+          subscription.plan_type,
+          subscription_id,
+          company_id,
+        ],
       );
     }
 
@@ -1375,23 +2208,43 @@ export const recordSubscriptionPayment = async (req, res) => {
       action: "CREATE",
       module_name: "Subscription Payment",
       record_id: paymentResult.insertId,
-      description: `Subscription payment ₹${formatAmount(finalAmount)} recorded for ${subscriptionRows[0].plan_name}`,
+      description: `Subscription payment ₹${formatAmount(
+        finalAmount,
+      )} recorded for ${subscription.plan_name}`,
       ip_address: req.ip,
     });
 
     return res.status(201).json({
       message: "Payment recorded successfully",
+
+      payment: {
+        id: paymentResult.insertId,
+        subscription_id: Number(subscription_id),
+        company_id: Number(company_id),
+        amount: finalAmount,
+        payment_status: finalPaymentStatus,
+        payment_method: payment_method || "manual",
+        transaction_id: transaction_id || null,
+      },
     });
   } catch (error) {
-    console.log("RECORD PAYMENT ERROR:", error);
-    return res.status(500).json({ message: "Failed to record payment" });
+    console.error("RECORD PAYMENT ERROR:", error);
+
+    return res.status(500).json({
+      message: "Failed to record payment",
+      error: error.message,
+    });
   }
 };
 
-// GET PAYMENTS
-export const getSubscriptionPayments = async (req, res) => {
+// SUPERADMIN: GET SUBSCRIPTION PAYMENTS
+export const getSubscriptionPayments = async (
+  req,
+  res,
+) => {
   try {
-    const [payments] = await db.query(`
+    const [payments] = await db.query(
+      `
       SELECT
         spay.id,
         spay.subscription_id,
@@ -1403,18 +2256,56 @@ export const getSubscriptionPayments = async (req, res) => {
         spay.payment_date,
         spay.created_at,
         c.name AS company_name,
-        plan.plan_name
+        plan.plan_name,
+
+        (
+          SELECT si.invoice_number
+          FROM tbl_subscription_invoices si
+          WHERE si.subscription_id =
+            spay.subscription_id
+            AND si.company_id =
+              spay.company_id
+            AND si.amount = spay.amount
+
+          ORDER BY
+            CASE
+              WHEN si.invoice_date =
+                spay.payment_date
+              THEN 0
+              ELSE 1
+            END,
+            si.id DESC
+
+          LIMIT 1
+        ) AS invoice_number
+
       FROM tbl_subscription_payments spay
-      JOIN tbl_companies c ON spay.company_id = c.id
-      JOIN tbl_company_subscriptions cs ON spay.subscription_id = cs.id
-      JOIN tbl_subscription_plans plan ON cs.plan_id = plan.id
+
+      JOIN tbl_companies c
+        ON spay.company_id = c.id
+
+      JOIN tbl_company_subscriptions cs
+        ON spay.subscription_id = cs.id
+
+      JOIN tbl_subscription_plans plan
+        ON cs.plan_id = plan.id
+
       ORDER BY spay.id DESC
-    `);
+      `,
+    );
 
     return res.status(200).json(payments);
   } catch (error) {
-    console.log("GET PAYMENTS ERROR:", error);
-    return res.status(500).json({ message: "Failed to fetch payments" });
+    console.error(
+      "GET SUBSCRIPTION PAYMENTS ERROR:",
+      error,
+    );
+
+    return res.status(500).json({
+      message:
+        "Failed to fetch subscription payments",
+      error: error.message,
+    });
   }
 };
 
@@ -1549,7 +2440,9 @@ export const getMySubscription = async (req, res) => {
     const companyId = req.user.company_id;
 
     if (!companyId) {
-      return res.status(400).json({ message: "Company ID missing" });
+      return res.status(400).json({
+        message: "Company ID missing",
+      });
     }
 
     const [rows] = await db.query(
@@ -1558,40 +2451,110 @@ export const getMySubscription = async (req, res) => {
         cs.id,
         cs.company_id,
         cs.plan_id,
-        cs.status,
+
+        CASE
+          WHEN cs.status = 'active'
+            AND cs.renewal_date IS NOT NULL
+            AND cs.renewal_date < CURDATE()
+          THEN 'expired'
+          ELSE cs.status
+        END AS status,
+
         cs.start_date,
         cs.trial_end_date,
         cs.renewal_date,
         cs.auto_renewal,
         cs.created_at,
 
-        cs.trial_extension_requested,
-        cs.trial_extension_status,
-        cs.trial_extension_used,
-        cs.trial_extension_requested_at,
-        cs.trial_extension_approved_at,
-        cs.trial_extension_approved_by,
-
         sp.plan_name,
+        sp.plan_type,
         sp.price,
         sp.billing_cycle,
-        sp.trial_days,
-        sp.max_branches,
-        sp.features
+        sp.duration_value,
+        sp.duration_unit,
+        sp.is_default,
+        sp.max_users,
+        sp.max_invoices,
+        sp.features,
+
+        GREATEST(
+          COALESCE(c.branch_limit, 0),
+          COALESCE(sp.max_branches, 0)
+        ) AS max_branches,
+
+        COALESCE(branch_data.used_branches, 0) AS used_branches,
+
+        GREATEST(
+          GREATEST(
+            COALESCE(c.branch_limit, 0),
+            COALESCE(sp.max_branches, 0)
+          ) - COALESCE(branch_data.used_branches, 0),
+          0
+        ) AS remaining_branches,
+
+        CASE
+          WHEN cs.renewal_date IS NULL THEN NULL
+          ELSE GREATEST(DATEDIFF(cs.renewal_date, CURDATE()), 0)
+        END AS remaining_days
+
       FROM tbl_company_subscriptions cs
+
       JOIN tbl_subscription_plans sp
         ON cs.plan_id = sp.id
+
+      JOIN tbl_companies c
+        ON cs.company_id = c.id
+
+      LEFT JOIN (
+        SELECT
+          company_id,
+          COUNT(*) AS used_branches
+        FROM tbl_company_branches
+        GROUP BY company_id
+      ) branch_data
+        ON branch_data.company_id = cs.company_id
+
       WHERE cs.company_id = ?
-      AND cs.status IN ('trial', 'active', 'pending_payment', 'expired')
+        AND cs.status IN (
+          'trial',
+          'active',
+          'pending_payment',
+          'expired'
+        )
+
       ORDER BY
         CASE
-          WHEN cs.status = 'active' THEN 1
-          WHEN cs.status = 'trial' THEN 2
-          WHEN cs.status = 'pending_payment' THEN 3
-          WHEN cs.status = 'expired' THEN 4
+          WHEN cs.status = 'active'
+            AND cs.start_date <= CURDATE()
+            AND (
+              cs.renewal_date IS NULL
+              OR cs.renewal_date >= CURDATE()
+            )
+          THEN 1
+
+          WHEN cs.status = 'trial'
+            AND cs.start_date <= CURDATE()
+            AND (
+              cs.trial_end_date IS NULL
+              OR cs.trial_end_date >= CURDATE()
+            )
+          THEN 2
+
+          WHEN cs.status = 'pending_payment'
+          THEN 3
+
+          WHEN cs.status = 'expired'
+            OR (
+              cs.renewal_date IS NOT NULL
+              AND cs.renewal_date < CURDATE()
+            )
+          THEN 4
+
           ELSE 5
         END,
+
         cs.id DESC
+
       LIMIT 1
       `,
       [companyId],
@@ -1599,7 +2562,7 @@ export const getMySubscription = async (req, res) => {
 
     return res.status(200).json(rows[0] || null);
   } catch (error) {
-    console.log("GET MY SUBSCRIPTION ERROR:", error);
+    console.error("GET MY SUBSCRIPTION ERROR:", error);
 
     return res.status(500).json({
       message: "Failed to fetch company subscription",
@@ -1649,12 +2612,17 @@ export const getMySubscriptionInvoices = async (req, res) => {
 };
 
 // COMPANY SIDE: GET OWN SUBSCRIPTION PAYMENTS
-export const getMySubscriptionPayments = async (req, res) => {
+export const getMySubscriptionPayments = async (
+  req,
+  res,
+) => {
   try {
     const companyId = req.user.company_id;
 
     if (!companyId) {
-      return res.status(400).json({ message: "Company ID missing" });
+      return res.status(400).json({
+        message: "Company ID missing",
+      });
     }
 
     const [payments] = await db.query(
@@ -1669,11 +2637,39 @@ export const getMySubscriptionPayments = async (req, res) => {
         spay.transaction_id,
         spay.payment_date,
         spay.created_at,
-        plan.plan_name
+        plan.plan_name,
+
+        (
+          SELECT si.invoice_number
+          FROM tbl_subscription_invoices si
+          WHERE si.subscription_id =
+            spay.subscription_id
+            AND si.company_id =
+              spay.company_id
+            AND si.amount = spay.amount
+
+          ORDER BY
+            CASE
+              WHEN si.invoice_date =
+                spay.payment_date
+              THEN 0
+              ELSE 1
+            END,
+            si.id DESC
+
+          LIMIT 1
+        ) AS invoice_number
+
       FROM tbl_subscription_payments spay
-      JOIN tbl_company_subscriptions cs ON spay.subscription_id = cs.id
-      JOIN tbl_subscription_plans plan ON cs.plan_id = plan.id
+
+      JOIN tbl_company_subscriptions cs
+        ON spay.subscription_id = cs.id
+
+      JOIN tbl_subscription_plans plan
+        ON cs.plan_id = plan.id
+
       WHERE spay.company_id = ?
+
       ORDER BY spay.id DESC
       `,
       [companyId],
@@ -1681,9 +2677,15 @@ export const getMySubscriptionPayments = async (req, res) => {
 
     return res.status(200).json(payments);
   } catch (error) {
-    console.log("GET MY SUBSCRIPTION PAYMENTS ERROR:", error);
+    console.error(
+      "GET MY SUBSCRIPTION PAYMENTS ERROR:",
+      error,
+    );
+
     return res.status(500).json({
-      message: "Failed to fetch subscription payments",
+      message:
+        "Failed to fetch subscription payments",
+      error: error.message,
     });
   }
 };
@@ -1694,6 +2696,7 @@ export const payMySubscriptionInvoice = async (req, res) => {
 
   try {
     const companyId = req.user.company_id;
+
     const {
       invoice_id,
       payment_method = "manual",
@@ -1701,14 +2704,24 @@ export const payMySubscriptionInvoice = async (req, res) => {
     } = req.body;
 
     if (!companyId) {
-      return res.status(400).json({ message: "Company ID missing" });
+      return res.status(400).json({
+        message: "Company ID missing",
+      });
     }
 
     if (!invoice_id) {
-      return res.status(400).json({ message: "Invoice is required" });
+      return res.status(400).json({
+        message: "Invoice is required",
+      });
     }
 
     await connection.beginTransaction();
+
+    /*
+    |--------------------------------------------------------------------------
+    | GET AND LOCK INVOICE
+    |--------------------------------------------------------------------------
+    */
 
     const [invoiceRows] = await connection.query(
       `
@@ -1721,21 +2734,25 @@ export const payMySubscriptionInvoice = async (req, res) => {
         si.invoice_status,
         cs.status AS subscription_status,
         sp.plan_name,
-        sp.billing_cycle
+        sp.plan_type,
+        sp.duration_value,
+        sp.duration_unit
       FROM tbl_subscription_invoices si
       JOIN tbl_company_subscriptions cs
         ON si.subscription_id = cs.id
       JOIN tbl_subscription_plans sp
         ON cs.plan_id = sp.id
       WHERE si.id = ?
-      AND si.company_id = ?
+        AND si.company_id = ?
       LIMIT 1
+      FOR UPDATE
       `,
       [invoice_id, companyId],
     );
 
-    if (!invoiceRows.length) {
+    if (invoiceRows.length === 0) {
       await connection.rollback();
+
       return res.status(404).json({
         message: "Subscription invoice not found",
       });
@@ -1745,25 +2762,57 @@ export const payMySubscriptionInvoice = async (req, res) => {
 
     if (invoice.invoice_status === "paid") {
       await connection.rollback();
+
       return res.status(400).json({
         message: "Invoice already paid",
       });
     }
 
+    const durationValue = Number(invoice.duration_value);
+
+    const durationUnit = String(invoice.duration_unit || "").toLowerCase();
+
+    if (
+      !Number.isInteger(durationValue) ||
+      durationValue <= 0 ||
+      !["day", "month", "year"].includes(durationUnit)
+    ) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        message: "Plan duration configuration is invalid",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | CREATE PAID PAYMENT
+    |--------------------------------------------------------------------------
+    */
+
     const [paymentResult] = await connection.query(
       `
-      INSERT INTO tbl_subscription_payments
-      (
-        subscription_id,
-        company_id,
-        amount,
-        payment_status,
-        payment_method,
-        transaction_id,
-        payment_date
-      )
-      VALUES (?, ?, ?, 'paid', ?, ?, CURDATE())
-      `,
+        INSERT INTO tbl_subscription_payments
+        (
+          subscription_id,
+          company_id,
+          amount,
+          payment_status,
+          payment_method,
+          transaction_id,
+          payment_date
+        )
+        VALUES
+        (
+          ?,
+          ?,
+          ?,
+          'paid',
+          ?,
+          ?,
+          CURDATE()
+        )
+        `,
       [
         invoice.subscription_id,
         companyId,
@@ -1773,88 +2822,186 @@ export const payMySubscriptionInvoice = async (req, res) => {
       ],
     );
 
+    /*
+    |--------------------------------------------------------------------------
+    | MARK INVOICE PAID
+    |--------------------------------------------------------------------------
+    */
+
     await connection.query(
       `
       UPDATE tbl_subscription_invoices
       SET invoice_status = 'paid'
       WHERE id = ?
-      AND company_id = ?
+        AND company_id = ?
       `,
       [invoice_id, companyId],
     );
+
+    /*
+    |--------------------------------------------------------------------------
+    | CANCEL OTHER OLD SUBSCRIPTIONS
+    |--------------------------------------------------------------------------
+    |
+    | Trial compatibility retained.
+    |
+    */
 
     await connection.query(
       `
       UPDATE tbl_company_subscriptions
       SET status = 'cancelled'
       WHERE company_id = ?
-      AND id != ?
-      AND status IN ('trial', 'active', 'pending_payment', 'expired')
+        AND id != ?
+        AND status IN (
+          'trial',
+          'active',
+          'pending_payment',
+          'expired'
+        )
       `,
       [companyId, invoice.subscription_id],
     );
 
+    /*
+    |--------------------------------------------------------------------------
+    | ACTIVATE PAID SUBSCRIPTION
+    |--------------------------------------------------------------------------
+    */
+
     await connection.query(
       `
-      UPDATE tbl_company_subscriptions cs
-      JOIN tbl_subscription_plans sp
-        ON cs.plan_id = sp.id
+      UPDATE tbl_company_subscriptions
       SET
-        cs.status = 'active',
-        cs.renewal_date = CASE
-          WHEN sp.billing_cycle = '1_month'
-            THEN DATE_ADD(CURDATE(), INTERVAL 1 MONTH)
-          WHEN sp.billing_cycle = '3_months'
-            THEN DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
-          WHEN sp.billing_cycle = '6_months'
-            THEN DATE_ADD(CURDATE(), INTERVAL 6 MONTH)
-          WHEN sp.billing_cycle = '1_year'
-            THEN DATE_ADD(CURDATE(), INTERVAL 1 YEAR)
-          ELSE cs.renewal_date
+        status = 'active',
+
+        renewal_date = CASE
+          WHEN ? = 'day'
+            THEN DATE_ADD(
+              CURDATE(),
+              INTERVAL ? DAY
+            )
+
+          WHEN ? = 'month'
+            THEN DATE_ADD(
+              CURDATE(),
+              INTERVAL ? MONTH
+            )
+
+          WHEN ? = 'year'
+            THEN DATE_ADD(
+              CURDATE(),
+              INTERVAL ? YEAR
+            )
+        END,
+
+        auto_renewal = CASE
+          WHEN ? = 'free' THEN 0
+          ELSE auto_renewal
         END
-      WHERE cs.id = ?
-      AND cs.company_id = ?
+
+      WHERE id = ?
+        AND company_id = ?
       `,
-      [invoice.subscription_id, companyId],
+      [
+        durationUnit,
+        durationValue,
+
+        durationUnit,
+        durationValue,
+
+        durationUnit,
+        durationValue,
+
+        invoice.plan_type,
+        invoice.subscription_id,
+        companyId,
+      ],
     );
-
-    await createAuditLog({
-      company_id: companyId,
-      user_id: req.user?.id || null,
-      action: "CREATE",
-      module_name: "Subscription Payment",
-      record_id: paymentResult.insertId,
-      description: `Subscription invoice ${invoice.invoice_number} paid for ${invoice.plan_name}`,
-      ip_address: req.ip,
-    });
-
-    await createAuditLog({
-      company_id: companyId,
-      user_id: req.user?.id || null,
-      action: "UPDATE",
-      module_name: "Subscription",
-      record_id: invoice.subscription_id,
-      description: `Subscription ${invoice.plan_name} activated after payment`,
-      ip_address: req.ip,
-    });
-
-    await notifyCompanyAdmins({
-      company_id: companyId,
-      type: "subscription",
-      exclude_user_id: req.user.id,
-      severity: "medium",
-      title: "Subscription Activated",
-      message: `${invoice.plan_name} subscription activated.`,
-    });
 
     await connection.commit();
 
+    /*
+    |--------------------------------------------------------------------------
+    | AUDIT LOGS
+    |--------------------------------------------------------------------------
+    */
+
+    try {
+      await createAuditLog({
+        company_id: companyId,
+        user_id: req.user?.id || null,
+        action: "CREATE",
+        module_name: "Subscription Payment",
+        record_id: paymentResult.insertId,
+        description:
+          `Subscription invoice ` +
+          `${invoice.invoice_number} paid for ` +
+          `${invoice.plan_name}`,
+        ip_address: req.ip,
+      });
+
+      await createAuditLog({
+        company_id: companyId,
+        user_id: req.user?.id || null,
+        action: "UPDATE",
+        module_name: "Subscription",
+        record_id: invoice.subscription_id,
+        description:
+          `Subscription ${invoice.plan_name} ` + "activated after payment",
+        ip_address: req.ip,
+      });
+    } catch (auditError) {
+      console.error("SUBSCRIPTION PAYMENT AUDIT ERROR:", auditError);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | NOTIFICATION
+    |--------------------------------------------------------------------------
+    */
+
+    try {
+      await notifyCompanyAdmins({
+        company_id: companyId,
+        type: "subscription",
+        exclude_user_id: req.user.id,
+        severity: "medium",
+        title: "Subscription Activated",
+        message: `${invoice.plan_name} subscription activated.`,
+      });
+    } catch (notificationError) {
+      console.error(
+        "SUBSCRIPTION PAYMENT NOTIFICATION ERROR:",
+        notificationError,
+      );
+    }
+
     return res.status(200).json({
       message: "Subscription payment completed and plan activated successfully",
+
+      subscription: {
+        id: invoice.subscription_id,
+        plan_name: invoice.plan_name,
+        status: "active",
+      },
+
+      payment: {
+        id: paymentResult.insertId,
+        amount: Number(invoice.amount),
+        payment_status: "paid",
+        payment_method,
+        transaction_id,
+      },
     });
   } catch (error) {
-    await connection.rollback();
-    console.log("PAY MY SUBSCRIPTION ERROR:", error);
+    try {
+      await connection.rollback();
+    } catch {
+      // Ignore rollback failure
+    }
+
+    console.error("PAY MY SUBSCRIPTION ERROR:", error);
 
     return res.status(500).json({
       message: "Failed to pay subscription invoice",
@@ -1862,275 +3009,5 @@ export const payMySubscriptionInvoice = async (req, res) => {
     });
   } finally {
     connection.release();
-  }
-};
-
-export const requestTrialExtension = async (req, res) => {
-  try {
-    const companyId = req.user.company_id;
-    const userId = req.user.id;
-
-    if (!companyId) {
-      return res.status(400).json({ message: "Company ID missing" });
-    }
-
-    const [rows] = await db.query(
-      `
-      SELECT id, status, trial_extension_used, trial_extension_status
-      FROM tbl_company_subscriptions
-      WHERE company_id = ?
-      AND status = 'expired'
-      ORDER BY id DESC
-      LIMIT 1
-      `,
-      [companyId],
-    );
-
-    if (rows.length === 0) {
-      return res.status(400).json({
-        message: "Trial extension can be requested only after trial expiry",
-      });
-    }
-
-    const subscription = rows[0];
-
-    if (Number(subscription.trial_extension_used) === 1) {
-      return res.status(400).json({
-        message: "Trial extension has already been used",
-      });
-    }
-
-    if (subscription.trial_extension_status === "pending") {
-      return res.status(400).json({
-        message: "Trial extension request is already pending",
-      });
-    }
-
-    await db.query(
-      `
-      UPDATE tbl_company_subscriptions
-      SET
-        trial_extension_requested = 1,
-        trial_extension_status = 'pending',
-        trial_extension_requested_at = NOW()
-      WHERE id = ?
-      `,
-      [subscription.id],
-    );
-
-    await createAuditLog({
-      company_id: companyId,
-      user_id: userId,
-      action: "TRIAL_EXTENSION_REQUESTED",
-      module_name: "Subscription",
-      record_id: subscription.id,
-      description: "Company Admin requested a 10-day trial extension",
-      ip_address: req.ip,
-    });
-
-    await notifySuperAdmins({
-      type: "subscription",
-      severity: "high",
-      title: "Trial Extension Requested",
-      message: "A company has requested a trial extension.",
-    });
-
-    return res.status(200).json({
-      message: "Trial extension request submitted successfully",
-    });
-  } catch (error) {
-    console.log("REQUEST TRIAL EXTENSION ERROR:", error);
-    return res.status(500).json({
-      message: "Failed to request trial extension",
-      error: error.message,
-    });
-  }
-};
-
-export const getTrialExtensionRequests = async (req, res) => {
-  try {
-    const [rows] = await db.query(
-      `
-      SELECT
-        cs.id,
-        cs.company_id,
-        cs.status,
-        cs.start_date,
-        cs.trial_end_date,
-        cs.trial_extension_requested,
-        cs.trial_extension_status,
-        cs.trial_extension_used,
-        cs.trial_extension_requested_at,
-        cs.trial_extension_approved_at,
-        c.name AS company_name,
-        c.email AS company_email,
-        sp.plan_name
-      FROM tbl_company_subscriptions cs
-      JOIN tbl_companies c ON cs.company_id = c.id
-      JOIN tbl_subscription_plans sp ON cs.plan_id = sp.id
-      WHERE cs.trial_extension_requested = 1
-      ORDER BY cs.trial_extension_requested_at DESC, cs.id DESC
-      `,
-    );
-
-    return res.status(200).json(rows);
-  } catch (error) {
-    console.log("GET TRIAL EXTENSION REQUESTS ERROR:", error);
-    return res.status(500).json({
-      message: "Failed to fetch trial extension requests",
-      error: error.message,
-    });
-  }
-};
-
-export const approveTrialExtension = async (req, res) => {
-  try {
-    const { subscriptionId } = req.params;
-    const superAdminId = req.user.id;
-
-    const [rows] = await db.query(
-      `
-      SELECT id, company_id, status, trial_end_date, trial_extension_used, trial_extension_status
-      FROM tbl_company_subscriptions
-      WHERE id = ?
-      LIMIT 1
-      `,
-      [subscriptionId],
-    );
-
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "Subscription not found" });
-    }
-
-    const subscription = rows[0];
-
-    if (subscription.status !== "expired") {
-      return res.status(400).json({
-        message: "Only expired trial subscriptions can be extended",
-      });
-    }
-
-    if (subscription.trial_extension_status !== "pending") {
-      return res.status(400).json({
-        message: "No pending trial extension request found",
-      });
-    }
-
-    if (Number(subscription.trial_extension_used) === 1) {
-      return res.status(400).json({
-        message: "Trial extension has already been used",
-      });
-    }
-
-    await db.query(
-      `
-      UPDATE tbl_company_subscriptions
-      SET
-        status = 'trial',
-        trial_end_date = DATE_ADD(CURDATE(), INTERVAL 10 DAY),
-        trial_extension_status = 'approved',
-        trial_extension_used = 1,
-        trial_extension_approved_at = NOW(),
-        trial_extension_approved_by = ?
-      WHERE id = ?
-      `,
-      [superAdminId, subscriptionId],
-    );
-
-    await createAuditLog({
-      company_id: subscription.company_id,
-      user_id: superAdminId,
-      action: "TRIAL_EXTENSION_APPROVED",
-      module_name: "Subscription",
-      record_id: subscriptionId,
-      description: "SuperAdmin approved 10-day trial extension",
-      ip_address: req.ip,
-    });
-
-    await notifyCompanyAdmins({
-      company_id: subscription.company_id,
-      exclude_user_id: req.user.id,
-      type: "subscription",
-      severity: "medium",
-      title: "Trial Extension Approved",
-      message: "Your trial extension has been approved.",
-    });
-
-    return res.status(200).json({
-      message: "Trial extension approved successfully",
-    });
-  } catch (error) {
-    console.log("APPROVE TRIAL EXTENSION ERROR:", error);
-    return res.status(500).json({
-      message: "Failed to approve trial extension",
-      error: error.message,
-    });
-  }
-};
-
-export const rejectTrialExtension = async (req, res) => {
-  try {
-    const { subscriptionId } = req.params;
-    const superAdminId = req.user.id;
-
-    const [rows] = await db.query(
-      `
-      SELECT id, company_id, trial_extension_status
-      FROM tbl_company_subscriptions
-      WHERE id = ?
-      LIMIT 1
-      `,
-      [subscriptionId],
-    );
-
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "Subscription not found" });
-    }
-
-    const subscription = rows[0];
-
-    if (subscription.trial_extension_status !== "pending") {
-      return res.status(400).json({
-        message: "No pending trial extension request found",
-      });
-    }
-
-    await db.query(
-      `
-      UPDATE tbl_company_subscriptions
-      SET trial_extension_status = 'rejected'
-      WHERE id = ?
-      `,
-      [subscriptionId],
-    );
-
-    await createAuditLog({
-      company_id: subscription.company_id,
-      user_id: superAdminId,
-      action: "TRIAL_EXTENSION_REJECTED",
-      module_name: "Subscription",
-      record_id: subscriptionId,
-      description: "SuperAdmin rejected trial extension request",
-      ip_address: req.ip,
-    });
-
-    await notifyCompanyAdmins({
-      company_id: subscription.company_id,
-      exclude_user_id: req.user.id,
-      type: "subscription",
-      severity: "high",
-      title: "Trial Extension Rejected",
-      message: "Your trial extension request has been rejected.",
-    });
-
-    return res.status(200).json({
-      message: "Trial extension rejected successfully",
-    });
-  } catch (error) {
-    console.log("REJECT TRIAL EXTENSION ERROR:", error);
-    return res.status(500).json({
-      message: "Failed to reject trial extension",
-      error: error.message,
-    });
   }
 };

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
+import { createPortal } from "react-dom";
 
 import {
   GitBranch,
@@ -24,8 +25,7 @@ import {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[6-9]\d{9}$/;
-const GST_REGEX =
-  /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 const ZIP_REGEX = /^\d{5,6}$/;
 const BRANCH_NAME_REGEX = /^[a-zA-Z0-9\s.&'(),-]+$/;
 const BRANCH_CODE_REGEX = /^[a-zA-Z0-9_-]{2,20}$/;
@@ -82,7 +82,9 @@ function Branches() {
         },
       });
 
-      const list = Array.isArray(res.data) ? res.data : res.data?.branches || [];
+      const list = Array.isArray(res.data)
+        ? res.data
+        : res.data?.branches || [];
       setBranches(list);
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to fetch branches");
@@ -95,7 +97,9 @@ function Branches() {
   }, [statusFilter]);
 
   const stats = useMemo(() => {
-    const active = branches.filter((branch) => branch.status === "active").length;
+    const active = branches.filter(
+      (branch) => branch.status === "active",
+    ).length;
     const inactive = branches.length - active;
 
     return {
@@ -142,7 +146,8 @@ function Branches() {
     if (!branchName) {
       nextErrors.branch_name = "Branch name is required";
     } else if (branchName.length < 2 || branchName.length > 100) {
-      nextErrors.branch_name = "Branch name must be between 2 and 100 characters";
+      nextErrors.branch_name =
+        "Branch name must be between 2 and 100 characters";
     } else if (!BRANCH_NAME_REGEX.test(branchName)) {
       nextErrors.branch_name = "Branch name contains invalid characters";
     }
@@ -333,7 +338,7 @@ function Branches() {
     );
   };
 
-    return (
+  return (
     <div className="w-full min-w-0 space-y-5 overflow-x-hidden">
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -768,7 +773,11 @@ function BranchForm({
           />
         </Field>
 
-        <Field icon={<MapPin size={16} />} label="ZIP Code" error={errors.zip_code}>
+        <Field
+          icon={<MapPin size={16} />}
+          label="ZIP Code"
+          error={errors.zip_code}
+        >
           <input
             type="text"
             name="zip_code"
@@ -779,7 +788,11 @@ function BranchForm({
           />
         </Field>
 
-        <Field icon={<MapPin size={16} />} label="Country" error={errors.country}>
+        <Field
+          icon={<MapPin size={16} />}
+          label="Country"
+          error={errors.country}
+        >
           <input
             type="text"
             name="country"
@@ -790,7 +803,11 @@ function BranchForm({
           />
         </Field>
 
-        <Field icon={<CheckCircle2 size={16} />} label="Status" error={errors.status}>
+        <Field
+          icon={<CheckCircle2 size={16} />}
+          label="Status"
+          error={errors.status}
+        >
           <CustomDropdown
             value={formData.status}
             onChange={(value) =>
@@ -854,12 +871,12 @@ function BranchForm({
 }
 
 function BranchViewModal({ branch, onClose }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
+  return createPortal(
+    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+      <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 shadow-sm dark:bg-blue-950/40 dark:text-blue-300">
               <GitBranch size={28} />
             </div>
 
@@ -891,42 +908,50 @@ function BranchViewModal({ branch, onClose }) {
           </button>
         </div>
 
-        <div className="p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/50 p-6 dark:bg-slate-950/20">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ViewField label="Branch Name" value={branch.branch_name} />
+
             <ViewField label="Branch Code" value={branch.branch_code} />
+
             <ViewField
               label="Status"
               value={<StatusBadge status={branch.status} />}
             />
+
             <ViewField label="GST Number" value={branch.gst_number} />
+
             <ViewField label="Email" value={branch.email} />
             <ViewField label="Phone" value={branch.phone} />
             <ViewField label="City" value={branch.city} />
             <ViewField label="State" value={branch.state} />
             <ViewField label="Country" value={branch.country} />
             <ViewField label="ZIP Code" value={branch.zip_code} />
+
             <ViewField label="Address" value={branch.address} full />
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 function FormModal({ title, children, onClose }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+  return createPortal(
+    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 shadow-sm dark:bg-blue-950/40 dark:text-blue-300">
               <GitBranch size={24} />
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+
+            <div className="min-w-0">
+              <h2 className="truncate text-xl font-bold text-slate-900 dark:text-white">
                 {title}
               </h2>
+
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Fill branch information for multi-branch setup.
               </p>
@@ -942,11 +967,12 @@ function FormModal({ title, children, onClose }) {
           </button>
         </div>
 
-        <div className="overflow-auto bg-white p-5 dark:bg-slate-900">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/50 p-6 dark:bg-slate-950/20">
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -964,14 +990,11 @@ function SummaryCard({ title, value, icon, color }) {
           </h2>
         </div>
 
-        <div className={`rounded-xl p-3 ${color}`}>
-          {icon}
-        </div>
+        <div className={`rounded-xl p-3 ${color}`}>{icon}</div>
       </div>
     </div>
   );
 }
-
 
 function ViewField({ label, value, full }) {
   return (

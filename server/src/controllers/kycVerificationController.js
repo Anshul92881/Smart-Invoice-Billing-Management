@@ -11,6 +11,8 @@ import {
   verifyTan as sandboxVerifyTan,
 } from "../services/sandboxKycService.js";
 
+import { assignDefaultFreeSubscription } from "./kycController.js";
+
 const MAX_KYC_ATTEMPTS = 3;
 
 const getUserAgent = (req) => req.headers["user-agent"] || null;
@@ -200,97 +202,163 @@ const increaseAttempt = async (companyId, req = null) => {
   return attempts;
 };
 
-const autoApproveCompany = async (companyId, req = null) => {
-  const isManualKyc = req?.user?.role === "superadmin";
+const autoApproveCompany = async (
+  companyId,
+  req = null,
+) => {
+  const isManualKyc =
+    req?.user?.role === "superadmin";
 
-  const [rows] = await db.query(
-    `
-    SELECT
-      aadhaar_verified,
-      pan_verified
-    FROM tbl_companies
-    WHERE id = ?
-    LIMIT 1
-    `,
-    [companyId],
-  );
+  const connection = await db.getConnection();
 
-  if (rows.length === 0) return false;
+  try {
+    await connection.beginTransaction();
 
-  const company = rows[0];
+    const [rows] = await connection.query(
+      `
+      SELECT
+        aadhaar_verified,
+        pan_verified
+      FROM tbl_companies
+      WHERE id = ?
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [companyId],
+    );
 
-  if (
-    Number(company.aadhaar_verified) !== 1 ||
-    Number(company.pan_verified) !== 1
-  ) {
-    return false;
-  }
+    if (rows.length === 0) {
+      await connection.rollback();
+      return false;
+    }
 
-  const [docRows] = await db.query(
-    `
-    SELECT COUNT(DISTINCT document_type) AS total_docs
-    FROM tbl_company_kyc_documents
-    WHERE company_id = ?
-    AND document_type IN ('aadhaar_card', 'pan_card')
-    `,
-    [companyId],
-  );
+    const company = rows[0];
 
-  const totalDocs = Number(docRows[0]?.total_docs || 0);
+    if (
+      Number(company.aadhaar_verified) !== 1 ||
+      Number(company.pan_verified) !== 1
+    ) {
+      await connection.rollback();
+      return false;
+    }
 
-  if (totalDocs < 2) {
-    return false;
-  }
+    const [docRows] = await connection.query(
+      `
+      SELECT COUNT(DISTINCT document_type) AS total_docs
+      FROM tbl_company_kyc_documents
+      WHERE company_id = ?
+        AND document_type IN (
+          'aadhaar_card',
+          'pan_card'
+        )
+      `,
+      [companyId],
+    );
 
-  await db.query(
-    `
-    UPDATE tbl_companies
-    SET
-      status = 'active',
-      kyc_status = ?,
-      kyc_verified_at = NOW(),
-      kyc_verified_by = ?,
-      kyc_attempts = 0,
-      kyc_rejection_reason = NULL
-    WHERE id = ?
-    `,
-    [
-      isManualKyc ? "manual_verified" : "approved",
-      isManualKyc ? req.user.id : null,
+    const totalDocs = Number(
+      docRows[0]?.total_docs || 0,
+    );
+
+    if (totalDocs < 2) {
+      await connection.rollback();
+      return false;
+    }
+
+
+    await connection.query(
+      `
+      UPDATE tbl_companies
+      SET
+        status = 'active',
+        kyc_status = ?,
+        kyc_verified_at = NOW(),
+        kyc_verified_by = ?,
+        kyc_attempts = 0,
+        kyc_rejection_reason = NULL
+      WHERE id = ?
+      `,
+      [
+        isManualKyc
+          ? "manual_verified"
+          : "approved",
+        isManualKyc
+          ? req.user.id
+          : null,
+        companyId,
+      ],
+    );
+
+
+    await connection.query(
+      `
+      UPDATE tbl_users
+      SET status = 'active'
+      WHERE company_id = ?
+        AND role = 'company_admin'
+      `,
+      [companyId],
+    );
+
+    await assignDefaultFreeSubscription(
+      connection,
       companyId,
-    ],
-  );
+    );
 
-  await db.query(
-    `
-    UPDATE tbl_users
-    SET status = 'active'
-    WHERE company_id = ?
-    AND role = 'company_admin'
-    `,
-    [companyId],
-  );
+    await connection.commit();
 
-  const admin = await getCompanyAdmin(companyId);
+    const admin = await getCompanyAdmin(companyId);
 
-  if (admin?.email) {
-    await sendKycApprovedEmail(admin.email, admin.name);
+    if (admin?.email) {
+      try {
+        await sendKycApprovedEmail(
+          admin.email,
+          admin.name,
+        );
+      } catch (emailError) {
+        console.error(
+          "KYC approved email error:",
+          emailError,
+        );
+      }
+    }
+
+    try {
+      await createAuditLog({
+        company_id: companyId,
+        user_id: req?.user?.id || null,
+        role:
+          req?.user?.role || "company_admin",
+        action: isManualKyc
+          ? "KYC_MANUAL_APPROVED"
+          : "KYC_AUTO_APPROVED",
+        module_name: "KYC",
+        description: isManualKyc
+          ? "Company manually approved by SuperAdmin and Default Free Plan assigned"
+          : "Company automatically approved and Default Free Plan assigned",
+        ip_address: req?.ip || null,
+        user_agent: req
+          ? getUserAgent(req)
+          : null,
+      });
+    } catch (auditError) {
+      console.error(
+        "KYC approval audit log error:",
+        auditError,
+      );
+    }
+
+    return true;
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // Ignore rollback failure
+    }
+
+    throw error;
+  } finally {
+    connection.release();
   }
-
-  await createAuditLog({
-    company_id: companyId,
-    user_id: req?.user?.id || null,
-    role: req?.user?.role || "company_admin",
-    action: isManualKyc ? "KYC_MANUAL_APPROVED" : "KYC_AUTO_APPROVED",
-    module_name: "KYC",
-    description: isManualKyc
-      ? "Company manually approved by Super Admin"
-      : "Company automatically approved after Aadhaar, PAN and required document verification",
-    ip_address: req?.ip || null,
-    user_agent: req ? getUserAgent(req) : null,
-  });
-
-  return true;
 };
 
 const checkKycAccess = async (req, res) => {

@@ -12,6 +12,8 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Server,
+  Send,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "../services/api";
@@ -54,6 +56,26 @@ function Profile() {
   const [uploading, setUploading] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
 
+  const [smtpForm, setSmtpForm] = useState({
+    smtp_host: "",
+    smtp_port: "465",
+    smtp_user: "",
+    smtp_pass: "",
+    smtp_secure: true,
+    from_email: "",
+    from_name: "Smart Invoice & Billing",
+    reply_to: "",
+  });
+
+  const [smtpConfigured, setSmtpConfigured] = useState(false);
+  const [smtpLoading, setSmtpLoading] = useState(false);
+  const [smtpSaving, setSmtpSaving] = useState(false);
+  const [smtpTesting, setSmtpTesting] = useState(false);
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+  const [testEmail, setTestEmail] = useState(user?.email || "");
+
+  const isSuperAdmin = user?.role === "superadmin";
+
   const formatRole = {
     superadmin: "Super Admin",
     company_admin: "Company Admin",
@@ -67,6 +89,41 @@ function Profile() {
       phone: user?.phone || "",
     });
   }, [user?.name, user?.phone]);
+
+  useEffect(() => {
+    if (user?.role !== "superadmin") return;
+
+    const loadSmtpSettings = async () => {
+      try {
+        setSmtpLoading(true);
+
+        const res = await api.get("/superadmin/smtp-settings");
+        const settings = res.data?.settings || {};
+
+        setSmtpForm((prev) => ({
+          ...prev,
+          smtp_host: settings.smtp_host || "",
+          smtp_port: String(settings.smtp_port || 465),
+          smtp_user: settings.smtp_user || "",
+          smtp_pass: "",
+          smtp_secure: Boolean(settings.smtp_secure),
+          from_email: settings.from_email || "",
+          from_name: settings.from_name || "Smart Invoice & Billing",
+          reply_to: settings.reply_to || "",
+        }));
+
+        setSmtpConfigured(Boolean(res.data?.configured));
+      } catch (error) {
+        toast.error(
+          error.response?.data?.message || "Failed to load SMTP settings",
+        );
+      } finally {
+        setSmtpLoading(false);
+      }
+    };
+
+    loadSmtpSettings();
+  }, [user?.role]);
 
   const initials = useMemo(() => {
     const name = user?.name || formData.name || "U";
@@ -255,11 +312,105 @@ function Profile() {
     }));
   };
 
+  const handleSmtpChange = (e) => {
+    const { name, value, type, checked } = e.target;
+
+    setSmtpForm((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
+
+  const validateSmtpForm = () => {
+    if (!smtpForm.smtp_host.trim()) {
+      toast.error("SMTP host is required");
+      return false;
+    }
+
+    const port = Number(smtpForm.smtp_port);
+
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      toast.error("Enter a valid SMTP port");
+      return false;
+    }
+
+    if (!smtpForm.smtp_user.trim()) {
+      toast.error("SMTP username is required");
+      return false;
+    }
+
+    if (!smtpConfigured && !smtpForm.smtp_pass) {
+      toast.error("SMTP password is required");
+      return false;
+    }
+
+    if (!smtpForm.from_email.trim()) {
+      toast.error("From email is required");
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSmtpSave = async (e) => {
+    e.preventDefault();
+
+    if (!validateSmtpForm()) return;
+
+    try {
+      setSmtpSaving(true);
+
+      const res = await api.put("/superadmin/smtp-settings", {
+        ...smtpForm,
+        smtp_port: Number(smtpForm.smtp_port),
+      });
+
+      setSmtpConfigured(true);
+      setSmtpForm((prev) => ({ ...prev, smtp_pass: "" }));
+
+      toast.success(res.data?.message || "SMTP settings saved successfully");
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Failed to save SMTP settings",
+      );
+    } finally {
+      setSmtpSaving(false);
+    }
+  };
+
+  const handleSmtpTest = async () => {
+    const email = testEmail.trim();
+
+    if (!email) {
+      toast.error("Test email is required");
+      return;
+    }
+
+    try {
+      setSmtpTesting(true);
+
+      const res = await api.post("/superadmin/smtp-settings/test", {
+        test_email: email,
+      });
+
+      toast.success(res.data?.message || "Test email sent successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "SMTP test failed");
+    } finally {
+      setSmtpTesting(false);
+    }
+  };
+
   return (
-    // lg+ pe fixed screen-fit (no scroll). Chhoti screens pe natural flow.
+    // Normal users: lg+ pe fixed screen-fit (no scroll).
+    // Super admin: SMTP card extra hai, isliye page scroll hoga.
     // Agar parent layout ki height fixed nahi hai to "lg:h-full" ki jagah
     // "lg:h-[calc(100vh-7rem)]" use karna (header height ke hisaab se adjust).
-    <div className="flex w-full min-w-0 max-w-full flex-col gap-4 lg:h-full lg:overflow-hidden">
+    <div
+      className={`flex w-full min-w-0 max-w-full flex-col gap-4 lg:h-full ${
+        isSuperAdmin ? "lg:overflow-y-auto" : "lg:overflow-hidden"
+      }`}
+    >
       {/* Header */}
       <div className="shrink-0 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -289,7 +440,11 @@ function Profile() {
       </div>
 
       {/* Content */}
-      <div className="grid min-h-0 gap-4 lg:flex-1 xl:grid-cols-[1fr_0.95fr]">
+      <div
+        className={`grid gap-4 xl:grid-cols-[1fr_0.95fr] ${
+          isSuperAdmin ? "shrink-0" : "min-h-0 lg:flex-1"
+        }`}
+      >
         {/* Left card */}
         <div className="grid min-h-0 gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:grid-cols-[0.85fr_1.15fr] lg:gap-0">
           <div className="flex min-h-0 flex-col border-slate-200 dark:border-slate-800 lg:border-r lg:pr-6">
@@ -299,7 +454,7 @@ function Profile() {
               description="Upload JPG, PNG or WEBP image up to 2MB."
             />
 
-            <div className="flex flex-1 flex-col items-center justify-center">
+            <div className="flex flex-1 flex-col items-center justify-center py-2">
               <div className="relative">
                 {visibleImage ? (
                   <img
@@ -364,7 +519,7 @@ function Profile() {
 
             <form
               onSubmit={handleProfileUpdate}
-              className="flex flex-1 flex-col justify-between gap-3"
+              className="flex flex-1 flex-col justify-between gap-4"
             >
               <div className="space-y-3">
                 <EditableField
@@ -420,7 +575,7 @@ function Profile() {
 
           <form
             onSubmit={handlePasswordChange}
-            className="flex flex-1 flex-col justify-between gap-3"
+            className="flex flex-1 flex-col justify-between gap-4"
           >
             <div className="space-y-3">
               <PasswordField
@@ -477,13 +632,193 @@ function Profile() {
           </form>
         </div>
       </div>
+
+      {/* SMTP settings (Super Admin only) */}
+      {isSuperAdmin && (
+        <form
+          onSubmit={handleSmtpSave}
+          className="shrink-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+        >
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <SectionTitle
+              icon={<Server size={19} />}
+              title="Greeting SMTP Settings"
+              description="Used only for greetings sent by Super Admin to Company Admins."
+              className="mb-0"
+            />
+
+            <span
+              className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
+                smtpConfigured
+                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                  : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+              }`}
+            >
+              {smtpConfigured ? "Configured" : "Not Configured"}
+            </span>
+          </div>
+
+          {smtpLoading ? (
+            <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm font-medium text-slate-500 dark:border-slate-700 dark:text-slate-400">
+              Loading SMTP settings...
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 xl:grid-cols-3">
+                {/* Server */}
+                <SmtpGroup title="Server" description="Where emails are sent from.">
+                  <SmtpField
+                    label="SMTP Host"
+                    name="smtp_host"
+                    value={smtpForm.smtp_host}
+                    onChange={handleSmtpChange}
+                    placeholder="smtp.gmail.com"
+                  />
+
+                  <SmtpField
+                    label="SMTP Port"
+                    name="smtp_port"
+                    type="number"
+                    value={smtpForm.smtp_port}
+                    onChange={handleSmtpChange}
+                    placeholder="465"
+                  />
+
+                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                    <input
+                      type="checkbox"
+                      name="smtp_secure"
+                      checked={smtpForm.smtp_secure}
+                      onChange={handleSmtpChange}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      Secure connection (SSL/TLS)
+                    </span>
+                  </label>
+                </SmtpGroup>
+
+                {/* Login */}
+                <SmtpGroup title="Login" description="Account used to authenticate.">
+                  <SmtpField
+                    label="SMTP Username"
+                    name="smtp_user"
+                    value={smtpForm.smtp_user}
+                    onChange={handleSmtpChange}
+                    placeholder="email@example.com"
+                  />
+
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      SMTP Password
+                    </label>
+
+                    <div className="relative">
+                      <input
+                        type={showSmtpPassword ? "text" : "password"}
+                        name="smtp_pass"
+                        value={smtpForm.smtp_pass}
+                        onChange={handleSmtpChange}
+                        placeholder={
+                          smtpConfigured
+                            ? "Blank means keep current password"
+                            : "Enter SMTP password"
+                        }
+                        autoComplete="new-password"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 dark:focus:ring-indigo-950/50"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setShowSmtpPassword((prev) => !prev)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                        aria-label="Toggle SMTP password visibility"
+                      >
+                        {showSmtpPassword ? (
+                          <EyeOff size={17} />
+                        ) : (
+                          <Eye size={17} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </SmtpGroup>
+
+                {/* Sender */}
+                <SmtpGroup title="Sender" description="What recipients will see.">
+                  <SmtpField
+                    label="From Email"
+                    name="from_email"
+                    type="email"
+                    value={smtpForm.from_email}
+                    onChange={handleSmtpChange}
+                    placeholder="greetings@example.com"
+                  />
+
+                  <SmtpField
+                    label="From Name"
+                    name="from_name"
+                    value={smtpForm.from_name}
+                    onChange={handleSmtpChange}
+                    placeholder="Smart Invoice & Billing"
+                  />
+
+                  <SmtpField
+                    label="Reply-To"
+                    name="reply_to"
+                    type="email"
+                    value={smtpForm.reply_to}
+                    onChange={handleSmtpChange}
+                    placeholder="support@example.com"
+                  />
+                </SmtpGroup>
+              </div>
+
+              {/* Footer: test + save */}
+              <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 dark:border-slate-800 lg:flex-row lg:items-end lg:justify-between">
+                <div className="w-full lg:max-w-md">
+                  <SmtpField
+                    label="Test Email Address"
+                    type="email"
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    placeholder="admin@example.com"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={handleSmtpTest}
+                    disabled={smtpTesting || !smtpConfigured}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    title={smtpConfigured ? "" : "Save SMTP settings before testing"}
+                  >
+                    <Send size={16} />
+                    {smtpTesting ? "Sending..." : "Send Test Email"}
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={smtpSaving}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Save size={16} />
+                    {smtpSaving ? "Saving..." : "Save SMTP Settings"}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </form>
+      )}
     </div>
   );
 }
 
-function SectionTitle({ icon, title, description }) {
+function SectionTitle({ icon, title, description, className = "mb-4" }) {
   return (
-    <div className="mb-4 flex shrink-0 items-center gap-3">
+    <div className={`flex shrink-0 items-center gap-3 ${className}`}>
       {icon && (
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
           {icon}
@@ -532,6 +867,49 @@ function EditableField({ label, name, value, onChange, icon }) {
         className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-950/50"
         value={value || ""}
         onChange={onChange}
+      />
+    </div>
+  );
+}
+
+function SmtpGroup({ title, description, children }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+      <div>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+          {title}
+        </h3>
+        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+          {description}
+        </p>
+      </div>
+
+      {children}
+    </div>
+  );
+}
+
+function SmtpField({
+  label,
+  name,
+  value,
+  onChange,
+  type = "text",
+  placeholder = "",
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+        {label}
+      </label>
+
+      <input
+        type={type}
+        name={name}
+        value={value || ""}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 dark:focus:ring-indigo-950/50"
       />
     </div>
   );

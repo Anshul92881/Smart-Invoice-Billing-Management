@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
+import { createPortal } from "react-dom";
 
 import {
   Wallet,
@@ -543,7 +544,10 @@ function Expenses() {
       return false;
     }
 
-    if (companyName && (companyName.length > 100 || !NAME_REGEX.test(companyName))) {
+    if (
+      companyName &&
+      (companyName.length > 100 || !NAME_REGEX.test(companyName))
+    ) {
       toast.error("Company name contains invalid characters");
       return false;
     }
@@ -955,12 +959,14 @@ function Expenses() {
                 icon={<Building2 size={16} />}
                 options={[
                   { value: "", label: "All Branches" },
-                  ...(Array.isArray(branches) ? branches : []).map((branch) => ({
-                    value: String(branch.id),
-                    label: `${branch.branch_name}${
-                      branch.branch_code ? ` (${branch.branch_code})` : ""
-                    }`,
-                  })),
+                  ...(Array.isArray(branches) ? branches : []).map(
+                    (branch) => ({
+                      value: String(branch.id),
+                      label: `${branch.branch_name}${
+                        branch.branch_code ? ` (${branch.branch_code})` : ""
+                      }`,
+                    }),
+                  ),
                 ]}
               />
 
@@ -970,10 +976,12 @@ function Expenses() {
                 icon={<Tag size={16} />}
                 options={[
                   { value: "", label: "All Categories" },
-                  ...(Array.isArray(categories) ? categories : []).map((category) => ({
-                    value: category,
-                    label: category,
-                  })),
+                  ...(Array.isArray(categories) ? categories : []).map(
+                    (category) => ({
+                      value: category,
+                      label: category,
+                    }),
+                  ),
                 ]}
               />
             </div>
@@ -1403,11 +1411,13 @@ function ExpenseForm({
             searchPlaceholder="Search category..."
             emptyText="No category found"
             options={[
-              ...(Array.isArray(categories) ? categories : []).map((category) => ({
-                value: category,
-                label: category,
-                description: "Expense category",
-              })),
+              ...(Array.isArray(categories) ? categories : []).map(
+                (category) => ({
+                  value: category,
+                  label: category,
+                  description: "Expense category",
+                }),
+              ),
 
               {
                 value: "__add_category__",
@@ -1758,10 +1768,10 @@ function CategoryForm({
 }
 
 function ExpenseViewModal({ expense, formatDate, onClose }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex items-start justify-between border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
+  return createPortal(
+    <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
+      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300">
               <Wallet size={28} />
@@ -1771,6 +1781,7 @@ function ExpenseViewModal({ expense, formatDate, onClose }) {
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">
                 {expense.category || "Expense Details"}
               </h2>
+
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Complete expense information
               </p>
@@ -1780,50 +1791,59 @@ function ExpenseViewModal({ expense, formatDate, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={20} />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
-          <ViewField
-            label="Branch"
-            value={
-              expense.branch_code
-                ? `${expense.branch_name} (${expense.branch_code})`
-                : expense.branch_name || "-"
-            }
-          />
-          <ViewField
-            label="Vendor"
-            value={expense.vendor_name || "Direct Company Expense"}
-          />
-          <ViewField
-            label="Vendor Company"
-            value={expense.vendor_company_name}
-          />
-          <ViewField label="Category" value={expense.category} />
-          <ViewField
-            label="Amount"
-            value={`₹ ${Number(expense.amount || 0).toFixed(2)}`}
-          />
-          <ViewField
-            label="Expense Date"
-            value={formatDate(expense.expense_date)}
-          />
-          <ViewField label="Notes" value={expense.notes} full />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+            <ViewField
+              label="Branch"
+              value={
+                expense.branch_code
+                  ? `${expense.branch_name} (${expense.branch_code})`
+                  : expense.branch_name || "-"
+              }
+            />
+
+            <ViewField
+              label="Vendor"
+              value={expense.vendor_name || "Direct Company Expense"}
+            />
+
+            <ViewField
+              label="Vendor Company"
+              value={expense.vendor_company_name}
+            />
+
+            <ViewField label="Category" value={expense.category} />
+
+            <ViewField
+              label="Amount"
+              value={`₹ ${Number(expense.amount || 0).toFixed(2)}`}
+            />
+
+            <ViewField
+              label="Expense Date"
+              value={formatDate(expense.expense_date)}
+            />
+
+            <ViewField label="Notes" value={expense.notes} full />
+          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 function FormModal({ title, description, icon, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+  return createPortal(
+    <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300">
               {icon}
@@ -1833,26 +1853,30 @@ function FormModal({ title, description, icon, onClose, children }) {
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">
                 {title}
               </h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {description}
-              </p>
+
+              {description && (
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  {description}
+                </p>
+              )}
             </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="overflow-auto bg-white p-5 dark:bg-slate-900">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white p-5 dark:bg-slate-900">
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

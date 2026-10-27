@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+
 import { createPortal } from "react-dom";
-import api from "../services/api";
-import socket from "../services/socket";
-import { useNavigate } from "react-router-dom";
+
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+
 import toast from "react-hot-toast";
-import { connectSocket } from "../services/socket";
+
+import api from "../services/api";
+
+import socket, { connectSocket } from "../services/socket";
 
 import {
   LayoutDashboard,
@@ -17,6 +21,7 @@ import {
   LogOut,
   Percent,
   Bell,
+  Mail,
   Building2,
   UserCircle,
   UserCog,
@@ -32,68 +37,438 @@ import {
   WalletCards,
 } from "lucide-react";
 
-import { Link, Outlet, useLocation } from "react-router-dom";
-
 const BASE_URL = import.meta.env.VITE_API_BASE_URL
-  ? import.meta.env.VITE_API_BASE_URL.replace("/api", "")
+  ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, "")
   : "http://localhost:5000";
+
+// BASE ROLE PERMISSIONS
+
+// Default module authority for each role
+
+const BASE_ROLE_PERMISSIONS = {
+  company_admin: "all",
+
+  accountant: {
+    branches: true, // view-only default in page
+
+    customers: true, // view-only default in page
+
+    products: true, // view-only default in page
+
+    invoices: true,
+
+    payments: true,
+
+    expenses: true,
+
+    taxes: true,
+
+    reports: true,
+  },
+
+  sales_user: {
+    branches: true, // view-only default in page
+
+    customers: true,
+
+    products: true, // view-only default in page
+
+    quotations: true,
+
+    invoices: true,
+  },
+};
+
+const FORMAT_ROLE = {
+  company_admin: "Company Admin",
+
+  accountant: "Accountant",
+
+  sales_user: "Sales User",
+};
+
+const MENU_GROUPS = [
+  {
+    key: "dashboard",
+
+    label: null,
+
+    items: [
+      {
+        name: "Dashboard",
+
+        path: "/dashboard",
+
+        icon: <LayoutDashboard size={19} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+      },
+    ],
+  },
+
+  {
+    key: "greetings",
+
+    label: null,
+
+    items: [
+      {
+        name: "Greetings",
+
+        path: "/dashboard/greetings",
+
+        icon: <Mail size={19} />,
+
+        roles: ["company_admin"],
+      },
+    ],
+  },
+
+  {
+    key: "users",
+
+    label: "Users",
+
+    icon: <Users size={19} />,
+
+    items: [
+      {
+        name: "Accountants",
+
+        path: "/dashboard/accountants",
+
+        icon: <UserCog size={18} />,
+
+        roles: ["company_admin"],
+      },
+
+      {
+        name: "Sales Users",
+
+        path: "/dashboard/sales-users",
+
+        icon: <Users size={18} />,
+
+        roles: ["company_admin"],
+      },
+
+      {
+        name: "Role Permissions",
+
+        path: "/dashboard/role-permissions",
+
+        icon: <ShieldCheck size={18} />,
+
+        roles: ["company_admin"],
+      },
+    ],
+  },
+
+  {
+    key: "business",
+
+    label: "Business",
+
+    icon: <Building2 size={19} />,
+
+    items: [
+      {
+        name: "Customers",
+
+        path: "/dashboard/customers",
+
+        icon: <Users size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+      },
+
+      {
+        name: "Products",
+
+        path: "/dashboard/products",
+
+        icon: <Package size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+      },
+
+      {
+        name: "Vendors",
+
+        path: "/dashboard/vendors",
+
+        icon: <Truck size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+
+        permissionKey: "vendors",
+      },
+
+      {
+        name: "Branches",
+
+        path: "/dashboard/branches",
+
+        icon: <Building2 size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+
+        permissionKey: "branches",
+      },
+
+      {
+        name: "Company Profile",
+
+        path: "/dashboard/company",
+
+        icon: <Building2 size={18} />,
+
+        roles: ["company_admin"],
+      },
+    ],
+  },
+
+  {
+    key: "sales",
+
+    label: "Sales",
+
+    icon: <Receipt size={19} />,
+
+    items: [
+      {
+        name: "Quotations",
+
+        path: "/dashboard/quotations",
+
+        icon: <FileText size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+
+        permissionKey: "quotations",
+      },
+
+      {
+        name: "Invoices",
+
+        path: "/dashboard/invoices",
+
+        icon: <FileText size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+      },
+
+      {
+        name: "Payments",
+
+        path: "/dashboard/payments",
+
+        icon: <Receipt size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+
+        permissionKey: "payments",
+      },
+    ],
+  },
+
+  {
+    key: "finance",
+
+    label: "Finance",
+
+    icon: <BarChart3 size={19} />,
+
+    items: [
+      {
+        name: "Expenses",
+
+        path: "/dashboard/expenses",
+
+        icon: <Wallet size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+
+        permissionKey: "expenses",
+      },
+
+      {
+        name: "Taxes",
+
+        path: "/dashboard/taxes",
+
+        icon: <Percent size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+
+        permissionKey: "taxes",
+      },
+
+      {
+        name: "Reports",
+
+        path: "/dashboard/reports",
+
+        icon: <BarChart3 size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+
+        permissionKey: "reports",
+      },
+
+      {
+        name: "Billing / Subscription",
+
+        path: "/dashboard/billing",
+
+        icon: <ShieldCheck size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+
+        permissionKey: "billing",
+      },
+    ],
+  },
+
+  {
+    key: "settings",
+
+    label: "Settings",
+
+    icon: <Settings size={19} />,
+
+    items: [
+      {
+        name: "Profile",
+
+        path: "/dashboard/profile",
+
+        icon: <UserCircle size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+      },
+
+      {
+        name: "Notifications",
+
+        path: "/dashboard/notifications",
+
+        icon: <Bell size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+      },
+
+      {
+        name: "Billing Template",
+
+        path: "/dashboard/billing-template",
+
+        icon: <WalletCards size={18} />,
+
+        roles: ["company_admin"],
+      },
+
+      {
+        name: "Company Settings",
+
+        path: "/dashboard/company-settings",
+
+        icon: <Settings size={18} />,
+
+        roles: ["company_admin"],
+      },
+
+      {
+        name: "Audit Logs",
+
+        path: "/dashboard/audit-logs",
+
+        icon: <Activity size={18} />,
+
+        roles: ["company_admin", "accountant", "sales_user"],
+
+        permissionKey: "audit_logs",
+      },
+    ],
+  },
+];
+
+const readStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user"));
+  } catch {
+    return null;
+  }
+};
 
 function DashboardLayout() {
   const location = useLocation();
+
+  const navigate = useNavigate();
+
   const profileMenuRef = useRef(null);
+
   const notificationRef = useRef(null);
 
-  const sidebarNavRef = useRef(null);
-  const sidebarScrollRef = useRef(0);
-
-  const [user] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("user"));
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState(readStoredUser);
 
   const [rolePermissions, setRolePermissions] = useState({});
 
   const role = user?.role;
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const [openMenuGroups, setOpenMenuGroups] = useState({});
+
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem("theme") === "dark";
-  });
+
+  const [darkMode, setDarkMode] = useState(
+    () => localStorage.getItem("theme") === "dark",
+  );
 
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
-  const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
 
+  const [showSubscriptionExpiredModal, setShowSubscriptionExpiredModal] =
+    useState(false);
   const [showKycPendingModal, setShowKycPendingModal] = useState(false);
+
   const [kycPendingMessage, setKycPendingMessage] = useState(
     "Your KYC is pending. Complete KYC to use this feature.",
   );
 
-  const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const trialExpired =
-    subscriptionStatus?.status === "expired" ||
-    subscriptionStatus?.trial_status === "expired";
+  const [notificationOpen, setNotificationOpen] = useState(false);
+
+  const [notifications, setNotifications] = useState([]);
+
+  // NO USER -> LOGIN
 
   useEffect(() => {
-    if (!trialExpired) return;
-
-    const allowedPaths = [
-      "/dashboard/billing",
-      "/dashboard/profile",
-      "/dashboard/notifications",
-    ];
-
-    if (!allowedPaths.includes(location.pathname)) {
-      navigate("/dashboard/billing", {
-        replace: true,
-      });
+    if (!user) {
+      navigate("/", { replace: true });
     }
-  }, [trialExpired, location.pathname, navigate]);
+  }, [user, navigate]);
+
+  // USER REFRESH
+
+  // Profile page: localStorage update karke window.dispatchEvent(new Event("userUpdated"))
+
+  useEffect(() => {
+    const refreshUser = () => setUser(readStoredUser());
+
+    window.addEventListener("userUpdated", refreshUser);
+
+    window.addEventListener("storage", refreshUser);
+
+    return () => {
+      window.removeEventListener("userUpdated", refreshUser);
+
+      window.removeEventListener("storage", refreshUser);
+    };
+  }, []);
+
+  // SUBSCRIPTION STATUS (company admin only)
 
   useEffect(() => {
     if (role !== "company_admin") return;
@@ -110,7 +485,7 @@ function DashboardLayout() {
           subscription?.status === "expired" ||
           subscription?.trial_status === "expired"
         ) {
-          setShowTrialExpiredModal(true);
+          setShowSubscriptionExpiredModal(true);
         }
       } catch (error) {
         console.log(error);
@@ -120,17 +495,23 @@ function DashboardLayout() {
     fetchSubscriptionStatus();
   }, [role]);
 
+  // THEME
+
   useEffect(() => {
     const root = document.documentElement;
 
     if (darkMode) {
       root.classList.add("dark");
+
       localStorage.setItem("theme", "dark");
     } else {
       root.classList.remove("dark");
+
       localStorage.setItem("theme", "light");
     }
   }, [darkMode]);
+
+  // KYC REQUIRED EVENT
 
   useEffect(() => {
     const handleKycRequired = (event) => {
@@ -138,6 +519,7 @@ function DashboardLayout() {
         event?.detail?.message ||
           "Your KYC is pending. Complete KYC to use this feature.",
       );
+
       setShowKycPendingModal(true);
     };
 
@@ -148,9 +530,7 @@ function DashboardLayout() {
     };
   }, []);
 
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
+  // CLICK OUTSIDE (profile + notifications)
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -177,18 +557,22 @@ function DashboardLayout() {
   }, []);
 
   // FETCH ROLE PERMISSIONS
-  // Loads optional permissions saved by Company Admin for current role
+
+  // Optional permissions saved by Company Admin for current role
+
   useEffect(() => {
     const fetchRolePermissions = async () => {
       try {
         if (!user?.company_id || role === "company_admin") {
           setRolePermissions({});
+
           return;
         }
 
         const res = await api.get("/companies/role-permissions");
+
         setRolePermissions(res.data?.permissions || {});
-      } catch (error) {
+      } catch {
         setRolePermissions({});
       }
     };
@@ -196,35 +580,10 @@ function DashboardLayout() {
     fetchRolePermissions();
   }, [user?.company_id, role]);
 
-  // BASE ROLE PERMISSIONS
-  // Defines default module authority for each role
-  const BASE_ROLE_PERMISSIONS = {
-    company_admin: "all",
-
-    accountant: {
-      branches: true, // view-only default in page
-      customers: true, // view-only default in page
-      products: true, // view-only default in page
-
-      invoices: true,
-      payments: true,
-      expenses: true,
-      taxes: true,
-      reports: true,
-    },
-
-    sales_user: {
-      branches: true, // view-only default in page
-      customers: true,
-      products: true, // view-only default in page
-
-      quotations: true,
-      invoices: true,
-    },
-  };
-
   // CHECK MODULE PERMISSION
-  // Allows module if role has default access or Company Admin has granted optional access
+
+  // Allowed if role has default access or Company Admin granted optional access
+
   const hasPermission = (key) => {
     if (!key) return true;
 
@@ -239,36 +598,36 @@ function DashboardLayout() {
 
   const initials =
     user?.name
+
       ?.split(" ")
+
       .map((word) => word[0])
+
       .join("")
+
       .slice(0, 2)
+
       .toUpperCase() || "U";
-
   const profileImageUrl = (() => {
-    if (!user?.profile_image) return "";
-    if (String(user.profile_image).startsWith("http"))
-      return user.profile_image;
-    if (
-      String(user.profile_image).startsWith("/uploads") ||
-      String(user.profile_image).startsWith("/upload")
-    ) {
-      return `${BASE_URL}${user.profile_image}`;
-    }
-    return `${BASE_URL}/uploads/profiles/${user.profile_image}`;
-  })();
+    const image = user?.profile_image;
 
-  const formatRole = {
-    company_admin: "Company Admin",
-    accountant: "Accountant",
-    sales_user: "Sales User",
-  };
+    if (!image) return "";
+
+    const value = String(image);
+
+    if (value.startsWith("http")) return value;
+
+    if (value.startsWith("/uploads") || value.startsWith("/upload")) {
+      return `${BASE_URL}${value}`;
+    }
+
+    return `${BASE_URL}/uploads/profiles/${value}`;
+  })();
 
   const settingsPath =
     role === "company_admin"
       ? "/dashboard/company-settings"
       : "/dashboard/profile";
-
   const formatBranchLabel = (item) => {
     if (!item?.branch_name) return "";
 
@@ -277,210 +636,23 @@ function DashboardLayout() {
       : item.branch_name;
   };
 
-  const menuGroups = [
-    {
-      key: "dashboard",
-      label: null,
-      items: [
-        {
-          name: "Dashboard",
-          path: "/dashboard",
-          icon: <LayoutDashboard size={19} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-        },
-      ],
-    },
-
-    {
-      key: "users",
-      label: "Users",
-      icon: <Users size={19} />,
-      items: [
-        {
-          name: "Accountants",
-          path: "/dashboard/accountants",
-          icon: <UserCog size={18} />,
-          roles: ["company_admin"],
-        },
-        {
-          name: "Sales Users",
-          path: "/dashboard/sales-users",
-          icon: <Users size={18} />,
-          roles: ["company_admin"],
-        },
-        {
-          name: "Role Permissions",
-          path: "/dashboard/role-permissions",
-          icon: <ShieldCheck size={18} />,
-          roles: ["company_admin"],
-        },
-      ],
-    },
-
-    {
-      key: "business",
-      label: "Business",
-      icon: <Building2 size={19} />,
-      items: [
-        {
-          name: "Customers",
-          path: "/dashboard/customers",
-          icon: <Users size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-        },
-        {
-          name: "Products",
-          path: "/dashboard/products",
-          icon: <Package size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-        },
-        {
-          name: "Vendors",
-          path: "/dashboard/vendors",
-          icon: <Truck size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-          permissionKey: "vendors",
-        },
-        {
-          name: "Branches",
-          path: "/dashboard/branches",
-          icon: <Building2 size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-          permissionKey: "branches",
-        },
-        {
-          name: "Company Profile",
-          path: "/dashboard/company",
-          icon: <Building2 size={18} />,
-          roles: ["company_admin"],
-        },
-      ],
-    },
-    {
-      key: "sales",
-      label: "Sales",
-      icon: <Receipt size={19} />,
-      items: [
-        {
-          name: "Quotations",
-          path: "/dashboard/quotations",
-          icon: <FileText size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-          permissionKey: "quotations",
-        },
-        {
-          name: "Invoices",
-          path: "/dashboard/invoices",
-          icon: <FileText size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-        },
-        {
-          name: "Payments",
-          path: "/dashboard/payments",
-          icon: <Receipt size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-          permissionKey: "payments",
-        },
-      ],
-    },
-    {
-      key: "finance",
-      label: "Finance",
-      icon: <BarChart3 size={19} />,
-      items: [
-        {
-          name: "Expenses",
-          path: "/dashboard/expenses",
-          icon: <Wallet size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-          permissionKey: "expenses",
-        },
-        {
-          name: "Taxes",
-          path: "/dashboard/taxes",
-          icon: <Percent size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-          permissionKey: "taxes",
-        },
-        {
-          name: "Reports",
-          path: "/dashboard/reports",
-          icon: <BarChart3 size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-          permissionKey: "reports",
-        },
-        {
-          name: "Billing / Subscription",
-          path: "/dashboard/billing",
-          icon: <ShieldCheck size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-          permissionKey: "billing",
-        },
-      ],
-    },
-
-    {
-      key: "settings",
-      label: "Settings",
-      icon: <Settings size={19} />,
-      items: [
-        {
-          name: "Profile",
-          path: "/dashboard/profile",
-          icon: <UserCircle size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-        },
-        {
-          name: "Notifications",
-          path: "/dashboard/notifications",
-          icon: <Bell size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-        },
-        {
-          name: "Billing Template",
-          path: "/dashboard/billing-template",
-          icon: <WalletCards size={18} />,
-          roles: ["company_admin"],
-        },
-        {
-          name: "Company Settings",
-          path: "/dashboard/company-settings",
-          icon: <Settings size={18} />,
-          roles: ["company_admin"],
-        },
-        {
-          name: "Audit Logs",
-          path: "/dashboard/audit-logs",
-          icon: <Activity size={18} />,
-          roles: ["company_admin", "accountant", "sales_user"],
-          permissionKey: "audit_logs",
-        },
-      ],
-    },
-  ];
-
-  const allowedExpiredRoutes = [
-    "/dashboard/billing",
-    "/dashboard/profile",
-    "/dashboard/notifications",
-  ];
-
   const isMenuItemActive = (item) =>
     location.pathname === item.path ||
     (item.path !== "/dashboard" &&
       location.pathname.startsWith(`${item.path}/`));
+  const visibleMenuGroups = MENU_GROUPS.map((group) => ({
+    ...group,
 
-  const visibleMenuGroups = menuGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => {
-        if (!item.roles.includes(role)) return false;
-        if (!hasPermission(item.permissionKey)) return false;
-        if (trialExpired) return allowedExpiredRoutes.includes(item.path);
-        return true;
-      }),
-    }))
-    .filter((group) => group.items.length > 0);
+    items: group.items.filter((item) => {
+      if (!item.roles.includes(role)) return false;
+
+      if (!hasPermission(item.permissionKey)) return false;
+
+      return true;
+    }),
+  })).filter((group) => group.items.length > 0);
+
+  // AUTO OPEN ACTIVE GROUP ON ROUTE CHANGE
 
   useEffect(() => {
     const activeGroup = visibleMenuGroups.find(
@@ -492,51 +664,62 @@ function DashboardLayout() {
 
     setOpenMenuGroups((prev) => ({
       ...prev,
+
       [activeGroup.key]: true,
     }));
-  }, [location.pathname, role, rolePermissions, trialExpired]);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, role, rolePermissions]);
 
   const toggleMenuGroup = (groupKey) => {
     setOpenMenuGroups((prev) => ({
       ...prev,
+
       [groupKey]: !prev[groupKey],
     }));
   };
 
+  const closeSidebar = () => setSidebarOpen(false);
+
+  // NOTE: unreadCount abhi sirf latest 20 notifications se nikal raha hai.
+
+  // Better: backend se unread_count return karwao.
+
   const fetchUnreadNotifications = async () => {
     try {
-      const allRes = await api.get("/notifications", {
+      const res = await api.get("/notifications", {
         params: {
           page: 1,
+
           limit: 20,
+
           type: "all",
+
           status: "all",
         },
       });
 
-      const companyAdminNotifications = allRes.data.notifications || [];
+      const list = res.data.notifications || [];
 
-      const sortedNotifications = [...companyAdminNotifications].sort(
-        (a, b) => {
-          const readA = Number(a.is_read || 0);
-          const readB = Number(b.is_read || 0);
+      const sorted = [...list].sort((a, b) => {
+        const readA = Number(a.is_read || 0);
 
-          if (readA !== readB) return readA - readB;
+        const readB = Number(b.is_read || 0);
 
-          return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-        },
-      );
+        if (readA !== readB) return readA - readB;
 
-      setUnreadCount(
-        companyAdminNotifications.filter((item) => Number(item.is_read) === 0)
-          .length,
-      );
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      });
 
-      setNotifications(sortedNotifications);
+      setUnreadCount(list.filter((item) => Number(item.is_read) === 0).length);
+
+      setNotifications(sorted);
     } catch (error) {
       console.log(error.response?.data || error);
     }
   };
+
+  // SOCKET + NOTIFICATIONS
 
   useEffect(() => {
     if (!user?.id) return;
@@ -558,23 +741,33 @@ function DashboardLayout() {
     return () => {
       socket.off("notification_updated", handleNotificationsUpdated);
     };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.role, user?.company_id]);
 
-  const handleRequestTrialExtension = async () => {
+  const handleMarkAllRead = async () => {
     try {
-      await api.post("/subscriptions/my/trial-extension/request");
+      await api.patch("/notifications/read-all");
 
-      toast.success("Trial extension request submitted successfully.");
+      await fetchUnreadNotifications();
 
-      setShowTrialExpiredModal(false);
-
-      const res = await api.get("/subscriptions/my/current");
-
-      setSubscriptionStatus(res.data?.subscription || res.data);
+      window.dispatchEvent(new Event("notificationsUpdated"));
     } catch (error) {
-      toast.error(
-        error.response?.data?.message || "Failed to request trial extension",
-      );
+      console.log(error);
+    }
+  };
+
+  const handleNotificationClick = async (item) => {
+    if (Number(item.is_read) !== 0) return;
+
+    try {
+      await api.patch(`/notifications/${item.id}/read`);
+
+      await fetchUnreadNotifications();
+
+      window.dispatchEvent(new Event("notificationsUpdated"));
+    } catch (error) {
+      console.log(error);
     }
   };
 
@@ -586,12 +779,14 @@ function DashboardLayout() {
 
     if (!companyId) {
       toast.error("Company information not found. Please login again.");
+
       return;
     }
 
     navigate(`/kyc-verification/${companyId}`, {
       state: {
         manualKyc: false,
+
         email: user?.email || "",
       },
     });
@@ -604,30 +799,19 @@ function DashboardLayout() {
       // Logout should still clear local session even if server logout fails.
     }
 
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-
-    navigate("/", {
-      replace: true,
-    });
-  };
-
-  const Avatar = () => {
-    if (profileImageUrl) {
-      return (
-        <img
-          src={profileImageUrl}
-          alt={user?.name || "User"}
-          className="h-11 w-11 shrink-0 rounded-full border border-slate-200 object-cover shadow-sm dark:border-slate-700"
-        />
-      );
+    try {
+      socket.disconnect?.();
+    } catch {
+      // ignore socket errors on logout
     }
 
-    return (
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white shadow-sm">
-        {initials}
-      </div>
-    );
+    localStorage.removeItem("token");
+
+    localStorage.removeItem("user");
+
+    localStorage.removeItem("pending_company_id");
+
+    navigate("/", { replace: true });
   };
 
   const sidebarContent = (
@@ -643,6 +827,7 @@ function DashboardLayout() {
               <h1 className="truncate text-xl font-bold leading-tight tracking-tight text-white">
                 Smart Invoice
               </h1>
+
               <p className="mt-1 truncate text-sm font-medium leading-5 text-slate-400">
                 Multi-Branch Billing
               </p>
@@ -651,13 +836,8 @@ function DashboardLayout() {
 
           <button
             type="button"
-            onClick={() => {
-              if (sidebarNavRef.current) {
-                sidebarScrollRef.current = sidebarNavRef.current.scrollTop;
-              }
-
-              setSidebarOpen(false);
-            }}
+            onClick={closeSidebar}
+            aria-label="Close sidebar"
             className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-slate-300 transition hover:bg-slate-700 hover:text-white lg:hidden"
           >
             <X size={18} />
@@ -665,13 +845,7 @@ function DashboardLayout() {
         </div>
       </div>
 
-      <nav
-        ref={sidebarNavRef}
-        onScroll={(e) => {
-          sidebarScrollRef.current = e.currentTarget.scrollTop;
-        }}
-        className="sidebar-scroll flex-1 space-y-1 overflow-y-auto p-4"
-      >
+      <nav className="sidebar-scroll flex-1 space-y-1 overflow-y-auto p-4">
         {visibleMenuGroups.map((group) => {
           if (!group.label) {
             return group.items.map((item) => {
@@ -681,14 +855,7 @@ function DashboardLayout() {
                 <Link
                   key={item.name}
                   to={item.path}
-                  onClick={() => {
-                    if (sidebarNavRef.current) {
-                      sidebarScrollRef.current =
-                        sidebarNavRef.current.scrollTop;
-                    }
-
-                    setSidebarOpen(false);
-                  }}
+                  onClick={closeSidebar}
                   className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
                     isActive
                       ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
@@ -696,6 +863,7 @@ function DashboardLayout() {
                   }`}
                 >
                   {item.icon}
+
                   <span className="truncate">{item.name}</span>
                 </Link>
               );
@@ -705,23 +873,24 @@ function DashboardLayout() {
           const hasActiveItem = group.items.some((item) =>
             isMenuItemActive(item),
           );
-          const isGroupOpen =
-            Boolean(openMenuGroups[group.key]) || hasActiveItem;
+
+          const isGroupOpen = Boolean(openMenuGroups[group.key]);
 
           return (
             <div key={group.key} className="space-y-1">
               <button
                 type="button"
                 onClick={() => toggleMenuGroup(group.key)}
+                aria-expanded={isGroupOpen}
                 className={`flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
                   hasActiveItem
                     ? "bg-slate-800 text-white"
                     : "text-slate-300 hover:bg-slate-800/90 hover:text-white"
                 }`}
-                aria-expanded={isGroupOpen}
               >
                 <span className="flex min-w-0 items-center gap-3">
                   <span className="shrink-0">{group.icon}</span>
+
                   <span className="truncate">{group.label}</span>
                 </span>
 
@@ -749,14 +918,7 @@ function DashboardLayout() {
                         <Link
                           key={item.name}
                           to={item.path}
-                          onClick={() => {
-                            if (sidebarNavRef.current) {
-                              sidebarScrollRef.current =
-                                sidebarNavRef.current.scrollTop;
-                            }
-
-                            setSidebarOpen(false);
-                          }}
+                          onClick={closeSidebar}
                           className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
                             isActive
                               ? "bg-blue-600 text-white shadow-md shadow-blue-950/20"
@@ -764,6 +926,7 @@ function DashboardLayout() {
                           }`}
                         >
                           <span className="shrink-0">{item.icon}</span>
+
                           <span className="truncate">{item.name}</span>
                         </Link>
                       );
@@ -778,18 +941,14 @@ function DashboardLayout() {
     </div>
   );
 
+  if (!user) return null;
+
   return (
     <div className="h-screen overflow-hidden bg-slate-100 text-slate-800 transition-colors dark:bg-slate-950 dark:text-slate-100">
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden"
-          onClick={() => {
-            if (sidebarNavRef.current) {
-              sidebarScrollRef.current = sidebarNavRef.current.scrollTop;
-            }
-
-            setSidebarOpen(false);
-          }}
+          onClick={closeSidebar}
         />
       )}
 
@@ -805,12 +964,13 @@ function DashboardLayout() {
         <header className="flex h-[73px] shrink-0 items-center border-b border-slate-200 bg-white px-3 transition-colors dark:border-slate-800 dark:bg-slate-900 sm:px-5 lg:px-6 xl:px-8">
           <div className="flex w-full min-w-0 items-center justify-between gap-3">
             {/* LEFT SIDE */}
+
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-700 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 lg:hidden"
                 aria-label="Open sidebar"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-700 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 lg:hidden"
               >
                 <Menu size={20} />
               </button>
@@ -827,8 +987,10 @@ function DashboardLayout() {
             </div>
 
             {/* RIGHT SIDE */}
+
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               {/* THEME */}
+
               <button
                 type="button"
                 onClick={() => setDarkMode((prev) => !prev)}
@@ -844,15 +1006,17 @@ function DashboardLayout() {
               </button>
 
               {/* NOTIFICATIONS */}
+
               <div ref={notificationRef} className="relative">
                 <button
                   type="button"
                   onClick={() => {
                     setNotificationOpen((prev) => !prev);
+
                     setProfileMenuOpen(false);
                   }}
-                  className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white sm:h-11 sm:w-11"
                   aria-label="Open notifications"
+                  className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white sm:h-11 sm:w-11"
                 >
                   <Bell size={18} />
 
@@ -864,12 +1028,13 @@ function DashboardLayout() {
                 </button>
 
                 {notificationOpen && (
-                  <div className="fixed left-3 right-3 top-[78px] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-87">
+                  <div className="fixed left-3 right-3 top-[78px] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[22rem]">
                     <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
                       <div className="min-w-0">
                         <h3 className="truncate text-sm font-bold text-slate-900 dark:text-white">
                           Notifications
                         </h3>
+
                         <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                           {unreadCount} unread alerts
                         </p>
@@ -879,18 +1044,7 @@ function DashboardLayout() {
                         {unreadCount > 0 && (
                           <button
                             type="button"
-                            onClick={async () => {
-                              try {
-                                await api.patch("/notifications/read-all");
-                                await fetchUnreadNotifications();
-
-                                window.dispatchEvent(
-                                  new Event("notificationsUpdated"),
-                                );
-                              } catch (error) {
-                                console.log(error);
-                              }
-                            }}
+                            onClick={handleMarkAllRead}
                             className="whitespace-nowrap text-xs font-semibold text-emerald-600 transition hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
                           >
                             Mark all read
@@ -909,73 +1063,59 @@ function DashboardLayout() {
 
                     <div className="max-h-[min(420px,calc(100vh-160px))] overflow-y-auto">
                       {notifications.length > 0 ? (
-                        notifications.map((item) => (
-                          <div
-                            key={item.id}
-                            onClick={async () => {
-                              if (Number(item.is_read) === 0) {
-                                try {
-                                  await api.patch(
-                                    `/notifications/${item.id}/read`,
-                                  );
+                        notifications.map((item) => {
+                          const unread = Number(item.is_read) === 0;
 
-                                  await fetchUnreadNotifications();
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => handleNotificationClick(item)}
+                              className={`cursor-pointer border-b border-slate-100 px-4 py-3 transition last:border-b-0 dark:border-slate-700 ${
+                                unread
+                                  ? "bg-blue-50/70 hover:bg-blue-100 dark:bg-blue-950/20"
+                                  : "bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800"
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="mt-1 flex w-3 shrink-0 justify-center">
+                                  {unread && (
+                                    <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                                  )}
+                                </div>
 
-                                  window.dispatchEvent(
-                                    new Event("notificationsUpdated"),
-                                  );
-                                } catch (error) {
-                                  console.log(error);
-                                }
-                              }
-                            }}
-                            className={`cursor-pointer border-b border-slate-100 px-4 py-3 transition last:border-b-0 dark:border-slate-700 ${
-                              Number(item.is_read) === 0
-                                ? "bg-blue-50/70 hover:bg-blue-100 dark:bg-blue-950/20"
-                                : "bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800"
-                            }`}
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className="mt-1 flex w-3 shrink-0 justify-center">
-                                {Number(item.is_read) === 0 && (
-                                  <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                                )}
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-                                <p
-                                  className={`truncate text-sm text-slate-900 dark:text-white ${
-                                    Number(item.is_read) === 0
-                                      ? "font-bold"
-                                      : "font-semibold"
-                                  }`}
-                                >
-                                  {item.title || "-"}
-                                </p>
-
-                                <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-                                  {item.message || "-"}
-                                </p>
-
-                                <div className="mt-2 flex items-center justify-between gap-3">
-                                  <p className="truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                                    {item.created_at
-                                      ? new Date(
-                                          item.created_at,
-                                        ).toLocaleString()
-                                      : "-"}
+                                <div className="min-w-0 flex-1">
+                                  <p
+                                    className={`truncate text-sm text-slate-900 dark:text-white ${
+                                      unread ? "font-bold" : "font-semibold"
+                                    }`}
+                                  >
+                                    {item.title || "-"}
                                   </p>
 
-                                  {Number(item.is_read) === 0 && (
-                                    <span className="shrink-0 text-[11px] font-bold text-blue-600 dark:text-blue-400">
-                                      New
-                                    </span>
-                                  )}
+                                  <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                    {item.message || "-"}
+                                  </p>
+
+                                  <div className="mt-2 flex items-center justify-between gap-3">
+                                    <p className="truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                                      {item.created_at
+                                        ? new Date(
+                                            item.created_at,
+                                          ).toLocaleString()
+                                        : "-"}
+                                    </p>
+
+                                    {unread && (
+                                      <span className="shrink-0 text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                                        New
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <div className="px-4 py-8 text-center">
                           <Bell
@@ -994,15 +1134,17 @@ function DashboardLayout() {
               </div>
 
               {/* PROFILE */}
+
               <div ref={profileMenuRef} className="relative">
                 <button
                   type="button"
                   onClick={() => {
                     setProfileMenuOpen((prev) => !prev);
+
                     setNotificationOpen(false);
                   }}
-                  className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 sm:h-11 sm:px-1.5 xl:max-w-[230px] xl:gap-2.5 xl:px-2"
                   aria-label="Open profile menu"
+                  className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 sm:h-11 sm:px-1.5 xl:max-w-[230px] xl:gap-2.5 xl:px-2"
                 >
                   {profileImageUrl ? (
                     <img
@@ -1023,7 +1165,7 @@ function DashboardLayout() {
 
                     <div className="flex min-w-0 items-center gap-1.5">
                       <p className="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">
-                        {formatRole[role] || "User"}
+                        {FORMAT_ROLE[role] || "User"}
                       </p>
 
                       {formatBranchLabel(user) && (
@@ -1061,7 +1203,7 @@ function DashboardLayout() {
 
                       <div className="mt-2 flex min-w-0 items-center gap-1.5">
                         <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {formatRole[role] || "User"}
+                          {FORMAT_ROLE[role] || "User"}
                         </span>
 
                         {formatBranchLabel(user) && (
@@ -1113,22 +1255,38 @@ function DashboardLayout() {
       </section>
 
       <style>{`
-        .sidebar-scroll::-webkit-scrollbar {
-          display: none;
-        }
 
-        .sidebar-scroll {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
+    .sidebar-scroll::-webkit-scrollbar {
 
-        button:focus,
-        button:focus-visible,
-        a:focus,
-        a:focus-visible {
-          outline: none;
-        }
-      `}</style>
+      display: none;
+
+    }
+
+
+
+    .sidebar-scroll {
+
+      -ms-overflow-style: none;
+
+      scrollbar-width: none;
+
+    }
+
+
+
+    button:focus,
+
+    button:focus-visible,
+
+    a:focus,
+
+    a:focus-visible {
+
+      outline: none;
+
+    }
+
+  `}</style>
 
       {showKycPendingModal &&
         createPortal(
@@ -1184,39 +1342,53 @@ function DashboardLayout() {
               </div>
             </div>
           </div>,
+
           document.body,
         )}
 
-      {showTrialExpiredModal && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+      {showSubscriptionExpiredModal && (
+        <div
+          className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="subscription-expired-title"
+        >
           <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-              Trial Plan Expired
+            <h2
+              id="subscription-expired-title"
+              className="text-xl font-bold text-slate-900 dark:text-white"
+            >
+              Subscription Expired
             </h2>
 
             <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
-              Your 10-day free trial has ended.
+              {subscriptionStatus?.plan_name
+                ? `Your ${subscriptionStatus.plan_name} plan has expired.`
+                : "Your current subscription plan has expired."}
             </p>
 
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              To continue using Smart Invoice & Billing Management System,
-              please purchase a subscription plan.
+              You can still view your existing records. To create or update
+              records, please purchase an active subscription plan.
             </p>
 
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/40">
               <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                Need more time?
+                View mode is still available
               </p>
 
               <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-                You may request a one-time 10-day trial extension.
+                Your sidebar and existing data will remain accessible. Only
+                restricted create, update and delete actions will be blocked.
               </p>
             </div>
 
             <div className="mt-6 flex gap-3">
               <button
+                type="button"
                 onClick={() => {
-                  setShowTrialExpiredModal(false);
+                  setShowSubscriptionExpiredModal(false);
+
                   navigate("/dashboard/billing");
                 }}
                 className="flex-1 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700"
@@ -1225,10 +1397,11 @@ function DashboardLayout() {
               </button>
 
               <button
-                onClick={handleRequestTrialExtension}
+                type="button"
+                onClick={() => setShowSubscriptionExpiredModal(false)}
                 className="flex-1 rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
               >
-                Request Extension
+                Continue in View Mode
               </button>
             </div>
           </div>

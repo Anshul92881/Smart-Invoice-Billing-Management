@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
 import CreateInvoice from "./Invoices";
+import { createPortal } from "react-dom";
 
 import {
   Receipt,
@@ -675,9 +676,9 @@ function PaymentModal({
   onReset,
   onCreateInvoice,
 }) {
-  return (
-    <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl dark:border-slate-700 dark:bg-slate-950">
+  return createPortal(
+    <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-50 shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-950">
         <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900">
           <div>
             <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
@@ -873,7 +874,8 @@ function PaymentModal({
           </form>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1205,63 +1207,96 @@ function CustomDropdown({ value, onChange, options, icon }) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  const selected = options.find(
+  const addTaxOption = options.find((option) => option.value === "__add_tax__");
+
+  const regularOptions = options.filter(
+    (option) => option.value !== "__add_tax__",
+  );
+
+  const selected = regularOptions.find(
     (option) => String(option.value) === String(value),
   );
 
   useEffect(() => {
-    const closeDropdown = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setOpen(false);
       }
     };
 
-    document.addEventListener("mousedown", closeDropdown);
-    return () => document.removeEventListener("mousedown", closeDropdown);
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const handleSelect = (nextValue) => {
+    onChange(nextValue);
+    setOpen(false);
+  };
+
   return (
-    <div ref={dropdownRef} className="relative">
+    <div ref={dropdownRef} className="relative min-w-0">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:border-emerald-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-emerald-950/50"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
       >
         <span className="flex min-w-0 items-center gap-2">
-          {icon && <span className="text-slate-400">{icon}</span>}
+          {icon && (
+            <span className="shrink-0 text-slate-400 dark:text-slate-500">
+              {icon}
+            </span>
+          )}
+
           <span className="truncate">{selected?.label || "Select"}</span>
         </span>
 
         <ChevronDown
           size={18}
-          className={`shrink-0 text-slate-500 transition ${
+          className={`shrink-0 text-slate-500 transition dark:text-slate-400 ${
             open ? "rotate-180" : ""
           }`}
         />
       </button>
 
       {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-slate-800 dark:hover:text-emerald-300 ${
-                String(value) === String(option.value)
-                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                  : "text-slate-700 dark:text-slate-200"
-              }`}
-            >
-              <span className="truncate">{option.label}</span>
-              {String(value) === String(option.value) && (
-                <CheckCircle size={16} className="shrink-0" />
-              )}
-            </button>
-          ))}
+        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+          <div className="max-h-60 overflow-y-auto">
+            {regularOptions.map((option) => {
+              const active = String(value) === String(option.value);
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleSelect(option.value)}
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 ${
+                    active
+                      ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                      : "text-slate-700 dark:text-slate-200"
+                  }`}
+                >
+                  <span className="truncate">{option.label}</span>
+
+                  {active && <CheckCircle2 size={16} className="shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+
+          {addTaxOption && (
+            <div className="border-t border-slate-100 p-2 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => handleSelect(addTaxOption.value)}
+                className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
+              >
+                <Plus size={16} />
+
+                {addTaxOption.label.replace(/^\+\s*/, "")}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

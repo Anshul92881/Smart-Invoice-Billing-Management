@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
 import CreateInvoice from "./CreateInvoice";
+import { createPortal } from "react-dom";
 
 import {
   FileText,
@@ -1324,20 +1325,22 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
         </div>
       </div>
 
-      {showInvoiceModal && (
-        <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
-          <div className="flex max-h-[92vh] w-full max-w-[92vw] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-2xl dark:border-slate-700 dark:bg-slate-950">
-            <CreateInvoice
-              modalMode
-              onClose={() => setShowInvoiceModal(false)}
-              onCreated={() => {
-                setShowInvoiceModal(false);
-                fetchData();
-              }}
-            />
-          </div>
-        </div>
-      )}
+      {showInvoiceModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
+            <div className="flex max-h-[94vh] w-full max-w-[95vw] flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-50 shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-950">
+              <CreateInvoice
+                modalMode
+                onClose={() => setShowInvoiceModal(false)}
+                onCreated={() => {
+                  setShowInvoiceModal(false);
+                  fetchData();
+                }}
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
 
       <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-200 p-4 dark:border-slate-800">
@@ -2161,12 +2164,12 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
 }
 
 function Modal({ title, description, icon, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white dark:bg-slate-900 px-5 py-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[60000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
               {icon || <FileText size={21} />}
             </div>
 
@@ -2174,24 +2177,30 @@ function Modal({ title, description, icon, onClose, children }) {
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 {title}
               </h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {description}
-              </p>
+
+              {description && (
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  {description}
+                </p>
+              )}
             </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="p-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/60 p-5 dark:bg-slate-950/40">
+          {children}
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

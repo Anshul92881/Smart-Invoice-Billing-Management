@@ -74,6 +74,93 @@ const sendCompanySecurityNotification = async ({
   });
 };
 
+const COMPANY_SUBSCRIPTION_ROLES = [
+  "company_admin",
+  "accountant",
+  "sales_user",
+];
+
+const getCompanySubscriptionAccess = async (
+  companyId,
+  role,
+) => {
+  // SuperAdmin aur non-company roles par subscription check nahi hoga
+  if (
+    !companyId ||
+    !COMPANY_SUBSCRIPTION_ROLES.includes(role)
+  ) {
+    return {
+      hasActiveSubscription: true,
+      subscriptionStatus: null,
+      subscriptionPlanName: null,
+      subscriptionRenewalDate: null,
+    };
+  }
+
+  const [rows] = await db.query(
+    `
+    SELECT
+      cs.id,
+      cs.status,
+      cs.start_date,
+      cs.renewal_date,
+      sp.plan_name,
+      sp.plan_type,
+
+      CASE
+        WHEN cs.status = 'active'
+          AND cs.start_date <= CURDATE()
+          AND cs.renewal_date IS NOT NULL
+          AND cs.renewal_date >= CURDATE()
+        THEN 1
+        ELSE 0
+      END AS is_valid
+
+    FROM tbl_company_subscriptions cs
+
+    JOIN tbl_subscription_plans sp
+      ON sp.id = cs.plan_id
+
+    WHERE cs.company_id = ?
+
+    ORDER BY
+      is_valid DESC,
+      cs.id DESC
+
+    LIMIT 1
+    `,
+    [companyId],
+  );
+
+  const subscription = rows[0] || null;
+
+  if (Number(subscription?.is_valid) === 1) {
+    return {
+      hasActiveSubscription: true,
+      subscriptionStatus: "active",
+      subscriptionPlanName:
+        subscription.plan_name || null,
+      subscriptionRenewalDate:
+        subscription.renewal_date || null,
+    };
+  }
+
+  const subscriptionStatus = subscription
+    ? subscription.status === "active"
+      ? "expired"
+      : subscription.status
+    : "missing";
+
+  return {
+    hasActiveSubscription: false,
+    subscriptionStatus,
+    subscriptionPlanName:
+      subscription?.plan_name || null,
+    subscriptionRenewalDate:
+      subscription?.renewal_date || null,
+  };
+};
+
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -301,26 +388,52 @@ export const login = async (req, res) => {
       ...(companyPermissions?.[user.role] || {}),
     };
 
-    const hasFullKycAccess =
-      user.role !== "company_admin" ||
-      ["approved", "manual_verified"].includes(user.kyc_status);
+    const isCompanySubscriptionRole =
+  COMPANY_SUBSCRIPTION_ROLES.includes(user.role);
 
-    const featureAccess = hasFullKycAccess ? "full" : "view_only";
+const hasFullKycAccess =
+  !isCompanySubscriptionRole ||
+  ["approved", "manual_verified"].includes(
+    user.kyc_status,
+  );
+
+const subscriptionAccess =
+  await getCompanySubscriptionAccess(
+    user.company_id,
+    user.role,
+  );
+
+const featureAccess =
+  hasFullKycAccess &&
+  subscriptionAccess.hasActiveSubscription
+    ? "full"
+    : "view_only";
+
+const subscriptionRequired =
+  isCompanySubscriptionRole &&
+  hasFullKycAccess &&
+  !subscriptionAccess.hasActiveSubscription;
 
     const token = jwt.sign(
-      {
-        id: user.id,
-        role: user.role,
-        company_id: user.company_id,
-        branch_id: user.branch_id || null,
-        customer_id: user.customer_id || null,
-        permissions,
-        kyc_status: user.kyc_status || null,
-        feature_access: featureAccess,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" },
-    );
+  {
+    id: user.id,
+    role: user.role,
+    company_id: user.company_id,
+    branch_id: user.branch_id || null,
+    customer_id: user.customer_id || null,
+    permissions,
+    kyc_status: user.kyc_status || null,
+    feature_access: featureAccess,
+
+    subscription_status:
+      subscriptionAccess.subscriptionStatus,
+
+    subscription_required:
+      subscriptionRequired,
+  },
+  process.env.JWT_SECRET,
+  { expiresIn: "1d" },
+);
 
     await db.query(
       `
@@ -350,24 +463,37 @@ export const login = async (req, res) => {
     });
 
     return res.json({
-      message: "Login successful",
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        company_id: user.company_id,
-        branch_id: user.branch_id || null,
-        branch_name: user.branch_name || null,
-        branch_code: user.branch_code || null,
-        customer_id: user.customer_id || null,
-        profile_image: user.profile_image || null,
-        permissions,
-        kyc_status: user.kyc_status || null,
-        feature_access: featureAccess,
-      },
-    });
+  message: "Login successful",
+  token,
+
+  user: {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    company_id: user.company_id,
+    branch_id: user.branch_id || null,
+    branch_name: user.branch_name || null,
+    branch_code: user.branch_code || null,
+    customer_id: user.customer_id || null,
+    profile_image: user.profile_image || null,
+    permissions,
+    kyc_status: user.kyc_status || null,
+    feature_access: featureAccess,
+
+    subscription_status:
+      subscriptionAccess.subscriptionStatus,
+
+    subscription_required:
+      subscriptionRequired,
+
+    subscription_plan_name:
+      subscriptionAccess.subscriptionPlanName,
+
+    subscription_renewal_date:
+      subscriptionAccess.subscriptionRenewalDate,
+  },
+});
   } catch (error) {
     console.error("LOGIN ERROR:", error);
 
@@ -450,22 +576,54 @@ export const getMe = async (req, res) => {
       ...(companyRolePermissions?.[user.role] || {}),
     };
 
-    const hasFullKycAccess =
-      user.role !== "company_admin" ||
-      ["approved", "manual_verified"].includes(user.kyc_status);
+    const isCompanySubscriptionRole =
+  COMPANY_SUBSCRIPTION_ROLES.includes(user.role);
 
-    const featureAccess = hasFullKycAccess ? "full" : "view_only";
+const hasFullKycAccess =
+  !isCompanySubscriptionRole ||
+  ["approved", "manual_verified"].includes(
+    user.kyc_status,
+  );
+
+const subscriptionAccess =
+  await getCompanySubscriptionAccess(
+    user.company_id,
+    user.role,
+  );
+
+const featureAccess =
+  hasFullKycAccess &&
+  subscriptionAccess.hasActiveSubscription
+    ? "full"
+    : "view_only";
+
+const subscriptionRequired =
+  isCompanySubscriptionRole &&
+  hasFullKycAccess &&
+  !subscriptionAccess.hasActiveSubscription;
 
     delete user.role_permissions;
 
-    return res.json({
-      user: {
-        ...user,
-        permissions: finalPermissions,
-        kyc_status: user.kyc_status || null,
-        feature_access: featureAccess,
-      },
-    });
+return res.json({
+  user: {
+    ...user,
+    permissions: finalPermissions,
+    kyc_status: user.kyc_status || null,
+    feature_access: featureAccess,
+
+    subscription_status:
+      subscriptionAccess.subscriptionStatus,
+
+    subscription_required:
+      subscriptionRequired,
+
+    subscription_plan_name:
+      subscriptionAccess.subscriptionPlanName,
+
+    subscription_renewal_date:
+      subscriptionAccess.subscriptionRenewalDate,
+  },
+});
   } catch (error) {
     console.error("GET ME ERROR:", error);
 

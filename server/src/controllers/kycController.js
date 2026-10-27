@@ -63,32 +63,80 @@ const sendKycRejectedEmail = async (email, name, reason) => {
   });
 };
 
-const createTrialSubscription = async (connection, companyId) => {
-  const [existing] = await connection.query(
+export const assignDefaultFreeSubscription = async (connection, companyId) => {
+  const [existingSubscriptions] = await connection.query(
     `
     SELECT id
     FROM tbl_company_subscriptions
     WHERE company_id = ?
-    AND status IN ('trial', 'active', 'pending_payment')
     LIMIT 1
+    FOR UPDATE
     `,
     [companyId],
   );
 
-  if (existing.length) return;
+  if (existingSubscriptions.length > 0) {
+    return {
+      assigned: false,
+      reason: "subscription_already_exists",
+    };
+  }
 
-  const [trialPlan] = await connection.query(
+  /*
+  |--------------------------------------------------------------------------
+  | GET SUPERADMIN DEFAULT FREE PLAN
+  |--------------------------------------------------------------------------
+  */
+
+  const [freePlans] = await connection.query(
     `
-    SELECT id
+    SELECT
+      id,
+      plan_name,
+      duration_value,
+      duration_unit,
+      max_branches
     FROM tbl_subscription_plans
-    WHERE LOWER(plan_name) = 'free trial'
+    WHERE plan_type = 'free'
+      AND is_default = 1
+      AND status = 'active'
+    ORDER BY id DESC
     LIMIT 1
+    FOR UPDATE
     `,
   );
 
-  if (!trialPlan.length) return;
+  if (freePlans.length === 0) {
+    throw new Error(
+      "Default active Free Plan not found. Please create a Default Free Plan first.",
+    );
+  }
 
-  await connection.query(
+  const freePlan = freePlans[0];
+
+  const durationValue = Number(freePlan.duration_value);
+  const durationUnit = String(freePlan.duration_unit || "").toLowerCase();
+  const maxBranches = Number(freePlan.max_branches);
+
+  /*
+  |--------------------------------------------------------------------------
+  | VALIDATE SUPERADMIN PLAN
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    !Number.isInteger(durationValue) ||
+    durationValue <= 0 ||
+    !["day", "month", "year"].includes(durationUnit)
+  ) {
+    throw new Error("Default Free Plan duration is invalid.");
+  }
+
+  if (!Number.isInteger(maxBranches) || maxBranches <= 0) {
+    throw new Error("Default Free Plan branch limit is invalid.");
+  }
+
+  const [subscriptionResult] = await connection.query(
     `
     INSERT INTO tbl_company_subscriptions
     (
@@ -97,20 +145,65 @@ const createTrialSubscription = async (connection, companyId) => {
       status,
       start_date,
       trial_end_date,
+      renewal_date,
       auto_renewal
     )
     VALUES
     (
       ?,
       ?,
-      'trial',
+      'active',
       CURDATE(),
-      DATE_ADD(CURDATE(), INTERVAL 10 DAY),
+      NULL,
+
+      CASE
+        WHEN ? = 'day'
+          THEN DATE_ADD(CURDATE(), INTERVAL ? DAY)
+
+        WHEN ? = 'month'
+          THEN DATE_ADD(CURDATE(), INTERVAL ? MONTH)
+
+        WHEN ? = 'year'
+          THEN DATE_ADD(CURDATE(), INTERVAL ? YEAR)
+      END,
+
       0
     )
     `,
-    [companyId, trialPlan[0].id],
+    [
+      companyId,
+      freePlan.id,
+
+      durationUnit,
+      durationValue,
+
+      durationUnit,
+      durationValue,
+
+      durationUnit,
+      durationValue,
+    ],
   );
+
+  await connection.query(
+    `
+    UPDATE tbl_companies
+    SET branch_limit = ?
+    WHERE id = ?
+    `,
+    [maxBranches, companyId],
+  );
+
+  return {
+    assigned: true,
+    subscription_id: subscriptionResult.insertId,
+    plan_id: freePlan.id,
+    plan_name: freePlan.plan_name,
+    duration_value: durationValue,
+    duration_unit: durationUnit,
+    max_branches: maxBranches,
+    auto_renewal: 0,
+  };
 };
 
 export const getMyKycStatus = async (req, res) => {
@@ -553,7 +646,7 @@ export const uploadCompanyKycDocuments = async (req, res) => {
         [companyId],
       );
 
-      await createTrialSubscription(connection, companyId);
+      await assignDefaultFreeSubscription(connection, companyId);
     }
 
     await connection.commit();
@@ -864,7 +957,7 @@ export const uploadSuperAdminKycDocuments = async (req, res) => {
       throw new Error("Company Admin status was not updated to active");
     }
 
-    await createTrialSubscription(connection, companyId);
+    await assignDefaultFreeSubscription(connection, companyId);
 
     const uploadedDocumentNames = uploadedDocs
       .map((item) => item.replaceAll("_", " "))
@@ -1324,7 +1417,7 @@ export const saveSuperAdminKycDetails = async (req, res) => {
         [companyAdmin.id],
       );
 
-      await createTrialSubscription(connection, companyId);
+      await assignDefaultFreeSubscription(connection, companyId);
     }
 
     const changedItems = [];

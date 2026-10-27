@@ -21,15 +21,64 @@ import {
   Activity,
 } from "lucide-react";
 
-function formatBillingCycle(cycle) {
-  const cycles = {
-    "1_month": "1 Month",
-    "3_months": "3 Months",
-    "6_months": "6 Months",
-    "1_year": "1 Year",
+function getPlanDuration(plan) {
+  if (
+    Number(plan?.duration_value) > 0 &&
+    ["day", "month", "year"].includes(plan?.duration_unit)
+  ) {
+    return {
+      value: Number(plan.duration_value),
+      unit: plan.duration_unit,
+    };
+  }
+
+  const legacyCycles = {
+    monthly: { value: 1, unit: "month" },
+    quarterly: { value: 3, unit: "month" },
+    half_yearly: { value: 6, unit: "month" },
+    yearly: { value: 1, unit: "year" },
+    "1_month": { value: 1, unit: "month" },
+    "3_months": { value: 3, unit: "month" },
+    "6_months": { value: 6, unit: "month" },
+    "1_year": { value: 1, unit: "year" },
   };
 
-  return cycles[cycle] || cycle || "-";
+  const customDuration = String(plan?.billing_cycle || "").match(
+    /^(\d+)_(day|month|year)s?$/,
+  );
+
+  if (customDuration) {
+    return {
+      value: Number(customDuration[1]),
+      unit: customDuration[2],
+    };
+  }
+
+  if (legacyCycles[plan?.billing_cycle]) {
+    return legacyCycles[plan.billing_cycle];
+  }
+
+  if (Number(plan?.validity_days || plan?.trial_days) > 0) {
+    return {
+      value: Number(plan.validity_days || plan.trial_days),
+      unit: "day",
+    };
+  }
+
+  return { value: 1, unit: "month" };
+}
+
+function formatPlanDuration(plan) {
+  const { value, unit } = getPlanDuration(plan);
+  const label = unit.charAt(0).toUpperCase() + unit.slice(1);
+  return `${value} ${label}${value === 1 ? "" : "s"}`;
+}
+
+function durationToDays(value, unit) {
+  const amount = Number(value || 0);
+  if (unit === "year") return amount * 365;
+  if (unit === "month") return amount * 30;
+  return amount;
 }
 
 function formatDate(date) {
@@ -40,11 +89,28 @@ function formatDate(date) {
 function getValidTillDate(subscription) {
   if (!subscription) return "-";
 
-  if (["trial", "expired"].includes(subscription.status)) {
-    return formatDate(subscription.trial_end_date);
-  }
+  return formatDate(
+    subscription.valid_until ||
+      subscription.end_date ||
+      subscription.renewal_date ||
+      subscription.trial_end_date,
+  );
+}
 
-  return formatDate(subscription.renewal_date);
+function isFreePlan(plan) {
+  return (
+    plan?.plan_type === "free" ||
+    plan?.is_free === 1 ||
+    Number(plan?.price || 0) === 0
+  );
+}
+
+function isFreeSubscription(subscription) {
+  return (
+    subscription?.plan_type === "free" ||
+    subscription?.is_free === 1 ||
+    Number(subscription?.price || 0) === 0
+  );
 }
 
 function Subscriptions() {
@@ -53,8 +119,6 @@ function Subscriptions() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [payments, setPayments] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [extensionRequests, setExtensionRequests] = useState([]);
-
   const [subscriptionSearch, setSubscriptionSearch] = useState("");
   const [modalType, setModalType] = useState(null);
   const [modalSearch, setModalSearch] = useState("");
@@ -67,11 +131,13 @@ function Subscriptions() {
 
   const initialPlanForm = {
     plan_name: "",
+    plan_type: "paid",
     price: "",
-    billing_cycle: "1_month",
-    trial_days: "",
+    duration_value: "1",
+    duration_unit: "month",
     max_branches: "2",
     features: "",
+    is_default: 0,
   };
 
   const [planForm, setPlanForm] = useState(initialPlanForm);
@@ -90,7 +156,7 @@ function Subscriptions() {
     return subscriptions.filter((subscription) =>
       `${subscription.company_name || ""} ${subscription.plan_name || ""} ${
         subscription.status || ""
-      } ${formatBillingCycle(subscription.billing_cycle)}`
+      } ${formatPlanDuration(subscription)}`
         .toLowerCase()
         .includes(keyword),
     );
@@ -108,21 +174,14 @@ function Subscriptions() {
 
   const fetchData = async () => {
     try {
-      const [
-        plansRes,
-        companiesRes,
-        subsRes,
-        paymentsRes,
-        invoicesRes,
-        extensionsRes,
-      ] = await Promise.all([
-        api.get("/subscriptions/plans"),
-        api.get("/companies"),
-        api.get("/subscriptions"),
-        api.get("/subscriptions/payments/all"),
-        api.get("/subscriptions/invoices/all"),
-        api.get("/subscriptions/trial-extension/requests"),
-      ]);
+      const [plansRes, companiesRes, subsRes, paymentsRes, invoicesRes] =
+        await Promise.all([
+          api.get("/subscriptions/plans"),
+          api.get("/companies"),
+          api.get("/subscriptions"),
+          api.get("/subscriptions/payments/all"),
+          api.get("/subscriptions/invoices/all"),
+        ]);
 
       setPlans(
         Array.isArray(plansRes.data)
@@ -153,12 +212,6 @@ function Subscriptions() {
           ? invoicesRes.data
           : invoicesRes.data.invoices || [],
       );
-
-      setExtensionRequests(
-        Array.isArray(extensionsRes.data)
-          ? extensionsRes.data
-          : extensionsRes.data.requests || [],
-      );
     } catch (error) {
       toast.error(
         error.response?.data?.message || "Failed to fetch subscriptions",
@@ -185,14 +238,18 @@ function Subscriptions() {
   };
 
   const openEditPlan = (plan) => {
+    const duration = getPlanDuration(plan);
+
     setEditingPlanId(plan.id);
     setPlanForm({
       plan_name: plan.plan_name || "",
-      price: plan.price || "",
-      billing_cycle: plan.billing_cycle || "3_months",
-      trial_days: plan.trial_days || "",
+      plan_type: isFreePlan(plan) ? "free" : "paid",
+      price: isFreePlan(plan) ? "0" : plan.price || "",
+      duration_value: String(duration.value),
+      duration_unit: duration.unit,
       max_branches: plan.max_branches || "1",
       features: plan.features || "",
+      is_default: isFreePlan(plan) ? 1 : 0,
     });
     setShowPlanModal(true);
   };
@@ -205,8 +262,16 @@ function Subscriptions() {
       return;
     }
 
-    if (!planForm.price || Number(planForm.price) <= 0) {
+    if (
+      planForm.plan_type === "paid" &&
+      (!planForm.price || Number(planForm.price) <= 0)
+    ) {
       toast.error("Valid plan price is required");
+      return;
+    }
+
+    if (!planForm.duration_value || Number(planForm.duration_value) <= 0) {
+      toast.error("Plan duration must be greater than 0");
       return;
     }
 
@@ -218,7 +283,24 @@ function Subscriptions() {
     try {
       const payload = {
         ...planForm,
+        price: planForm.plan_type === "free" ? 0 : Number(planForm.price),
+        duration_value: Number(planForm.duration_value),
+        duration_unit: planForm.duration_unit,
+        billing_cycle:
+          planForm.plan_type === "paid"
+            ? `${Number(planForm.duration_value)}_${planForm.duration_unit}`
+            : null,
+        validity_days: durationToDays(
+          planForm.duration_value,
+          planForm.duration_unit,
+        ),
+        // Remove this compatibility field after backend migration is complete.
+        trial_days:
+          planForm.plan_type === "free"
+            ? durationToDays(planForm.duration_value, planForm.duration_unit)
+            : 0,
         max_branches: Number(planForm.max_branches),
+        is_default: planForm.plan_type === "free" ? 1 : 0,
       };
 
       if (editingPlanId) {
@@ -246,7 +328,7 @@ function Subscriptions() {
 
     try {
       await api.post("/subscriptions", subscriptionForm);
-      toast.success("Subscription assigned. Now generate invoice.");
+      toast.success("Subscription assigned successfully");
 
       setSubscriptionForm({
         company_id: "",
@@ -333,30 +415,6 @@ function Subscriptions() {
     }
   };
 
-  const approveExtension = async (id) => {
-    try {
-      await api.patch(`/subscriptions/trial-extension/${id}/approve`);
-      toast.success("Trial extension approved");
-      fetchData();
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message || "Failed to approve extension",
-      );
-    }
-  };
-
-  const rejectExtension = async (id) => {
-    try {
-      await api.patch(`/subscriptions/trial-extension/${id}/reject`);
-      toast.success("Trial extension rejected");
-      fetchData();
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message || "Failed to reject extension",
-      );
-    }
-  };
-
   const paidPayments = payments.filter(
     (item) => item.payment_status === "paid",
   );
@@ -370,13 +428,7 @@ function Subscriptions() {
     (item) => item.status === "active",
   ).length;
 
-  const trialSubscriptions = subscriptions.filter(
-    (item) => item.status === "trial",
-  ).length;
-
-  const pendingExtensionRequests = extensionRequests.filter(
-    (item) => item.trial_extension_status === "pending",
-  ).length;
+  const freeSubscriptions = subscriptions.filter(isFreeSubscription).length;
 
   const safeCompanies = Array.isArray(companies) ? companies : [];
 
@@ -443,12 +495,10 @@ function Subscriptions() {
 
         <StatCard
           icon={<CalendarClock size={20} />}
-          title="Trial Accounts"
-          value={trialSubscriptions}
-          badge={pendingExtensionRequests}
-          badgeLabel="Extension Requests"
+          title="Default Free Plans"
+          value={freeSubscriptions}
           color="bg-amber-50 dark:bg-amber-950/40 text-amber-700"
-          onClick={() => setModalType("trial")}
+          onClick={() => setModalType("free")}
         />
 
         <StatCard
@@ -489,7 +539,17 @@ function Subscriptions() {
           <Field label="Plan">
             <CustomSelect
               value={subscriptionForm.plan_id}
-              onChange={(value) => updateSubscriptionField("plan_id", value)}
+              onChange={(value) => {
+                updateSubscriptionField("plan_id", value);
+
+                const selectedPlan = plans.find(
+                  (plan) => String(plan.id) === String(value),
+                );
+
+                if (isFreePlan(selectedPlan)) {
+                  updateSubscriptionField("auto_renewal", 0);
+                }
+              }}
               searchable
               placeholder="Select Plan"
               options={plans
@@ -497,9 +557,11 @@ function Subscriptions() {
                 .map((plan) => ({
                   value: plan.id,
                   label: plan.plan_name,
-                  subLabel: `₹${Number(plan.price || 0).toFixed(
-                    2,
-                  )} / ${formatBillingCycle(plan.billing_cycle)} / ${
+                  subLabel: `${
+                    isFreePlan(plan)
+                      ? "Free"
+                      : `₹${Number(plan.price || 0).toFixed(2)}`
+                  } / ${formatPlanDuration(plan)} / ${
                     plan.max_branches || 1
                   } Branch(es)`,
                 }))}
@@ -581,11 +643,18 @@ function Subscriptions() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                    {plan.plan_name}
-                  </h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                      {plan.plan_name}
+                    </h3>
+                    {isFreePlan(plan) && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                        Default
+                      </span>
+                    )}
+                  </div>
                   <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    {formatBillingCycle(plan.billing_cycle)}
+                    {isFreePlan(plan) ? "Free Plan" : "Paid Plan"}
                   </p>
                 </div>
 
@@ -604,18 +673,16 @@ function Subscriptions() {
 
               <div className="mt-4">
                 <span className="text-2xl font-semibold text-slate-900 dark:text-white">
-                  ₹{Number(plan.price || 0).toFixed(2)}
+                  {isFreePlan(plan)
+                    ? "Free"
+                    : `₹${Number(plan.price || 0).toFixed(2)}`}
                 </span>
               </div>
 
               <div className="mt-4 space-y-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
                 <p>
                   <CalendarClock size={14} className="mr-2 inline" />
-                  Trial: {plan.trial_days || 0} days
-                </p>
-                <p>
-                  <FileText size={14} className="mr-2 inline" />
-                  Billing: {formatBillingCycle(plan.billing_cycle)}
+                  Plan Duration: {formatPlanDuration(plan)}
                 </p>
                 <p>
                   <Building2 size={14} className="mr-2 inline" />
@@ -740,9 +807,6 @@ function Subscriptions() {
           type={modalType}
           subscriptions={subscriptions}
           payments={payments}
-          extensionRequests={extensionRequests}
-          approveExtension={approveExtension}
-          rejectExtension={rejectExtension}
           search={modalSearch}
           setSearch={setModalSearch}
           onClose={() => {
@@ -818,7 +882,7 @@ function CreatePlanModal({
                 {editingPlanId ? "Edit Plan" : "Create New Plan"}
               </h2>
               <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                Add billing cycle, price, trial days and branch limit.
+                Configure plan type, validity and branch allowance.
               </p>
             </div>
           </div>
@@ -833,56 +897,123 @@ function CreatePlanModal({
         </div>
 
         <form onSubmit={onSubmit} className="overflow-auto p-5">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input
-              label="Plan Name"
-              name="plan_name"
-              value={planForm.plan_name}
-              onChange={(e) => updatePlanField("plan_name", e.target.value)}
-              placeholder="Basic Plan"
-            />
-
-            <Input
-              label="Price"
-              type="number"
-              name="price"
-              value={planForm.price}
-              onChange={(e) => updatePlanField("price", e.target.value)}
-              placeholder="999"
-            />
-
-            <Field label="Billing Cycle">
-              <CustomSelect
-                value={planForm.billing_cycle}
-                onChange={(value) => updatePlanField("billing_cycle", value)}
-                options={[
-                  { value: "1_month", label: "1 Month" },
-                  { value: "3_months", label: "3 Months" },
-                  { value: "6_months", label: "6 Months" },
-                  { value: "1_year", label: "1 Year" },
-                ]}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+            <div className="md:col-span-3">
+              <Input
+                label="Plan Name"
+                name="plan_name"
+                value={planForm.plan_name}
+                onChange={(e) => updatePlanField("plan_name", e.target.value)}
+                placeholder="Basic Plan"
               />
-            </Field>
+            </div>
 
-            <Input
-              label="Trial Days"
-              type="number"
-              name="trial_days"
-              value={planForm.trial_days}
-              onChange={(e) => updatePlanField("trial_days", e.target.value)}
-              placeholder="10"
-            />
+            <div className="md:col-span-3">
+              <Field label="Plan Type">
+                <CustomSelect
+                  value={planForm.plan_type}
+                  onChange={(value) => {
+                    updatePlanField("plan_type", value);
+                    if (value === "free") {
+                      updatePlanField("price", "0");
+                      updatePlanField("duration_value", "30");
+                      updatePlanField("duration_unit", "day");
+                      updatePlanField("is_default", 1);
+                    } else {
+                      updatePlanField("duration_value", "1");
+                      updatePlanField("duration_unit", "month");
+                      updatePlanField("is_default", 0);
+                    }
+                  }}
+                  options={[
+                    { value: "free", label: "Free Plan" },
+                    { value: "paid", label: "Paid Plan" },
+                  ]}
+                />
+              </Field>
+            </div>
 
-            <Input
-              label="Max Branches"
-              type="number"
-              name="max_branches"
-              value={planForm.max_branches}
-              onChange={(e) => updatePlanField("max_branches", e.target.value)}
-              placeholder="1"
-            />
+            {planForm.plan_type === "paid" && (
+              <div className="md:col-span-3">
+                <Input
+                  label="Price"
+                  type="number"
+                  name="price"
+                  value={planForm.price}
+                  onChange={(e) => updatePlanField("price", e.target.value)}
+                  placeholder="999"
+                />
+              </div>
+            )}
 
-            <div className="md:col-span-2">
+            <div
+              className={
+                planForm.plan_type === "free"
+                  ? "md:col-span-2"
+                  : "md:col-span-3"
+              }
+            >
+              <Field label="Plan Duration">
+                <div
+                  className={`grid gap-2 ${
+                    planForm.plan_type === "free"
+                      ? "grid-cols-[minmax(0,1fr)_105px]"
+                      : "grid-cols-[minmax(0,1fr)_140px]"
+                  }`}
+                >
+                  <input
+                    type="number"
+                    min="1"
+                    name="duration_value"
+                    value={planForm.duration_value}
+                    onChange={(e) =>
+                      updatePlanField("duration_value", e.target.value)
+                    }
+                    placeholder="Duration"
+                    className="input"
+                  />
+
+                  <CustomSelect
+                    value={planForm.duration_unit}
+                    onChange={(value) =>
+                      updatePlanField("duration_unit", value)
+                    }
+                    options={[
+                      { value: "day", label: "Days" },
+                      { value: "month", label: "Months" },
+                      { value: "year", label: "Years" },
+                    ]}
+                  />
+                </div>
+              </Field>
+            </div>
+
+            <div
+              className={
+                planForm.plan_type === "free"
+                  ? "md:col-span-1"
+                  : "md:col-span-2"
+              }
+            >
+              <Input
+                label="Max Branches"
+                type="number"
+                name="max_branches"
+                value={planForm.max_branches}
+                onChange={(e) =>
+                  updatePlanField("max_branches", e.target.value)
+                }
+                placeholder="1"
+              />
+            </div>
+
+            <div
+              className={
+                planForm.plan_type === "free"
+                  ? "md:col-span-3"
+                  : "md:col-span-4"
+              }
+            >
               <Input
                 label="Features"
                 name="features"
@@ -961,12 +1092,14 @@ function SubscriptionsTable({
                     {subscription.plan_name || "-"}
                   </p>
                   <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    {formatBillingCycle(subscription.billing_cycle)}
+                    {formatPlanDuration(subscription)}
                   </p>
                 </td>
 
                 <td className="p-4 font-semibold text-slate-900 dark:text-white">
-                  ₹ {Number(subscription.price || 0).toFixed(2)}
+                  {isFreeSubscription(subscription)
+                    ? "Free"
+                    : `₹ ${Number(subscription.price || 0).toFixed(2)}`}
                 </td>
 
                 <td className="p-4">
@@ -1259,52 +1392,29 @@ function SubscriptionStatsModal({
   type,
   subscriptions,
   payments,
-  extensionRequests = [],
-  approveExtension,
-  rejectExtension,
   search,
   setSearch,
   onClose,
 }) {
-  const pendingExtensionRows = useMemo(
-    () =>
-      extensionRequests
-        .filter((item) => item.trial_extension_status === "pending")
-        .map((item) => ({
-          ...item,
-          id: `extension-${item.id}`,
-          subscription_id: item.id,
-          status: item.status || "expired",
-          billing_cycle: item.billing_cycle || "trial",
-          is_extension_request: true,
-        })),
-    [extensionRequests],
-  );
-
   const filteredSubscriptions = useMemo(() => {
     const keyword = search.trim().toLowerCase();
 
-    const baseRows = subscriptions.filter((item) => {
+    const rows = subscriptions.filter((item) => {
       if (type === "active") return item.status === "active";
-      if (type === "trial") return item.status === "trial";
+      if (type === "free") return isFreeSubscription(item);
       return true;
     });
-
-    const rows =
-      type === "trial" ? [...baseRows, ...pendingExtensionRows] : baseRows;
 
     if (!keyword) return rows;
 
     return rows.filter((item) =>
       `${item.company_name || ""} ${item.company_email || ""} ${
         item.plan_name || ""
-      } ${item.status || ""} ${item.request_type || ""} ${
-        item.trial_extension_status || ""
-      } ${formatBillingCycle(item.billing_cycle)}`
+      } ${item.status || ""} ${formatPlanDuration(item)}`
         .toLowerCase()
         .includes(keyword),
     );
-  }, [subscriptions, pendingExtensionRows, search, type]);
+  }, [subscriptions, search, type]);
 
   const filteredPayments = payments
     .filter((item) => item.payment_status === "paid")
@@ -1323,9 +1433,7 @@ function SubscriptionStatsModal({
   const activeSubscriptions = subscriptions.filter(
     (item) => item.status === "active",
   ).length;
-  const trialSubscriptions = subscriptions.filter(
-    (item) => item.status === "trial",
-  ).length;
+  const freeSubscriptions = subscriptions.filter(isFreeSubscription).length;
 
   const inactiveSubscriptions = subscriptions.filter(
     (item) =>
@@ -1358,9 +1466,9 @@ function SubscriptionStatsModal({
       icon: <CheckCircle2 size={22} />,
       color: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700",
     },
-    trial: {
-      title: "Trial Accounts",
-      subtitle: "Trial accounts and pending extension requests.",
+    free: {
+      title: "Default Free Plans",
+      subtitle: "Companies currently using a free subscription.",
       icon: <CalendarClock size={22} />,
       color: "bg-amber-50 dark:bg-amber-950/40 text-amber-700",
     },
@@ -1457,8 +1565,8 @@ function SubscriptionStatsModal({
                   className="bg-green-50 dark:bg-emerald-950/40 text-green-700"
                 />
                 <ModalStatCard
-                  title="Trial"
-                  value={trialSubscriptions}
+                  title="Free Plans"
+                  value={freeSubscriptions}
                   icon={<CalendarClock size={18} />}
                   className="bg-amber-50 dark:bg-amber-950/40 text-amber-700"
                 />
@@ -1472,12 +1580,7 @@ function SubscriptionStatsModal({
 
               <SearchBox value={search} setValue={setSearch} />
 
-              <SubscriptionModalTable
-                subscriptions={filteredSubscriptions}
-                showTrialActions={type === "trial"}
-                approveExtension={approveExtension}
-                rejectExtension={rejectExtension}
-              />
+              <SubscriptionModalTable subscriptions={filteredSubscriptions} />
             </div>
           )}
         </div>
@@ -1585,139 +1688,83 @@ function RevenueModalTable({ filteredPayments }) {
   );
 }
 
-function SubscriptionModalTable({
-  subscriptions,
-  showTrialActions = false,
-  approveExtension,
-  rejectExtension,
-}) {
-  const tableMinWidth = showTrialActions ? "min-w-[760px]" : "min-w-[950px]";
-  const emptyColSpan = showTrialActions ? 6 : 7;
-
+function SubscriptionModalTable({ subscriptions }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
       <div className="overflow-x-auto">
-        <table className={`w-full ${tableMinWidth} text-sm`}>
+        <table className="w-full min-w-[950px] text-sm">
           <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
             <tr>
               <TableHead title="Company" />
               <TableHead title="Plan" />
-              {!showTrialActions && <TableHead title="Amount" />}
-              {!showTrialActions && <TableHead title="Branch Limit" />}
+              <TableHead title="Amount" />
+              <TableHead title="Branch Limit" />
               <TableHead title="Status" />
               <TableHead title="Valid Till" />
               <TableHead title="Auto Renewal" />
-              {showTrialActions && <TableHead title="Action" />}
             </tr>
           </thead>
 
           <tbody>
-            {subscriptions.map((subscription) => {
-              const isExtensionRequest = subscription.is_extension_request;
-              const rowKey = isExtensionRequest
-                ? `extension-${subscription.subscription_id}`
-                : subscription.id;
-
-              return (
-                <tr
-                  key={rowKey}
-                  className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:bg-slate-700 dark:bg-slate-800"
-                >
-                  <td className="p-4 font-semibold text-slate-900 dark:text-white">
-                    {subscription.company_name || "-"}
-                    {subscription.company_email && (
-                      <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                        {subscription.company_email}
-                      </p>
-                    )}
-                  </td>
-
-                  <td className="p-4">
-                    <p className="font-semibold text-slate-800 dark:text-slate-100">
-                      {subscription.plan_name || "-"}
-                    </p>
+            {subscriptions.map((subscription) => (
+              <tr
+                key={subscription.id}
+                className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:bg-slate-700 dark:bg-slate-800"
+              >
+                <td className="p-4 font-semibold text-slate-900 dark:text-white">
+                  {subscription.company_name || "-"}
+                  {subscription.company_email && (
                     <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      {formatBillingCycle(subscription.billing_cycle)}
+                      {subscription.company_email}
                     </p>
-                  </td>
-
-                  {!showTrialActions && (
-                    <td className="p-4 font-semibold text-slate-900 dark:text-white">
-                      ₹ {Number(subscription.price || 0).toFixed(2)}
-                    </td>
                   )}
+                </td>
 
-                  {!showTrialActions && (
-                    <td className="p-4 font-semibold text-slate-700 dark:text-slate-200">
-                      {subscription.max_branches || 1}
-                    </td>
-                  )}
+                <td className="p-4">
+                  <p className="font-semibold text-slate-800 dark:text-slate-100">
+                    {subscription.plan_name || "-"}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    {formatPlanDuration(subscription)}
+                  </p>
+                </td>
 
-                  <td className="p-4">
-                    <StatusBadge
-                      status={
-                        isExtensionRequest
-                          ? subscription.trial_extension_status
-                          : subscription.status
-                      }
-                    />
-                  </td>
+                <td className="p-4 font-semibold text-slate-900 dark:text-white">
+                  {isFreeSubscription(subscription)
+                    ? "Free"
+                    : `₹ ${Number(subscription.price || 0).toFixed(2)}`}
+                </td>
 
-                  <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">
-                    {getValidTillDate(subscription)}
-                  </td>
+                <td className="p-4 font-semibold text-slate-700 dark:text-slate-200">
+                  {subscription.max_branches || 1}
+                </td>
 
-                  <td className="p-4">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        subscription.auto_renewal
-                          ? "bg-green-50 dark:bg-emerald-950/40 text-green-700"
-                          : "bg-red-50 dark:bg-red-950/40 text-red-700"
-                      }`}
-                    >
-                      {subscription.auto_renewal ? "Enabled" : "Disabled"}
-                    </span>
-                  </td>
+                <td className="p-4">
+                  <StatusBadge status={subscription.status} />
+                </td>
 
-                  {showTrialActions && (
-                    <td className="p-4">
-                      {isExtensionRequest ? (
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              approveExtension(subscription.subscription_id)
-                            }
-                            className="rounded-lg bg-green-50 dark:bg-emerald-950/40 px-3 py-2 text-xs font-semibold text-green-700 hover:bg-green-100 dark:hover:bg-emerald-950/70"
-                          >
-                            Approve
-                          </button>
+                <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">
+                  {getValidTillDate(subscription)}
+                </td>
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              rejectExtension(subscription.subscription_id)
-                            }
-                            className="rounded-lg bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 dark:hover:bg-red-950/70"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-xs font-semibold text-slate-400">
-                          -
-                        </span>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
+                <td className="p-4">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      subscription.auto_renewal
+                        ? "bg-green-50 dark:bg-emerald-950/40 text-green-700"
+                        : "bg-red-50 dark:bg-red-950/40 text-red-700"
+                    }`}
+                  >
+                    {subscription.auto_renewal ? "Enabled" : "Disabled"}
+                  </span>
+                </td>
+              </tr>
+            ))}
 
             {subscriptions.length === 0 && (
               <tr>
                 <td
-                  colSpan={emptyColSpan}
+                  colSpan="7"
                   className="p-8 text-center text-slate-500 dark:text-slate-400"
                 >
                   No matching subscription records found.
@@ -1756,7 +1803,15 @@ function Field({ label, children }) {
   );
 }
 
-function Input({ label, name, value, onChange, type = "text", placeholder }) {
+function Input({
+  label,
+  name,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  disabled = false,
+}) {
   return (
     <Field label={label}>
       <input
@@ -1765,7 +1820,8 @@ function Input({ label, name, value, onChange, type = "text", placeholder }) {
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className="input"
+        disabled={disabled}
+        className="input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800"
       />
     </Field>
   );
