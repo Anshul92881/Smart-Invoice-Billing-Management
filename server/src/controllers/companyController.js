@@ -309,6 +309,7 @@ export const createCompany = async (req, res) => {
       currency,
       email,
       phone,
+      city,
       pan_number,
       website,
       state,
@@ -406,6 +407,7 @@ export const createCompany = async (req, res) => {
     pan_number,
     website,
     state,
+    city,
     country,
     zip_code,
     branch_limit,
@@ -414,7 +416,7 @@ export const createCompany = async (req, res) => {
     kyc_attempts,
     last_activity_at
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', 'pending', 0, NOW())
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?, ?, ?, 'inactive', 'pending', 0, NOW())
   `,
       [
         normalizedName,
@@ -427,6 +429,7 @@ export const createCompany = async (req, res) => {
         normalizedPAN,
         normalizeNullable(website),
         normalizeNullable(state),
+        normalizeText(city),
         normalizeText(country) || "India",
         normalizeNullable(zip_code),
         normalizedBranchLimit,
