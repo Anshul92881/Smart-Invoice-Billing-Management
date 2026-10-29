@@ -396,43 +396,42 @@ export const createCompany = async (req, res) => {
 
     const [companyResult] = await db.query(
       `
-  INSERT INTO tbl_companies
-  (
-    name,
-    gst_number,
-    address,
-    currency,
-    email,
-    phone,
-    pan_number,
-    website,
-    state,
-    city,
-    country,
-    zip_code,
-    branch_limit,
-    status,
-    kyc_status,
-    kyc_attempts,
-    last_activity_at
-  )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?, ?, ?, 'inactive', 'pending', 0, NOW())
-  `,
+      INSERT INTO tbl_companies
+      (
+        name,
+        gst_number,
+        address,
+        currency,
+        email,
+        phone,
+        pan_number,
+        website,
+        state,
+        city,
+        country,
+        zip_code,
+        branch_limit,
+        status,
+        kyc_status,
+        kyc_attempts,
+        last_activity_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', 'pending', 0, NOW())
+      `,
       [
-        normalizedName,
-        normalizedGST,
-        normalizeNullable(address),
-        normalizeNullable(city),
-        normalizeUpper(currency) || "INR",
-        normalizedEmail,
-        normalizeNullable(phone),
-        normalizedPAN,
-        normalizeNullable(website),
-        normalizeNullable(state),
-        normalizeText(city),
-        normalizeText(country) || "India",
-        normalizeNullable(zip_code),
-        normalizedBranchLimit,
+        normalizedName, 
+        normalizedGST, 
+        normalizeNullable(address), 
+        normalizeUpper(currency) || "INR", 
+        normalizedEmail, // email
+        normalizeNullable(phone), 
+        normalizedPAN, 
+        normalizeNullable(website), 
+        normalizeNullable(state), 
+        normalizeNullable(city), 
+        normalizeText(country) || "India", 
+        normalizeNullable(zip_code), 
+        normalizedBranchLimit, 
       ],
     );
 
