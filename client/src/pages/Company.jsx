@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
-const APP_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '');   
+const APP_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, "");
 console.log(APP_URL);
 
 import {
@@ -49,7 +49,7 @@ function Company() {
     country: "India",
     zip_code: "",
     logo: "",
-    branch_limit: "",
+    hq_branch_code: "",
   };
 
   const [companies, setCompanies] = useState([]);
@@ -76,7 +76,7 @@ function Company() {
   const getLogoUrl = (logo) => {
     if (!logo) return "";
     if (logo.startsWith("http")) return logo;
-    
+
     return `${APP_URL}/upload/company-logos/${logo}`;
   };
 
@@ -96,10 +96,7 @@ function Company() {
       country: company?.country || "India",
       zip_code: company?.zip_code || "",
       logo: company?.logo || "",
-      branch_limit:
-        company?.branch_limit !== null && company?.branch_limit !== undefined
-          ? String(company.branch_limit)
-          : "",
+      hq_branch_code: company?.hq_branch_code || "",
     });
   };
 
@@ -176,9 +173,14 @@ function Company() {
   };
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
+
+    const updatedValue =
+      name === "hq_branch_code" ? value.toUpperCase() : value;
+
     setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value,
+      [name]: updatedValue,
     }));
   };
 
@@ -225,14 +227,20 @@ function Company() {
       return;
     }
 
-    if (
-      isSuperAdmin &&
-      formData.branch_limit !== "" &&
-      (!Number.isInteger(Number(formData.branch_limit)) ||
-        Number(formData.branch_limit) < 1)
-    ) {
-      toast.warn("Branch limit must be a positive integer");
-      return;
+    if (isSuperAdmin) {
+      const headOfficeCode = formData.hq_branch_code.trim().toUpperCase();
+
+      if (!headOfficeCode) {
+        toast.warn("Head Office Code is required");
+        return;
+      }
+
+      if (!/^[A-Z0-9_-]{2,20}$/.test(headOfficeCode)) {
+        toast.warn(
+          "Head Office Code must be 2-20 characters and can contain letters, numbers, underscore or hyphen",
+        );
+        return;
+      }
     }
 
     try {
@@ -242,7 +250,10 @@ function Company() {
         toast.success("Company profile updated");
         setIsEditMode(false);
       } else if (editingId) {
-        const { branch_limit, ...companyPayload } = formData;
+        const companyPayload = {
+          ...formData,
+          hq_branch_code: formData.hq_branch_code.trim().toUpperCase(),
+        };
 
         if (crmApiKey.trim()) {
           companyPayload.crm_api_key = crmApiKey.trim();
@@ -250,32 +261,13 @@ function Company() {
 
         await api.put(`/companies/${editingId}`, companyPayload);
 
-        if (
-          branch_limit !== "" &&
-          branch_limit !== null &&
-          branch_limit !== undefined
-        ) {
-          await api.patch(`/companies/${editingId}/branch-limit`, {
-            branch_limit: Number(branch_limit),
-          });
-        }
-
         toast.success("Company updated");
         closeFormModal();
       } else {
         const payload = {
           ...formData,
+          hq_branch_code: formData.hq_branch_code.trim().toUpperCase(),
         };
-
-        if (
-          payload.branch_limit === "" ||
-          payload.branch_limit === null ||
-          payload.branch_limit === undefined
-        ) {
-          delete payload.branch_limit;
-        } else {
-          payload.branch_limit = Number(payload.branch_limit);
-        }
 
         await api.post("/companies", payload);
 
@@ -922,16 +914,16 @@ function CompanyForm({
         </Field>
 
         {!isCompanyAdmin && (
-          <Field icon={<Building2 size={16} />} label="Branch Limit">
+          <Field icon={<Building2 size={16} />} label="Head Office Code">
             <input
-              type="number"
-              name="branch_limit"
-              min="1"
-              step="1"
-              value={formData.branch_limit}
+              type="text"
+              name="hq_branch_code"
+              value={formData.hq_branch_code}
               onChange={handleChange}
-              placeholder="Default (2) / Plan limit"
-              className="input"
+              placeholder="HQ001"
+              maxLength={20}
+              className="input uppercase"
+              required
             />
           </Field>
         )}
@@ -1175,13 +1167,8 @@ function CompanyViewModal({ company, getLogoUrl, onClose }) {
             <ViewField label="Website" value={company.website} />
             <ViewField label="Currency" value={company.currency || "INR"} />
             <ViewField
-              label="Branch Limit"
-              value={
-                company.branch_limit !== null &&
-                company.branch_limit !== undefined
-                  ? company.branch_limit
-                  : "Default (2)"
-              }
+              label="Head Office Code"
+              value={company.hq_branch_code || "-"}
             />
             <ViewField label="City" value={company.city} />
             <ViewField label="State" value={company.state} />

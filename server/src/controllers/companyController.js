@@ -66,6 +66,7 @@ const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const UPI_REGEX = /^[\w.-]+@[\w.-]+$/;
 const ACCOUNT_NUMBER_REGEX = /^[0-9]{6,20}$/;
 const TIMEZONE_REGEX = /^[A-Za-z_]+\/[A-Za-z0-9_+\-/]+$/;
+const BRANCH_CODE_REGEX = /^[A-Z0-9_-]{2,20}$/;
 const SMTP_HOST_REGEX =
   /^(([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}|localhost|\d{1,3}(\.\d{1,3}){3})$/;
 
@@ -301,6 +302,9 @@ const escapeHtml = (value) => {
 
 // CREATE COMPANY - SuperAdmin
 export const createCompany = async (req, res) => {
+  let connection;
+  let transactionStarted = false;
+
   try {
     const {
       name,
@@ -315,7 +319,7 @@ export const createCompany = async (req, res) => {
       state,
       country,
       zip_code,
-      branch_limit,
+      hq_branch_code,
     } = req.body;
 
     const validationError = validateCompanyPayload({
@@ -324,77 +328,107 @@ export const createCompany = async (req, res) => {
     });
 
     if (validationError) {
-      return res.status(400).json({ message: validationError });
-    }
-
-    if (
-      branch_limit !== undefined &&
-      branch_limit !== null &&
-      branch_limit !== "" &&
-      !isPositiveInteger(branch_limit)
-    ) {
       return res.status(400).json({
-        message: "Branch limit must be a positive integer",
+        message: validationError,
       });
     }
 
-    const normalizedBranchLimit =
-      branch_limit !== undefined && branch_limit !== null && branch_limit !== ""
-        ? Number(branch_limit)
-        : null;
+    // Head Office Code
+    const normalizedHqBranchCode = normalizeUpper(hq_branch_code);
 
+    if (!normalizedHqBranchCode) {
+      return res.status(400).json({
+        message: "Head Office Code is required",
+      });
+    }
+
+    if (!BRANCH_CODE_REGEX.test(normalizedHqBranchCode)) {
+      return res.status(400).json({
+        message:
+          "Head Office Code must be 2-20 characters and can contain letters, numbers, underscore or hyphen",
+      });
+    }
+
+    // Company values normalize karo
     const normalizedName = normalizeText(name);
     const normalizedEmail = normalizeEmail(email) || null;
     const normalizedGST = normalizeUpper(gst_number) || null;
     const normalizedPAN = normalizeUpper(pan_number) || null;
+    const normalizedCurrency = normalizeUpper(currency) || "INR";
+    const normalizedCountry = normalizeText(country) || "India";
 
-    const [duplicateRows] = await db.query(
+    /*
+     * Same company name, email, GST ya PAN
+     * already exist nahi hona chahiye.
+     */
+    const [duplicateCompanies] = await db.query(
       `
-      SELECT id, email, gst_number, pan_number, name
+      SELECT
+        id,
+        name,
+        email,
+        gst_number,
+        pan_number
       FROM tbl_companies
       WHERE LOWER(name) = ?
-      OR (? IS NOT NULL AND LOWER(email) = ?)
-      OR (? IS NOT NULL AND gst_number = ?)
-      OR (? IS NOT NULL AND pan_number = ?)
+        OR (? IS NOT NULL AND LOWER(email) = ?)
+        OR (? IS NOT NULL AND gst_number = ?)
+        OR (? IS NOT NULL AND pan_number = ?)
       LIMIT 1
       `,
       [
         normalizedName.toLowerCase(),
+
         normalizedEmail,
         normalizedEmail,
+
         normalizedGST,
         normalizedGST,
+
         normalizedPAN,
         normalizedPAN,
       ],
     );
 
-    if (duplicateRows.length > 0) {
-      const duplicate = duplicateRows[0];
+    if (duplicateCompanies.length > 0) {
+      const duplicateCompany = duplicateCompanies[0];
 
-      if (duplicate.name?.toLowerCase() === normalizedName.toLowerCase()) {
-        return res.status(400).json({ message: "Company name already exists" });
+      if (
+        duplicateCompany.name?.toLowerCase() === normalizedName.toLowerCase()
+      ) {
+        return res.status(400).json({
+          message: "Company name already exists",
+        });
       }
 
       if (
         normalizedEmail &&
-        duplicate.email?.toLowerCase() === normalizedEmail
+        duplicateCompany.email?.toLowerCase() === normalizedEmail
       ) {
-        return res
-          .status(400)
-          .json({ message: "Company email already exists" });
+        return res.status(400).json({
+          message: "Company email already exists",
+        });
       }
 
-      if (normalizedGST && duplicate.gst_number === normalizedGST) {
-        return res.status(400).json({ message: "GST number already exists" });
+      if (normalizedGST && duplicateCompany.gst_number === normalizedGST) {
+        return res.status(400).json({
+          message: "GST number already exists",
+        });
       }
 
-      if (normalizedPAN && duplicate.pan_number === normalizedPAN) {
-        return res.status(400).json({ message: "PAN number already exists" });
+      if (normalizedPAN && duplicateCompany.pan_number === normalizedPAN) {
+        return res.status(400).json({
+          message: "PAN number already exists",
+        });
       }
     }
 
-    const [companyResult] = await db.query(
+    connection = await db.getConnection();
+
+    await connection.beginTransaction();
+    transactionStarted = true;
+
+    const [companyResult] = await connection.query(
       `
       INSERT INTO tbl_companies
       (
@@ -416,46 +450,127 @@ export const createCompany = async (req, res) => {
         kyc_attempts,
         last_activity_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', 'pending', 0, NOW())
+      VALUES
+      (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        NULL,
+        'inactive',
+        'pending',
+        0,
+        NOW()
+      )
       `,
       [
-        normalizedName, 
-        normalizedGST, 
-        normalizeNullable(address), 
-        normalizeUpper(currency) || "INR", 
-        normalizedEmail, // email
-        normalizeNullable(phone), 
-        normalizedPAN, 
-        normalizeNullable(website), 
-        normalizeNullable(state), 
-        normalizeNullable(city), 
-        normalizeText(country) || "India", 
-        normalizeNullable(zip_code), 
-        normalizedBranchLimit, 
+        normalizedName,
+        normalizedGST,
+        normalizeNullable(address),
+        normalizedCurrency,
+        normalizedEmail,
+        normalizeNullable(phone),
+        normalizedPAN,
+        normalizeNullable(website),
+        normalizeNullable(state),
+        normalizeNullable(city),
+        normalizedCountry,
+        normalizeNullable(zip_code),
       ],
     );
 
-    await createAuditLog({
-      company_id: companyResult.insertId,
-      user_id: req.user.id,
-      role: req.user.role,
-      action: "CREATE",
-      module_name: "Company",
-      record_id: companyResult.insertId,
-      description: `Company ${normalizedName} created`,
-      ip_address: req.ip,
-      user_agent: getUserAgent(req),
-    });
+    const companyId = companyResult.insertId;
+
+    const [headOfficeResult] = await connection.query(
+      `
+        INSERT INTO tbl_company_branches
+        (
+          company_id,
+          branch_name,
+          branch_code,
+          email,
+          phone,
+          gst_number,
+          address,
+          city,
+          state,
+          country,
+          zip_code,
+          status,
+          is_main
+        )
+        VALUES
+        (
+          ?,
+          ?,
+          ?,
+          ?,
+          ?,
+          ?,
+          ?,
+          ?,
+          ?,
+          ?,
+          ?,
+          'active',
+          1
+        )
+        `,
+      [
+        companyId,
+        normalizedName,
+        normalizedHqBranchCode,
+        normalizedEmail,
+        normalizeNullable(phone),
+        normalizedGST,
+        normalizeNullable(address),
+        normalizeNullable(city),
+        normalizeNullable(state),
+        normalizedCountry,
+        normalizeNullable(zip_code),
+      ],
+    );
+
+    if (headOfficeResult.affectedRows !== 1) {
+      throw new Error("Head Office branch could not be created");
+    }
+    await connection.commit();
+    transactionStarted = false;
+
+    try {
+      await createAuditLog({
+        company_id: companyId,
+        user_id: req.user.id,
+        role: req.user.role,
+        action: "CREATE",
+        module_name: "Company",
+        record_id: companyId,
+        description: `Company ${normalizedName} created with Head Office ${normalizedHqBranchCode}`,
+        ip_address: req.ip,
+        user_agent: getUserAgent(req),
+      });
+    } catch (auditError) {
+      console.error("CREATE COMPANY AUDIT LOG ERROR:", auditError);
+    }
 
     return res.status(201).json({
-      message: "Company created successfully",
-      company_id: companyResult.insertId,
+      message: "Company and Head Office created successfully",
+      company_id: companyId,
+      head_office_id: headOfficeResult.insertId,
+      hq_branch_code: normalizedHqBranchCode,
     });
   } catch (error) {
+    if (transactionStarted && connection) {
+      await connection.rollback();
+    }
+
+    console.error("CREATE COMPANY ERROR:", error);
+
     return res.status(500).json({
       message: "Create company error",
       error: error.message,
     });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 };
 
@@ -542,6 +657,13 @@ export const getCompanies = async (req, res) => {
     zip_code,
     logo,
     kyc_status,
+    (
+  SELECT branch.branch_code
+  FROM tbl_company_branches AS branch
+  WHERE branch.company_id = tbl_companies.id
+    AND branch.is_main = 1
+  LIMIT 1
+) AS hq_branch_code,
 
     CASE
       WHEN crm_api_key IS NOT NULL
@@ -658,6 +780,7 @@ export const updateCompany = async (req, res) => {
       state,
       country,
       zip_code,
+      hq_branch_code,
     } = req.body;
 
     const crmApiKey =
@@ -686,6 +809,20 @@ export const updateCompany = async (req, res) => {
     const normalizedGST = normalizeUpper(gst_number) || null;
     const normalizedPAN = normalizeUpper(pan_number) || null;
     const normalizedStatus = normalizeCompanyStatus(status);
+    const normalizedHqBranchCode = normalizeUpper(hq_branch_code);
+
+    if (!normalizedHqBranchCode) {
+      return res.status(400).json({
+        message: "Head Office Code is required",
+      });
+    }
+
+    if (!BRANCH_CODE_REGEX.test(normalizedHqBranchCode)) {
+      return res.status(400).json({
+        message:
+          "Head Office Code must be 2-20 characters and can contain letters, numbers, underscore or hyphen",
+      });
+    }
 
     const [companyRows] = await db.query(
       `
@@ -823,11 +960,12 @@ export const updateCompany = async (req, res) => {
       });
     }
 
-    // Sync HQ branch with Company Profile
     const [hqResult] = await connection.query(
       `
     UPDATE tbl_company_branches
     SET
+      branch_name = ?,
+      branch_code = ?,
       email = ?,
       phone = ?,
       gst_number = ?,
@@ -840,6 +978,8 @@ export const updateCompany = async (req, res) => {
       AND is_main = 1
   `,
       [
+        normalizedName,
+        normalizedHqBranchCode,
         normalizedEmail,
         normalizeNullable(phone),
         normalizedGST,
