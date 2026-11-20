@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
-
 import {
   Activity,
   Search,
@@ -25,7 +24,6 @@ import {
   X,
   ChevronDown,
 } from "lucide-react";
-
 function AuditLogs() {
   const defaultFilters = {
     search: "",
@@ -35,7 +33,6 @@ function AuditLogs() {
     to_date: "",
     limit: 20,
   };
-
   const [logs, setLogs] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
   const [loading, setLoading] = useState(false);
@@ -47,7 +44,6 @@ function AuditLogs() {
     total: 0,
     totalPages: 1,
   });
-
   const actionOptions = [
     { value: "", label: "All Actions" },
     { value: "LOGIN_SUCCESS", label: "Login Success" },
@@ -61,7 +57,6 @@ function AuditLogs() {
     { value: "CONVERT", label: "Convert" },
     { value: "SECURITY_EVENT", label: "Security Event" },
   ];
-
   const moduleOptions = [
     { value: "", label: "All Modules" },
     { value: "Auth", label: "Authentication" },
@@ -78,11 +73,9 @@ function AuditLogs() {
     { value: "Tax", label: "Tax / GST" },
     { value: "Subscription", label: "Subscription" },
   ];
-
   const fetchLogs = async (customFilters = filters, customPage = page) => {
     try {
       setLoading(true);
-
       const res = await api.get("/audit-logs", {
         params: {
           ...customFilters,
@@ -90,7 +83,6 @@ function AuditLogs() {
           limit: customFilters.limit || 20,
         },
       });
-
       if (Array.isArray(res.data)) {
         setLogs(res.data);
         setPagination({
@@ -118,42 +110,34 @@ function AuditLogs() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     fetchLogs(defaultFilters);
   }, []);
-
   const updateFilter = (name, value) => {
     setFilters((prev) => ({ ...prev, [name]: value }));
   };
-
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     updateFilter(name, value);
   };
-
   const resetFilters = () => {
     setFilters(defaultFilters);
     setPage(1);
     fetchLogs(defaultFilters, 1);
   };
-
   const handleExportCSV = async () => {
     try {
       const res = await api.get("/audit-logs/export/csv", {
         params: filters,
         responseType: "blob",
       });
-
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
-
       link.href = url;
       link.setAttribute("download", "audit-logs.csv");
       document.body.appendChild(link);
       link.click();
       link.remove();
-
       window.URL.revokeObjectURL(url);
       toast.success("Audit logs exported successfully");
     } catch (error) {
@@ -162,10 +146,8 @@ function AuditLogs() {
       );
     }
   };
-
   const formatLabel = (value) => {
     if (!value) return "-";
-
     return String(value)
       .toLowerCase()
       .replaceAll("_", " ")
@@ -174,10 +156,8 @@ function AuditLogs() {
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
   };
-
   const formatDate = (date) => {
     if (!date) return "-";
-
     return new Date(date).toLocaleString("en-IN", {
       day: "2-digit",
       month: "short",
@@ -186,7 +166,6 @@ function AuditLogs() {
       minute: "2-digit",
     });
   };
-
   const getActionClass = (logAction) => {
     switch (logAction?.toUpperCase()) {
       case "CREATE":
@@ -212,7 +191,6 @@ function AuditLogs() {
         return "border border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200";
     }
   };
-
   const getActionIcon = (action) => {
     switch (action?.toUpperCase()) {
       case "CREATE":
@@ -234,64 +212,54 @@ function AuditLogs() {
         return <Activity size={14} />;
     }
   };
-
   return (
     <div className="w-full min-w-0 space-y-5 overflow-x-hidden text-slate-900 dark:text-slate-100">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="px-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
+          <div className="min-w-0">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
               <ShieldCheck size={17} />
-              Audit Logs
+              Workspace / Audit Logs
             </div>
-
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
               Activity History
             </h1>
-
-            <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Track login, logout, user actions, module updates and security
               activities.
             </p>
           </div>
-
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <Activity size={16} />
+              {pagination.total || 0} Audit Logs
+            </div>
             <button
               type="button"
               onClick={handleExportCSV}
-              className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-0"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
             >
               <Download size={16} />
               Export CSV
             </button>
-
-            <div className="flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              <Activity size={16} />
-              {pagination.total || 0} Audit Logs
-            </div>
           </div>
         </div>
       </div>
-
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-200 p-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-col gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                   Recent Activities
                 </h2>
-                <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                  {pagination.total || 0}
-                </span>
               </div>
               <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
                 Latest user and system activity records.
               </p>
             </div>
-
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-6 xl:w-[850px]">
-              <div className="relative sm:col-span-2 lg:col-span-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(190px,1.5fr)_minmax(130px,1fr)_minmax(130px,1fr)_minmax(145px,1fr)_minmax(145px,1fr)_auto_auto]">
+              <div className="relative min-w-0 sm:col-span-2 xl:col-span-1">
                 <Search
                   size={16}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
@@ -305,7 +273,6 @@ function AuditLogs() {
                   className="input !pl-10"
                 />
               </div>
-
               <CustomSelect
                 value={filters.action}
                 onChange={(value) => updateFilter("action", value)}
@@ -313,7 +280,6 @@ function AuditLogs() {
                 placeholder="All Actions"
                 searchable
               />
-
               <CustomSelect
                 value={filters.module_name}
                 onChange={(value) => updateFilter("module_name", value)}
@@ -321,7 +287,6 @@ function AuditLogs() {
                 placeholder="All Modules"
                 searchable
               />
-
               <input
                 type="date"
                 name="from_date"
@@ -329,7 +294,6 @@ function AuditLogs() {
                 onChange={handleFilterChange}
                 className="input"
               />
-
               <input
                 type="date"
                 name="to_date"
@@ -337,7 +301,6 @@ function AuditLogs() {
                 onChange={handleFilterChange}
                 className="input"
               />
-
               <button
                 type="button"
                 onClick={() => {
@@ -350,7 +313,6 @@ function AuditLogs() {
                 <Filter size={15} />
                 {loading ? "Loading..." : "Apply"}
               </button>
-
               <button
                 type="button"
                 onClick={resetFilters}
@@ -362,7 +324,6 @@ function AuditLogs() {
             </div>
           </div>
         </div>
-
         <AuditTable
           logs={logs}
           formatDate={formatDate}
@@ -379,7 +340,6 @@ function AuditLogs() {
           fetchLogs={fetchLogs}
         />
       </div>
-
       {viewLog && (
         <LogViewModal
           log={viewLog}
@@ -390,7 +350,6 @@ function AuditLogs() {
           onClose={() => setViewLog(null)}
         />
       )}
-
       <style>{`
         .input {
           width: 100%;
@@ -404,36 +363,29 @@ function AuditLogs() {
           color: #334155;
           transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
         }
-
         .input::placeholder {
           color: #94a3b8;
           font-weight: 400;
         }
-
         .input:focus {
           border-color: #2563eb;
           box-shadow: 0 0 0 3px #dbeafe;
         }
-
         .dark .input {
           border-color: #334155;
           background: #0f172a;
           color: #e2e8f0;
         }
-
         .dark .input::placeholder {
           color: #64748b;
         }
-
         .dark .input:focus {
           border-color: #3b82f6;
           box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.35);
         }
-
         .input[type="date"]::-webkit-calendar-picker-indicator {
           opacity: 0.65;
         }
-
         .dark .input[type="date"]::-webkit-calendar-picker-indicator {
           filter: invert(1);
           opacity: 0.75;
@@ -442,7 +394,6 @@ function AuditLogs() {
     </div>
   );
 }
-
 function AuditTable({
   logs,
   formatDate,
@@ -453,7 +404,7 @@ function AuditTable({
 }) {
   return (
     <div className="w-full overflow-x-auto">
-      <table className="w-full min-w-[1180px] text-sm">
+      <table className="w-full min-w-[1180px] text-left text-sm [&_th]:whitespace-nowrap [&_td:not(:nth-child(7))]:whitespace-nowrap">
         <thead className="bg-slate-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
           <tr>
             {[
@@ -469,14 +420,13 @@ function AuditTable({
             ].map((head) => (
               <th
                 key={head}
-                className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
               >
                 {head}
               </th>
             ))}
           </tr>
         </thead>
-
         <tbody>
           {logs.map((log) => (
             <tr
@@ -489,8 +439,7 @@ function AuditTable({
                   {formatDate(log.created_at)}
                 </div>
               </td>
-
-              <td className="p-4">
+              <td className="whitespace-nowrap p-4">
                 <div className="flex items-start gap-2">
                   <div className="rounded-lg bg-blue-50 p-2 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
                     <User size={15} />
@@ -505,27 +454,26 @@ function AuditTable({
                   </div>
                 </div>
               </td>
-
               <td className="whitespace-nowrap p-4">
                 <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                   {formatLabel(log.role)}
                 </span>
               </td>
-
-              <td className="p-4 font-medium text-slate-600 dark:text-slate-300">
+              <td className="whitespace-nowrap p-4 font-medium text-slate-600 dark:text-slate-300">
                 <div className="flex items-center gap-2">
-                  <Building2 size={15} className="text-slate-400 dark:text-slate-500" />
+                  <Building2
+                    size={15}
+                    className="text-slate-400 dark:text-slate-500"
+                  />
                   {log.company_name || "-"}
                 </div>
               </td>
-
               <td className="whitespace-nowrap p-4 font-semibold text-slate-900 dark:text-white">
                 {formatLabel(log.module_name)}
               </td>
-
               <td className="whitespace-nowrap p-4">
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold shadow-sm ${getActionClass(
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm ${getActionClass(
                     log.action,
                   )}`}
                 >
@@ -533,27 +481,33 @@ function AuditTable({
                   {formatLabel(log.action)}
                 </span>
               </td>
-
-              <td className="max-w-md p-4 font-medium text-slate-600 dark:text-slate-300">
-                <p className="line-clamp-2">{log.description || "-"}</p>
+              <td className="w-[320px] min-w-[320px] p-4 font-medium text-slate-600 dark:text-slate-300">
+                <p className="w-[288px] whitespace-normal break-words leading-6 [overflow-wrap:anywhere]">
+                  {log.description || "-"}
+                </p>
               </td>
-
-              <td className="max-w-xs p-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              <td className="p-4 text-sm font-normal text-slate-600 dark:text-slate-300">
                 <div className="space-y-1">
                   <p className="flex items-center gap-2">
                     <Globe size={14} />
-                    {log.ip_address || "-"}
+                    {String(log.ip_address || "").trim() || "Not recorded"}
                   </p>
                   <p className="flex items-start gap-2">
                     <Monitor size={14} className="mt-0.5 shrink-0" />
-                    <span className="line-clamp-2">
-                      {log.user_agent || "-"}
+                    <span
+                      className="block max-w-[320px] truncate"
+                      title={
+                        String(log.user_agent || "").trim() ||
+                        "Device not recorded"
+                      }
+                    >
+                      {String(log.user_agent || "").trim() ||
+                        "Device not recorded"}
                     </span>
                   </p>
                 </div>
               </td>
-
-              <td className="p-4">
+              <td className="whitespace-nowrap p-4">
                 <button
                   type="button"
                   onClick={() => setViewLog(log)}
@@ -565,12 +519,14 @@ function AuditTable({
               </td>
             </tr>
           ))}
-
           {logs.length === 0 && (
             <tr>
               <td colSpan="9" className="p-10 text-center">
                 <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-950">
-                  <Activity className="mx-auto text-slate-400 dark:text-slate-500" size={34} />
+                  <Activity
+                    className="mx-auto text-slate-400 dark:text-slate-500"
+                    size={34}
+                  />
                   <p className="mt-3 font-semibold text-slate-700 dark:text-slate-200">
                     No audit logs found
                   </p>
@@ -586,24 +542,19 @@ function AuditTable({
     </div>
   );
 }
-
 function PaginationControls({ page, setPage, pagination, filters, fetchLogs }) {
   const totalPages = pagination.totalPages || 1;
-
   const goToPage = (nextPage) => {
     if (nextPage < 1 || nextPage > totalPages) return;
-
     setPage(nextPage);
     fetchLogs(filters, nextPage);
   };
-
   return (
     <div className="flex flex-col gap-3 border-t border-slate-200 p-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
         Page {pagination.page || page} of {totalPages} · {pagination.total || 0}{" "}
         total logs
       </p>
-
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -613,7 +564,6 @@ function PaginationControls({ page, setPage, pagination, filters, fetchLogs }) {
         >
           Previous
         </button>
-
         <button
           type="button"
           disabled={page >= totalPages}
@@ -626,7 +576,6 @@ function PaginationControls({ page, setPage, pagination, filters, fetchLogs }) {
     </div>
   );
 }
-
 function LogViewModal({
   log,
   formatDate,
@@ -643,7 +592,6 @@ function LogViewModal({
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
               <Activity size={26} />
             </div>
-
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 Audit Log Details
@@ -653,7 +601,6 @@ function LogViewModal({
               </p>
             </div>
           </div>
-
           <button
             type="button"
             onClick={onClose}
@@ -662,7 +609,6 @@ function LogViewModal({
             <X size={20} />
           </button>
         </div>
-
         <div className="overflow-y-auto overflow-x-hidden bg-white p-5 dark:bg-slate-900">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ViewField label="Date" value={formatDate(log.created_at)} />
@@ -670,7 +616,7 @@ function LogViewModal({
               label="Action"
               value={
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold shadow-sm ${getActionClass(
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm ${getActionClass(
                     log.action,
                   )}`}
                 >
@@ -685,7 +631,10 @@ function LogViewModal({
             <ViewField label="User Email" value={log.user_email || "-"} />
             <ViewField label="Role" value={formatLabel(log.role)} />
             <ViewField label="Company" value={log.company_name || "-"} />
-            <ViewField label="IP Address" value={log.ip_address || "-"} />
+            <ViewField
+              label="IP Address"
+              value={String(log.ip_address || "").trim() || "Not recorded"}
+            />
             <ViewField
               label="Description"
               value={log.description || "-"}
@@ -693,7 +642,9 @@ function LogViewModal({
             />
             <ViewField
               label="User Agent / Device"
-              value={log.user_agent || "-"}
+              value={
+                String(log.user_agent || "").trim() || "Device not recorded"
+              }
               full
             />
           </div>
@@ -702,18 +653,18 @@ function LogViewModal({
     </div>
   );
 }
-
 function ViewField({ label, value, full = false }) {
   return (
     <div className={full ? "md:col-span-2" : ""}>
-      <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">{label}</p>
+      <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+        {label}
+      </p>
       <div className="min-h-[44px] break-words rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
         {value || "-"}
       </div>
     </div>
   );
 }
-
 function CustomSelect({
   value,
   onChange,
@@ -724,45 +675,33 @@ function CustomSelect({
   const [open, setOpen] = useState(false);
   const [selectSearch, setSelectSearch] = useState("");
   const [dropdownStyle, setDropdownStyle] = useState(null);
-
   const buttonRef = useRef(null);
   const dropdownRef = useRef(null);
-
   const selected = options.find(
     (option) => String(option.value) === String(value),
   );
-
   const filteredOptions = options.filter((option) =>
     `${option.label || ""}`.toLowerCase().includes(selectSearch.toLowerCase()),
   );
-
   const updateDropdownPosition = () => {
     if (!buttonRef.current) return;
-
     const rect = buttonRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-
     const dropdownHeight = searchable
       ? 330
       : Math.min(options.length * 46 + 20, 260);
-
     const dropdownWidth = Math.max(rect.width, 220);
     const left = Math.min(
       Math.max(12, rect.left),
       viewportWidth - dropdownWidth - 12,
     );
-
     const spaceBelow = viewportHeight - rect.bottom;
     const spaceAbove = rect.top;
-
-    const openUp =
-      spaceBelow < dropdownHeight + 12 && spaceAbove > spaceBelow;
-
+    const openUp = spaceBelow < dropdownHeight + 12 && spaceAbove > spaceBelow;
     const top = openUp
       ? Math.max(12, rect.top - dropdownHeight - 8)
       : Math.min(rect.bottom + 8, viewportHeight - dropdownHeight - 12);
-
     setDropdownStyle({
       position: "fixed",
       left: `${left}px`,
@@ -772,12 +711,9 @@ function CustomSelect({
       zIndex: 99999,
     });
   };
-
   useEffect(() => {
     if (!open) return;
-
     updateDropdownPosition();
-
     const handleClickOutside = (event) => {
       if (
         buttonRef.current?.contains(event.target) ||
@@ -785,36 +721,29 @@ function CustomSelect({
       ) {
         return;
       }
-
       setOpen(false);
       setSelectSearch("");
     };
-
     const handleWindowMove = (event) => {
       if (dropdownRef.current?.contains(event.target)) {
         return;
       }
-
       updateDropdownPosition();
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     window.addEventListener("resize", updateDropdownPosition);
     window.addEventListener("scroll", handleWindowMove, true);
-
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       window.removeEventListener("resize", updateDropdownPosition);
       window.removeEventListener("scroll", handleWindowMove, true);
     };
   }, [open, options.length, searchable]);
-
   const handleSelect = (selectedValue) => {
     onChange(selectedValue);
     setOpen(false);
     setSelectSearch("");
   };
-
   return (
     <div className="relative min-w-0">
       <button
@@ -824,12 +753,11 @@ function CustomSelect({
           setOpen((prev) => !prev);
           window.requestAnimationFrame(updateDropdownPosition);
         }}
-        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
+        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-normal text-slate-700 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
       >
         <span className="min-w-0 truncate">
           {selected?.label || placeholder}
         </span>
-
         <ChevronDown
           size={17}
           className={`shrink-0 text-slate-400 transition ${
@@ -837,7 +765,6 @@ function CustomSelect({
           }`}
         />
       </button>
-
       {open && dropdownStyle && (
         <div
           ref={dropdownRef}
@@ -851,23 +778,20 @@ function CustomSelect({
                   size={15}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
                 />
-
                 <input
                   type="text"
                   value={selectSearch}
                   onChange={(event) => setSelectSearch(event.target.value)}
                   placeholder="Search..."
                   autoFocus
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
                 />
               </div>
             </div>
           )}
-
           <div className="max-h-56 overflow-y-auto p-2">
             {filteredOptions.map((option) => {
               const active = String(option.value) === String(value);
-
               return (
                 <button
                   key={option.value || "all"}
@@ -880,10 +804,9 @@ function CustomSelect({
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <p className="truncate text-sm font-semibold">
+                    <p className="truncate text-sm font-normal">
                       {option.label}
                     </p>
-
                     {active && (
                       <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
                     )}
@@ -891,7 +814,6 @@ function CustomSelect({
                 </button>
               );
             })}
-
             {filteredOptions.length === 0 && (
               <div className="px-3 py-5 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">
                 No option found
@@ -903,5 +825,4 @@ function CustomSelect({
     </div>
   );
 }
-
 export default AuditLogs;

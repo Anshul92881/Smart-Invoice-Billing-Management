@@ -34,7 +34,7 @@ const parseJson = (value) => {
   return value;
 };
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -68,6 +68,34 @@ const authMiddleware = (req, res, next) => {
       customer_id: decoded.customer_id || null,
       permissions: parseJson(decoded.permissions),
     };
+
+    const companyRoles = ["company_admin", "accountant", "sales_user"];
+
+    if (companyRoles.includes(req.user.role) && req.user.company_id) {
+      const [companies] = await db.query(
+        `
+        SELECT status
+        FROM tbl_companies
+        WHERE id = ?
+        LIMIT 1
+        `,
+        [req.user.company_id],
+      );
+
+      if (!companies.length) {
+        return res.status(403).json({
+          message: "Company not found",
+          company_inactive: true,
+        });
+      }
+
+      if (companies[0].status !== "active") {
+        return res.status(403).json({
+          message: "Company account is inactive. Please contact Super Admin.",
+          company_inactive: true,
+        });
+      }
+    }
 
     next();
   } catch (error) {
@@ -177,18 +205,9 @@ export const applyBranchFilter = (req, alias = "", column = "branch_id") => {
   };
 };
 
-export const kycAccessMiddleware = async (
-  req,
-  res,
-  next,
-) => {
+export const kycAccessMiddleware = async (req, res, next) => {
   try {
-    const mutationMethods = [
-      "POST",
-      "PUT",
-      "PATCH",
-      "DELETE",
-    ];
+    const mutationMethods = ["POST", "PUT", "PATCH", "DELETE"];
 
     /*
     |--------------------------------------------------------------------------
@@ -249,10 +268,9 @@ export const kycAccessMiddleware = async (
       companyRows[0].kyc_status || "pending",
     ).toLowerCase();
 
-    const hasFullKycAccess = [
-      "approved",
-      "manual_verified",
-    ].includes(kycStatus);
+    const hasFullKycAccess = ["approved", "manual_verified"].includes(
+      kycStatus,
+    );
 
     if (!hasFullKycAccess) {
       return res.status(403).json({
@@ -273,9 +291,7 @@ export const kycAccessMiddleware = async (
     |
     */
 
-    const requestPath = String(
-      req.originalUrl || req.url || "",
-    )
+    const requestPath = String(req.originalUrl || req.url || "")
       .split("?")[0]
       .toLowerCase();
 
@@ -296,11 +312,7 @@ export const kycAccessMiddleware = async (
     |
     */
 
-    const subscriptionRoles = [
-      "company_admin",
-      "accountant",
-      "sales_user",
-    ];
+    const subscriptionRoles = ["company_admin", "accountant", "sales_user"];
 
     if (!subscriptionRoles.includes(req.user?.role)) {
       return next();
@@ -348,8 +360,7 @@ export const kycAccessMiddleware = async (
       [req.user.company_id],
     );
 
-    const subscription =
-      subscriptionRows[0] || null;
+    const subscription = subscriptionRows[0] || null;
 
     /*
     |--------------------------------------------------------------------------
@@ -365,9 +376,7 @@ export const kycAccessMiddleware = async (
         plan_type: subscription.plan_type,
         start_date: subscription.start_date,
         renewal_date: subscription.renewal_date,
-        auto_renewal: Number(
-          subscription.auto_renewal || 0,
-        ),
+        auto_renewal: Number(subscription.auto_renewal || 0),
       };
 
       return next();
@@ -394,19 +403,14 @@ export const kycAccessMiddleware = async (
       subscription_required: true,
       subscription_status: subscriptionStatus,
       plan_name: subscription?.plan_name || null,
-      renewal_date:
-        subscription?.renewal_date || null,
+      renewal_date: subscription?.renewal_date || null,
       read_only: true,
     });
   } catch (error) {
-    console.error(
-      "KYC/subscription access error:",
-      error,
-    );
+    console.error("KYC/subscription access error:", error);
 
     return res.status(500).json({
-      message:
-        "Unable to verify KYC or subscription access.",
+      message: "Unable to verify KYC or subscription access.",
       error: error.message,
     });
   }

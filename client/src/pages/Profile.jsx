@@ -5,7 +5,6 @@ import {
   UserRoundPen,
   Save,
   Mail,
-  Phone,
   MapPin,
   ShieldCheck,
   Lock,
@@ -17,11 +16,9 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "../services/api";
-
 const BASE_URL = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace("/api", "")
   : "http://localhost:5000";
-
 function Profile() {
   const [user, setUser] = useState(() => {
     try {
@@ -30,32 +27,21 @@ function Profile() {
       return null;
     }
   });
-
-  const [formData, setFormData] = useState({
-    name: user?.name || "",
-    phone: user?.phone || "",
-  });
-
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
-
   const [showPasswords, setShowPasswords] = useState({
     currentPassword: false,
     newPassword: false,
     confirmPassword: false,
   });
-
   const [previewImage, setPreviewImage] = useState("");
   const [selectedFileName, setSelectedFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
-
-  const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
-
   const [smtpForm, setSmtpForm] = useState({
     smtp_host: "",
     smtp_port: "465",
@@ -66,40 +52,26 @@ function Profile() {
     from_name: "Smart Invoice & Billing",
     reply_to: "",
   });
-
   const [smtpConfigured, setSmtpConfigured] = useState(false);
   const [smtpLoading, setSmtpLoading] = useState(false);
   const [smtpSaving, setSmtpSaving] = useState(false);
   const [smtpTesting, setSmtpTesting] = useState(false);
   const [showSmtpPassword, setShowSmtpPassword] = useState(false);
   const [testEmail, setTestEmail] = useState(user?.email || "");
-
   const isSuperAdmin = user?.role === "superadmin";
-
   const formatRole = {
     superadmin: "Super Admin",
     company_admin: "Company Admin",
     accountant: "Accountant",
     sales_user: "Sales User",
   };
-
-  useEffect(() => {
-    setFormData({
-      name: user?.name || "",
-      phone: user?.phone || "",
-    });
-  }, [user?.name, user?.phone]);
-
   useEffect(() => {
     if (user?.role !== "superadmin") return;
-
     const loadSmtpSettings = async () => {
       try {
         setSmtpLoading(true);
-
         const res = await api.get("/superadmin/smtp-settings");
         const settings = res.data?.settings || {};
-
         setSmtpForm((prev) => ({
           ...prev,
           smtp_host: settings.smtp_host || "",
@@ -111,7 +83,6 @@ function Profile() {
           from_name: settings.from_name || "Smart Invoice & Billing",
           reply_to: settings.reply_to || "",
         }));
-
         setSmtpConfigured(Boolean(res.data?.configured));
       } catch (error) {
         toast.error(
@@ -121,13 +92,10 @@ function Profile() {
         setSmtpLoading(false);
       }
     };
-
     loadSmtpSettings();
   }, [user?.role]);
-
   const initials = useMemo(() => {
-    const name = user?.name || formData.name || "U";
-
+    const name = user?.name || "U";
     return (
       name
         .split(" ")
@@ -136,68 +104,53 @@ function Profile() {
         .slice(0, 2)
         .toUpperCase() || "U"
     );
-  }, [user?.name, formData.name]);
-
+  }, [user?.name]);
   const profileImageUrl = useMemo(() => {
     if (!user?.profile_image) return "";
-
     if (user.profile_image.startsWith("http")) {
       return user.profile_image;
     }
-
     if (
       user.profile_image.startsWith("/uploads") ||
       user.profile_image.startsWith("/upload")
     ) {
       return `${BASE_URL}${user.profile_image}`;
     }
-
     return `${BASE_URL}/uploads/profiles/${user.profile_image}`;
   }, [user?.profile_image]);
-
   const visibleImage = previewImage || profileImageUrl;
-
   const handleImageSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-
     if (!allowedTypes.includes(file.type)) {
       toast.error("Only JPG, PNG and WEBP images are allowed");
       e.target.value = "";
       return;
     }
-
     if (file.size > 2 * 1024 * 1024) {
       toast.error("Image size must be less than 2MB");
       e.target.value = "";
       return;
     }
-
     setSelectedFile(file);
     setSelectedFileName(file.name);
     setPreviewImage(URL.createObjectURL(file));
   };
-
   const handleProfileImageUpload = async () => {
     if (!selectedFile) {
       toast.error("Please select an image first");
       return;
     }
-
     const formDataPayload = new FormData();
     formDataPayload.append("profile_image", selectedFile);
-
     try {
       setUploading(true);
-
       const res = await api.patch("/users/profile-image", formDataPayload, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
       });
-
       const updatedUser = {
         ...user,
         ...(res.data?.user || {}),
@@ -206,14 +159,11 @@ function Profile() {
           res.data?.user?.profile_image ||
           user?.profile_image,
       };
-
       localStorage.setItem("user", JSON.stringify(updatedUser));
       setUser(updatedUser);
-
       setSelectedFile(null);
       setSelectedFileName("");
       setPreviewImage("");
-
       window.dispatchEvent(new Event("userUpdated"));
       toast.success("Profile image updated successfully");
     } catch (error) {
@@ -222,74 +172,32 @@ function Profile() {
       setUploading(false);
     }
   };
-
-  const handleProfileUpdate = async (e) => {
-    e.preventDefault();
-
-    if (!formData.name.trim()) {
-      toast.error("Name is required");
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      await api.patch("/users/profile", {
-        name: formData.name.trim(),
-        phone: formData.phone,
-      });
-
-      const updatedUser = {
-        ...user,
-        name: formData.name.trim(),
-        phone: formData.phone,
-      };
-
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-      setUser(updatedUser);
-
-      window.dispatchEvent(new Event("userUpdated"));
-      toast.success("Profile updated successfully");
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Profile update failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-
     if (!passwordData.currentPassword) {
       toast.error("Current password is required");
       return;
     }
-
     if (passwordData.newPassword.length < 6) {
       toast.error("New password must be at least 6 characters");
       return;
     }
-
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast.error("New password and confirm password do not match");
       return;
     }
-
     try {
       setChangingPassword(true);
-
       await api.patch("/auth/change-password", {
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
         confirmPassword: passwordData.confirmPassword,
       });
-
       setPasswordData({
         currentPassword: "",
         newPassword: "",
         confirmPassword: "",
       });
-
       toast.success("Password changed successfully");
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to change password");
@@ -297,77 +205,54 @@ function Profile() {
       setChangingPassword(false);
     }
   };
-
-  const handleFormChange = (e) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
-  };
-
   const handlePasswordInputChange = (e) => {
     setPasswordData((prev) => ({
       ...prev,
       [e.target.name]: e.target.value,
     }));
   };
-
   const handleSmtpChange = (e) => {
     const { name, value, type, checked } = e.target;
-
     setSmtpForm((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
   };
-
   const validateSmtpForm = () => {
     if (!smtpForm.smtp_host.trim()) {
       toast.error("SMTP host is required");
       return false;
     }
-
     const port = Number(smtpForm.smtp_port);
-
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       toast.error("Enter a valid SMTP port");
       return false;
     }
-
     if (!smtpForm.smtp_user.trim()) {
       toast.error("SMTP username is required");
       return false;
     }
-
     if (!smtpConfigured && !smtpForm.smtp_pass) {
       toast.error("SMTP password is required");
       return false;
     }
-
     if (!smtpForm.from_email.trim()) {
       toast.error("From email is required");
       return false;
     }
-
     return true;
   };
-
   const handleSmtpSave = async (e) => {
     e.preventDefault();
-
     if (!validateSmtpForm()) return;
-
     try {
       setSmtpSaving(true);
-
       const res = await api.put("/superadmin/smtp-settings", {
         ...smtpForm,
         smtp_port: Number(smtpForm.smtp_port),
       });
-
       setSmtpConfigured(true);
       setSmtpForm((prev) => ({ ...prev, smtp_pass: "" }));
-
       toast.success(res.data?.message || "SMTP settings saved successfully");
     } catch (error) {
       toast.error(
@@ -377,22 +262,17 @@ function Profile() {
       setSmtpSaving(false);
     }
   };
-
   const handleSmtpTest = async () => {
     const email = testEmail.trim();
-
     if (!email) {
       toast.error("Test email is required");
       return;
     }
-
     try {
       setSmtpTesting(true);
-
       const res = await api.post("/superadmin/smtp-settings/test", {
         test_email: email,
       });
-
       toast.success(res.data?.message || "Test email sent successfully");
     } catch (error) {
       toast.error(error.response?.data?.message || "SMTP test failed");
@@ -400,95 +280,72 @@ function Profile() {
       setSmtpTesting(false);
     }
   };
-
   return (
-    // Normal users: lg+ pe fixed screen-fit (no scroll).
-    // Super admin: SMTP card extra hai, isliye page scroll hoga.
-    // Agar parent layout ki height fixed nahi hai to "lg:h-full" ki jagah
-    // "lg:h-[calc(100vh-7rem)]" use karna (header height ke hisaab se adjust).
-    <div
-      className={`flex w-full min-w-0 max-w-full flex-col gap-4 lg:h-full ${
-        isSuperAdmin ? "lg:overflow-y-auto" : "lg:overflow-hidden"
-      }`}
-    >
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-6 text-sm text-slate-700 dark:text-slate-200">
       {/* Header */}
-      <div className="shrink-0 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="shrink-0 px-1">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
               <UserRoundPen size={16} />
-              Account Profile
+              Workspace / Profile
             </div>
-
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
               Profile
             </h1>
-
             <p className="mt-0.5 text-sm font-medium text-slate-500 dark:text-slate-400">
               Manage your personal account information, photo and password.
             </p>
           </div>
-
           <div className="flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
             <ShieldCheck
               size={16}
-              className="text-indigo-600 dark:text-indigo-300"
+              className="text-blue-600 dark:text-blue-300"
             />
             {formatRole[user?.role] || user?.role || "User"}
           </div>
         </div>
       </div>
-
       {/* Content */}
-      <div
-        className={`grid gap-4 xl:grid-cols-[1fr_0.95fr] ${
-          isSuperAdmin ? "shrink-0" : "min-h-0 lg:flex-1"
-        }`}
-      >
+      <div className="grid min-w-0 items-stretch gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         {/* Left card */}
-        <div className="grid min-h-0 gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:grid-cols-[0.85fr_1.15fr] lg:gap-0">
-          <div className="flex min-h-0 flex-col border-slate-200 dark:border-slate-800 lg:border-r lg:pr-6">
+        <div className="grid min-h-0 gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:gap-0">
+          <div className="flex min-h-0 flex-col border-slate-200 dark:border-slate-800 md:border-r md:pr-5">
             <SectionTitle
               icon={<Camera size={18} />}
               title="Profile Photo"
               description="Upload JPG, PNG or WEBP image up to 2MB."
             />
-
-            <div className="flex flex-1 flex-col items-center justify-center py-2">
+            <div className="flex flex-1 flex-col items-center justify-center py-4">
               <div className="relative">
                 {visibleImage ? (
                   <img
                     src={visibleImage}
                     alt={user?.name || "User"}
-                    className="h-28 w-28 rounded-full border-4 border-white object-cover shadow-lg ring-1 ring-slate-200 dark:border-slate-800 dark:ring-slate-700"
+                    className="h-28 w-28 rounded-2xl border-4 border-white object-cover shadow-sm ring-1 ring-slate-200 dark:border-slate-800 dark:ring-slate-700"
                   />
                 ) : (
-                  <div className="flex h-28 w-28 items-center justify-center rounded-full bg-indigo-600 text-3xl font-bold text-white shadow-lg ring-1 ring-slate-200 dark:ring-slate-700">
+                  <div className="flex h-28 w-28 items-center justify-center rounded-2xl bg-blue-600 text-3xl font-semibold text-white shadow-lg ring-1 ring-slate-200 dark:ring-slate-700">
                     {initials}
                   </div>
                 )}
-
-                <div className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-indigo-600 text-white shadow dark:border-slate-900">
+                <div className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-white shadow dark:border-slate-900">
                   <Camera size={15} />
                 </div>
               </div>
-
               {previewImage && (
-                <span className="mt-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-0.5 text-xs font-bold text-indigo-700 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300">
+                <span className="mt-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-0.5 text-sm font-semibold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300">
                   Preview
                 </span>
               )}
-
               <div className="mt-5 w-full max-w-sm space-y-3">
-                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm transition hover:border-indigo-400 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-indigo-500 dark:hover:bg-indigo-950/30">
-                  <span className="font-bold text-slate-800 dark:text-slate-100">
+                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm transition hover:border-blue-400 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-blue-500 dark:hover:bg-blue-950/30">
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">
                     Choose File
                   </span>
-
                   <span className="max-w-40 truncate text-sm font-medium text-slate-600 dark:text-slate-400">
                     {selectedFileName || "No file selected"}
                   </span>
-
                   <input
                     type="file"
                     accept="image/jpeg,image/jpg,image/png,image/webp"
@@ -496,12 +353,11 @@ function Profile() {
                     onChange={handleImageSelect}
                   />
                 </label>
-
                 <button
                   type="button"
                   onClick={handleProfileImageUpload}
                   disabled={uploading}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-indigo-700 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <UploadCloud size={18} />
                   {uploading ? "Uploading..." : "Upload Photo"}
@@ -509,41 +365,29 @@ function Profile() {
               </div>
             </div>
           </div>
-
-          <div className="flex min-h-0 flex-col lg:pl-6">
+          <div className="flex min-h-0 flex-col md:pl-5">
             <SectionTitle
               icon={<UserRoundPen size={18} />}
               title="Profile Information"
               description="Your personal and account details."
             />
-
-            <form
-              onSubmit={handleProfileUpdate}
-              className="flex flex-1 flex-col justify-between gap-4"
-            >
+            <div className="flex flex-1 flex-col gap-4">
               <div className="space-y-3">
-                <EditableField
+                <ReadOnlyField
                   label="Full Name"
-                  name="name"
                   icon={<UserRoundPen size={16} />}
-                  value={formData.name}
-                  onChange={handleFormChange}
+                  value={user?.name || ""}
                 />
-
                 <ReadOnlyField
                   label="Email Address"
                   icon={<Mail size={16} />}
                   value={user?.email || ""}
                 />
-
-                <EditableField
-                  label="Phone Number"
-                  name="phone"
-                  icon={<Phone size={16} />}
-                  value={formData.phone}
-                  onChange={handleFormChange}
+                <ReadOnlyField
+                  label="Role"
+                  icon={<ShieldCheck size={16} />}
+                  value={formatRole[user?.role] || user?.role || "User"}
                 />
-
                 {user?.branch_name && (
                   <ReadOnlyField
                     label="Branch"
@@ -552,19 +396,9 @@ function Profile() {
                   />
                 )}
               </div>
-
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex w-fit items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-indigo-700 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Save size={17} />
-                {saving ? "Saving..." : "Save Profile"}
-              </button>
-            </form>
+            </div>
           </div>
         </div>
-
         {/* Right card */}
         <div className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <SectionTitle
@@ -572,7 +406,6 @@ function Profile() {
             title="Change Password"
             description="Update your account password securely."
           />
-
           <form
             onSubmit={handlePasswordChange}
             className="flex flex-1 flex-col justify-between gap-4"
@@ -591,7 +424,6 @@ function Profile() {
                 }
                 onChange={handlePasswordInputChange}
               />
-
               <PasswordField
                 label="New Password"
                 name="newPassword"
@@ -605,7 +437,6 @@ function Profile() {
                 }
                 onChange={handlePasswordInputChange}
               />
-
               <PasswordField
                 label="Confirm Password"
                 name="confirmPassword"
@@ -620,11 +451,10 @@ function Profile() {
                 onChange={handlePasswordInputChange}
               />
             </div>
-
             <button
               type="submit"
               disabled={changingPassword}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-slate-800 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-600 dark:hover:bg-indigo-700"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-600 dark:hover:bg-blue-700"
             >
               <Lock size={17} />
               {changingPassword ? "Updating..." : "Update Password"}
@@ -632,7 +462,6 @@ function Profile() {
           </form>
         </div>
       </div>
-
       {/* SMTP settings (Super Admin only) */}
       {isSuperAdmin && (
         <form
@@ -646,9 +475,8 @@ function Profile() {
               description="Used only for greetings sent by Super Admin to Company Admins."
               className="mb-0"
             />
-
             <span
-              className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
+              className={`w-fit shrink-0 rounded-full px-3 py-1 text-sm font-semibold ${
                 smtpConfigured
                   ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
                   : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
@@ -657,16 +485,18 @@ function Profile() {
               {smtpConfigured ? "Configured" : "Not Configured"}
             </span>
           </div>
-
           {smtpLoading ? (
             <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm font-medium text-slate-500 dark:border-slate-700 dark:text-slate-400">
               Loading SMTP settings...
             </div>
           ) : (
             <>
-              <div className="grid gap-4 xl:grid-cols-3">
+              <div className="grid min-w-0 gap-4 lg:grid-cols-3">
                 {/* Server */}
-                <SmtpGroup title="Server" description="Where emails are sent from.">
+                <SmtpGroup
+                  title="Server"
+                  description="Where emails are sent from."
+                >
                   <SmtpField
                     label="SMTP Host"
                     name="smtp_host"
@@ -674,7 +504,6 @@ function Profile() {
                     onChange={handleSmtpChange}
                     placeholder="smtp.gmail.com"
                   />
-
                   <SmtpField
                     label="SMTP Port"
                     name="smtp_port"
@@ -683,23 +512,24 @@ function Profile() {
                     onChange={handleSmtpChange}
                     placeholder="465"
                   />
-
                   <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
                     <input
                       type="checkbox"
                       name="smtp_secure"
                       checked={smtpForm.smtp_secure}
                       onChange={handleSmtpChange}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                     />
-                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
                       Secure connection (SSL/TLS)
                     </span>
                   </label>
                 </SmtpGroup>
-
                 {/* Login */}
-                <SmtpGroup title="Login" description="Account used to authenticate.">
+                <SmtpGroup
+                  title="Login"
+                  description="Account used to authenticate."
+                >
                   <SmtpField
                     label="SMTP Username"
                     name="smtp_user"
@@ -707,12 +537,10 @@ function Profile() {
                     onChange={handleSmtpChange}
                     placeholder="email@example.com"
                   />
-
                   <div>
-                    <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                       SMTP Password
                     </label>
-
                     <div className="relative">
                       <input
                         type={showSmtpPassword ? "text" : "password"}
@@ -725,9 +553,8 @@ function Profile() {
                             : "Enter SMTP password"
                         }
                         autoComplete="new-password"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 dark:focus:ring-indigo-950/50"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 dark:focus:ring-blue-950/50"
                       />
-
                       <button
                         type="button"
                         onClick={() => setShowSmtpPassword((prev) => !prev)}
@@ -743,9 +570,11 @@ function Profile() {
                     </div>
                   </div>
                 </SmtpGroup>
-
                 {/* Sender */}
-                <SmtpGroup title="Sender" description="What recipients will see.">
+                <SmtpGroup
+                  title="Sender"
+                  description="What recipients will see."
+                >
                   <SmtpField
                     label="From Email"
                     name="from_email"
@@ -754,7 +583,6 @@ function Profile() {
                     onChange={handleSmtpChange}
                     placeholder="greetings@example.com"
                   />
-
                   <SmtpField
                     label="From Name"
                     name="from_name"
@@ -762,7 +590,6 @@ function Profile() {
                     onChange={handleSmtpChange}
                     placeholder="Smart Invoice & Billing"
                   />
-
                   <SmtpField
                     label="Reply-To"
                     name="reply_to"
@@ -773,7 +600,6 @@ function Profile() {
                   />
                 </SmtpGroup>
               </div>
-
               {/* Footer: test + save */}
               <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 dark:border-slate-800 lg:flex-row lg:items-end lg:justify-between">
                 <div className="w-full lg:max-w-md">
@@ -785,23 +611,23 @@ function Profile() {
                     placeholder="admin@example.com"
                   />
                 </div>
-
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <button
                     type="button"
                     onClick={handleSmtpTest}
                     disabled={smtpTesting || !smtpConfigured}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                    title={smtpConfigured ? "" : "Save SMTP settings before testing"}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    title={
+                      smtpConfigured ? "" : "Save SMTP settings before testing"
+                    }
                   >
                     <Send size={16} />
                     {smtpTesting ? "Sending..." : "Send Test Email"}
                   </button>
-
                   <button
                     type="submit"
                     disabled={smtpSaving}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Save size={16} />
                     {smtpSaving ? "Saving..." : "Save SMTP Settings"}
@@ -815,18 +641,16 @@ function Profile() {
     </div>
   );
 }
-
 function SectionTitle({ icon, title, description, className = "mb-4" }) {
   return (
-    <div className={`flex shrink-0 items-center gap-3 ${className}`}>
+    <div className={`flex shrink-0 items-start gap-3 ${className}`}>
       {icon && (
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
           {icon}
         </div>
       )}
-
       <div className="min-w-0">
-        <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
           {title}
         </h2>
         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -836,15 +660,13 @@ function SectionTitle({ icon, title, description, className = "mb-4" }) {
     </div>
   );
 }
-
 function ReadOnlyField({ label, value, icon }) {
   return (
     <div>
-      <label className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         <span className="text-slate-500 dark:text-slate-400">{icon}</span>
         {label}
       </label>
-
       <input
         className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 opacity-90 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
         value={value || ""}
@@ -853,42 +675,21 @@ function ReadOnlyField({ label, value, icon }) {
     </div>
   );
 }
-
-function EditableField({ label, name, value, onChange, icon }) {
-  return (
-    <div>
-      <label className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-        <span className="text-slate-500 dark:text-slate-400">{icon}</span>
-        {label}
-      </label>
-
-      <input
-        name={name}
-        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-950/50"
-        value={value || ""}
-        onChange={onChange}
-      />
-    </div>
-  );
-}
-
 function SmtpGroup({ title, description, children }) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
       <div>
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
           {title}
         </h3>
-        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
           {description}
         </p>
       </div>
-
       {children}
     </div>
   );
 }
-
 function SmtpField({
   label,
   name,
@@ -899,45 +700,43 @@ function SmtpField({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
         {label}
       </label>
-
       <input
         type={type}
         name={name}
         value={value || ""}
         onChange={onChange}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 dark:focus:ring-indigo-950/50"
+        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 dark:focus:ring-blue-950/50"
       />
     </div>
   );
 }
-
 function PasswordField({ label, name, value, visible, onToggle, onChange }) {
   return (
     <div>
-      <label className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         <span className="text-slate-500 dark:text-slate-400">
           <Lock size={16} />
         </span>
         {label}
       </label>
-
       <div className="relative">
         <input
           type={visible ? "text" : "password"}
           name={name}
           value={value}
           onChange={onChange}
-          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 pr-11 text-sm font-medium text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-950/50"
+          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 pr-11 text-sm font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:ring-blue-950/50"
           autoComplete="new-password"
         />
-
         <button
           type="button"
           onClick={onToggle}
+          aria-label={visible ? `Hide ${label}` : `Show ${label}`}
+          aria-pressed={visible}
           className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
         >
           {visible ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -946,5 +745,4 @@ function PasswordField({ label, name, value, visible, onToggle, onChange }) {
     </div>
   );
 }
-
 export default Profile;

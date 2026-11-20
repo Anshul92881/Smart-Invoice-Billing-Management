@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
-import { createPortal } from "react-dom";
-
 import {
   Pencil,
   X,
-  Users,
   UserPlus,
   Mail,
   Lock,
+  Users,
   ShieldCheck,
   CheckCircle2,
   XCircle,
@@ -21,14 +20,18 @@ import {
   BadgePercent,
   MapPin,
   Globe,
-  Eye,
-  EyeOff,
-  Plus,
   Search,
   Filter,
+  Eye,
+  Plus,
   ChevronDown,
+  EyeOff,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpRight,
+  ArrowUpDown,
 } from "lucide-react";
-
 function SalesUsers() {
   const initialForm = {
     name: "",
@@ -36,7 +39,6 @@ function SalesUsers() {
     password: "",
     branch_id: "",
   };
-
   const initialBranchForm = {
     branch_name: "",
     branch_code: "",
@@ -50,24 +52,29 @@ function SalesUsers() {
     zip_code: "",
     status: "active",
   };
-
   const [salesUsers, setSalesUsers] = useState([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("name");
+  const [sortDirection, setSortDirection] = useState("asc");
+  const requestRef = useRef(0),
+    saveLock = useRef(false),
+    branchLock = useRef(false);
   const [branches, setBranches] = useState([]);
   const [formData, setFormData] = useState(initialForm);
   const [branchForm, setBranchForm] = useState(initialBranchForm);
-
   const [editId, setEditId] = useState(null);
-  const [viewUser, setViewUser] = useState(null);
+  const [viewSalesUser, setViewSalesUser] = useState(null);
   const [showFormModal, setShowFormModal] = useState(false);
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [branchLoading, setBranchLoading] = useState(false);
-
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
-
   const [cardFilter, setCardFilter] = useState("all");
-
   const stats = {
     total: salesUsers.length,
     active: salesUsers.filter((u) => (u.status || "active") === "active")
@@ -75,96 +82,87 @@ function SalesUsers() {
     inactive: salesUsers.filter((u) => (u.status || "active") !== "active")
       .length,
   };
-
   const isActiveBranch = (branch) =>
     branch.status === "active" || branch.status === 1 || branch.status === true;
-
   const formatBranchLabel = (item) => {
     if (!item?.branch_name) return "-";
-
     return item.branch_code
       ? `${item.branch_name} (${item.branch_code})`
       : item.branch_name;
   };
-
   const getDefaultBranchId = () => {
     const hqBranch = branches.find(
       (branch) => branch.is_main === 1 || branch.is_main === true,
     );
-
     return hqBranch?.id ? String(hqBranch.id) : "";
   };
-
   const fetchData = async () => {
+    const requestId = ++requestRef.current;
+    setListLoading(true);
+    setListError("");
     try {
       const [salesResult, branchResult] = await Promise.allSettled([
         api.get("/users/sales-users"),
         api.get("/branches"),
       ]);
-
+      if (requestId !== requestRef.current) return;
       if (salesResult.status === "fulfilled") {
         const salesData = Array.isArray(salesResult.value.data)
           ? salesResult.value.data
           : salesResult.value.data?.salesUsers || [];
-
-        setSalesUsers(salesData);
+        setSalesUsers(Array.isArray(salesData) ? salesData : []);
       } else {
         const salesError = salesResult.reason;
-
+        setListError(
+          salesError.response?.data?.message || "Failed to fetch sales users",
+        );
         console.error(
           "Sales users API failed:",
           salesError.response?.status,
           salesError.response?.data,
         );
-
         toast.error(
           salesError.response?.data?.message || "Failed to fetch sales users",
         );
       }
-
       if (branchResult.status === "fulfilled") {
         const branchData = Array.isArray(branchResult.value.data)
           ? branchResult.value.data
           : branchResult.value.data?.branches || [];
-
-        setBranches(branchData.filter(isActiveBranch));
+        setBranches(
+          (Array.isArray(branchData) ? branchData : []).filter(isActiveBranch),
+        );
       } else {
         const branchError = branchResult.reason;
-
         console.error(
           "Branches API failed:",
           branchError.response?.status,
           branchError.response?.data,
         );
-
         toast.error(
           branchError.response?.data?.message || "Failed to fetch branches",
         );
       }
     } catch (error) {
       console.error("Sales users page fetch error:", error);
-
+      if (requestId === requestRef.current)
+        setListError(
+          error.response?.data?.message || "Failed to load sales users page",
+        );
       toast.error(
         error.response?.data?.message || "Failed to load sales users page",
       );
+    } finally {
+      if (requestId === requestRef.current) setListLoading(false);
     }
   };
-
   useEffect(() => {
     fetchData();
   }, []);
-
-  const matchesCard =
-    cardFilter === "all" ||
-    (cardFilter === "active" && status === "active") ||
-    (cardFilter === "inactive" && status !== "active");
-
   const filteredSalesUsers = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-
     return salesUsers.filter((item) => {
       const status = item.status || "active";
-
       const matchesSearch =
         !keyword ||
         (item.name || "").toLowerCase().includes(keyword) ||
@@ -172,23 +170,47 @@ function SalesUsers() {
         (item.branch_name || "").toLowerCase().includes(keyword) ||
         (item.branch_code || "").toLowerCase().includes(keyword) ||
         (item.role || "").toLowerCase().includes(keyword);
-
       const matchesStatus = statusFilter === "all" || status === statusFilter;
-
       const matchesBranch =
         branchFilter === "all" ||
         String(item.branch_id || "") === String(branchFilter);
-
       const matchesCard =
         cardFilter === "all" ||
         (cardFilter === "active" && status === "active") ||
         (cardFilter === "inactive" && status !== "active") ||
         (cardFilter === "assigned" && Boolean(item.branch_id));
-
       return matchesSearch && matchesStatus && matchesBranch && matchesCard;
     });
   }, [salesUsers, search, statusFilter, branchFilter, cardFilter]);
-
+  const pages = Math.max(1, Math.ceil(filteredSalesUsers.length / pageSize));
+  const sortedSalesUsers = useMemo(
+    () =>
+      [...filteredSalesUsers].sort((a, b) => {
+        const comparison = String(a[sortBy] || "").localeCompare(
+          String(b[sortBy] || ""),
+          undefined,
+          { numeric: true, sensitivity: "base" },
+        );
+        return sortDirection === "asc" ? comparison : -comparison;
+      }),
+    [filteredSalesUsers, sortBy, sortDirection],
+  );
+  const visibleSalesUsers = sortedSalesUsers.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
+  const changeSort = (key) => {
+    setSortDirection(
+      sortBy === key && sortDirection === "asc" ? "desc" : "asc",
+    );
+    setSortBy(key);
+    setPage(1);
+  };
+  useEffect(
+    () => setPage(1),
+    [search, statusFilter, branchFilter, cardFilter, pageSize],
+  );
+  useEffect(() => setPage((current) => Math.min(current, pages)), [pages]);
   const confirmToast = (message, onConfirm) => {
     toast(
       (t) => (
@@ -196,7 +218,6 @@ function SalesUsers() {
           <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
             {message}
           </p>
-
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -205,7 +226,6 @@ function SalesUsers() {
             >
               No
             </button>
-
             <button
               type="button"
               onClick={() => {
@@ -222,22 +242,17 @@ function SalesUsers() {
       { duration: 6000 },
     );
   };
-
   const handleChange = (e) => {
     const { name, value } = e.target;
-
     if (name === "branch_id" && value === "__add_branch__") {
       setShowBranchModal(true);
       return;
     }
-
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
-
   const handleBranchChange = (e) => {
     setBranchForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
-
   const resetForm = () => {
     setFormData({
       ...initialForm,
@@ -245,16 +260,13 @@ function SalesUsers() {
     });
     setEditId(null);
   };
-
   const resetBranchForm = () => {
     setBranchForm(initialBranchForm);
   };
-
   const openCreateModal = () => {
     resetForm();
     setShowFormModal(true);
   };
-
   const openEditModal = (salesUser) => {
     setEditId(salesUser.id);
     setFormData({
@@ -265,34 +277,31 @@ function SalesUsers() {
     });
     setShowFormModal(true);
   };
-
   const closeFormModal = () => {
     resetForm();
     setShowFormModal(false);
   };
-
   const handleCreateBranch = async () => {
+    if (branchLock.current) return;
     if (!branchForm.branch_name.trim()) {
       toast.error("Branch name is required");
       return;
     }
-
     try {
+      branchLock.current = true;
       setBranchLoading(true);
-
       const payload = {
         ...branchForm,
         branch_name: branchForm.branch_name.trim(),
       };
-
       const res = await api.post("/branches", payload);
       const newBranch = res.data?.branch || res.data;
-
       const branchRes = await api.get("/branches");
-      const updatedBranches = (branchRes.data || []).filter(isActiveBranch);
-
+      const branchList = Array.isArray(branchRes.data)
+        ? branchRes.data
+        : branchRes.data?.branches || [];
+      const updatedBranches = branchList.filter(isActiveBranch);
       setBranches(updatedBranches);
-
       const selectedBranch =
         newBranch?.id ||
         newBranch?.branch_id ||
@@ -301,43 +310,40 @@ function SalesUsers() {
             branch.branch_name?.toLowerCase() ===
             payload.branch_name.toLowerCase(),
         )?.id;
-
       if (selectedBranch) {
         setFormData((prev) => ({
           ...prev,
           branch_id: String(selectedBranch),
         }));
       }
-
       resetBranchForm();
       setShowBranchModal(false);
       toast.success("Branch added successfully");
     } catch (error) {
       toast.error(error.response?.data?.message || "Branch create failed");
     } finally {
+      branchLock.current = false;
       setBranchLoading(false);
     }
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    if (saveLock.current) return;
     if (!formData.branch_id) {
       toast.error("Please select branch");
       return;
     }
-
     if (!formData.name.trim() || !formData.email.trim()) {
       toast.error("Name and email are required");
       return;
     }
-
     if (!editId && !formData.password) {
       toast.error("Password is required");
       return;
     }
-
     try {
+      saveLock.current = true;
+      setLoading(true);
       if (editId) {
         await api.put(`/users/team/${editId}`, formData);
         toast.success("Sales user updated successfully");
@@ -345,18 +351,18 @@ function SalesUsers() {
         await api.post("/users/sales-user", formData);
         toast.success("Sales user created successfully");
       }
-
       closeFormModal();
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to save sales user");
+    } finally {
+      saveLock.current = false;
+      setLoading(false);
     }
   };
-
   const handleToggleStatus = (salesUser) => {
     const currentStatus = String(salesUser.status || "active").toLowerCase();
     const nextStatus = currentStatus === "inactive" ? "active" : "inactive";
-
     confirmToast(
       `${nextStatus === "active" ? "Activate" : "Deactivate"} this sales user?`,
       async () => {
@@ -364,7 +370,6 @@ function SalesUsers() {
           await api.patch(`/users/team/${salesUser.id}/status`, {
             status: nextStatus,
           });
-
           toast.success(`Sales user ${nextStatus} successfully`);
           fetchData();
         } catch (error) {
@@ -373,149 +378,227 @@ function SalesUsers() {
       },
     );
   };
-
   return (
-    <div className="w-full min-w-0 space-y-5 overflow-x-hidden">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
-              <Users size={17} />
-              Sales Team Management
-            </div>
-
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Sales Users
-            </h1>
-
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Create, update and assign branch-wise sales users for quotations,
-              customers and limited sales work.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:ring-0"
-          >
-            <Plus size={17} />
-            Create Sales User
-          </button>
+    <div className="salesUsers-workspace w-full min-w-0 space-y-5">
+      <header className="flex flex-col justify-between gap-4 py-1 sm:flex-row sm:items-center">
+        <div>
+          <p className="mb-2 text-sm text-slate-500">Team / Sales Users</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            Sales Users
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Manage your sales team and branch assignments.
+          </p>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatsCard
-          title="Total Users"
+        <button
+          type="button"
+          onClick={openCreateModal}
+          className="inline-flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+        >
+          <Plus size={17} />
+          New Sales User
+        </button>
+      </header>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          title="Total Sales Users"
           value={stats.total}
           icon={<Users size={20} />}
-          color="bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+          color="bg-blue-50 text-blue-600"
           onClick={() => {
             setCardFilter("all");
             setStatusFilter("all");
             setBranchFilter("all");
           }}
         />
-
-        <StatsCard
-          title="Active Users"
+        <SummaryCard
+          title="Active Members"
           value={stats.active}
           icon={<CheckCircle2 size={20} />}
-          color="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+          color="bg-emerald-50 text-emerald-600"
           onClick={() => {
             setCardFilter("active");
             setStatusFilter("all");
             setBranchFilter("all");
           }}
         />
-
-        <StatsCard
-          title="Inactive Users"
+        <SummaryCard
+          title="Inactive Members"
           value={stats.inactive}
           icon={<XCircle size={20} />}
-          color="bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+          color="bg-amber-50 text-amber-600"
           onClick={() => {
             setCardFilter("inactive");
             setStatusFilter("all");
             setBranchFilter("all");
           }}
         />
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 p-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Sales User List
-              </h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Search, filter, view and manage sales users.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="relative">
-                <Search
-                  size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-400"
-                />
-                <input
-                  type="text"
-                  placeholder="Search user"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="input !pl-10"
-                />
-              </div>
-
-              <CustomDropdown
-                value={statusFilter}
-                onChange={setStatusFilter}
-                icon={<Filter size={16} />}
-                options={[
-                  { value: "all", label: "All Status" },
-                  { value: "active", label: "Active" },
-                  { value: "inactive", label: "Inactive" },
-                ]}
-              />
-
-              <CustomDropdown
-                value={branchFilter}
-                onChange={setBranchFilter}
-                icon={<Building2 size={16} />}
-                options={[
-                  { value: "all", label: "All Branches" },
-
-                  ...branches.map((branch) => ({
-                    value: String(branch.id),
-                    label: formatBranchLabel(branch),
-                  })),
-                ]}
-              />
-            </div>
-          </div>
-        </div>
-
-        <SalesUserTable
-          salesUsers={filteredSalesUsers}
-          onView={setViewUser}
-          onEdit={openEditModal}
-          onToggleStatus={handleToggleStatus}
-          formatBranchLabel={formatBranchLabel}
+        <SummaryCard
+          title="Active Branches"
+          value={branches.length}
+          icon={<GitBranch size={20} />}
+          color="bg-violet-50 text-violet-600"
         />
       </div>
-
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 pt-4 dark:border-slate-800">
+          <div
+            className="flex gap-5 overflow-x-auto"
+            role="tablist"
+            aria-label="Sales User status"
+          >
+            {[
+              ["all", "All Sales Users"],
+              ["active", "Active"],
+              ["inactive", "Inactive"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={statusFilter === value}
+                onClick={() => {
+                  setCardFilter("all");
+                  setStatusFilter(value);
+                }}
+                className={`whitespace-nowrap border-b-2 pb-4 text-sm font-medium ${statusFilter === value ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={fetchData}
+            disabled={listLoading}
+            aria-label="Refresh sales users"
+            className="mb-3 rounded-lg p-2 text-slate-500 hover:bg-slate-50 hover:text-blue-600 disabled:opacity-40 dark:hover:bg-slate-800"
+          >
+            <RefreshCw
+              size={16}
+              className={listLoading ? "animate-spin" : ""}
+            />
+          </button>
+        </div>
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 dark:border-slate-800 sm:flex-row">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              size={17}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+            />
+            <input
+              type="search"
+              aria-label="Search sales users"
+              placeholder="Search by name, email or branch…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="input !pl-10"
+            />
+          </div>
+          <div className="sm:w-60">
+            <CustomDropdown
+              value={branchFilter}
+              onChange={setBranchFilter}
+              icon={<GitBranch size={15} />}
+              options={[
+                { value: "all", label: "All Branches" },
+                ...branches.map((branch) => ({
+                  value: String(branch.id),
+                  label: formatBranchLabel(branch),
+                })),
+              ]}
+            />
+          </div>
+        </div>
+        {listError ? (
+          <div role="alert" className="p-10 text-center">
+            <p className="text-sm text-red-500">{listError}</p>
+            <button
+              type="button"
+              onClick={fetchData}
+              className="mt-3 text-sm text-blue-600"
+            >
+              Try again
+            </button>
+          </div>
+        ) : listLoading ? (
+          <div
+            role="status"
+            aria-label="Loading sales users"
+            className="space-y-4 p-6"
+          >
+            {[1, 2, 3].map((row) => (
+              <div
+                key={row}
+                className="h-14 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800"
+              />
+            ))}
+          </div>
+        ) : (
+          <SalesUserTable
+            salesUsers={visibleSalesUsers}
+            sortBy={sortBy}
+            sortDirection={sortDirection}
+            onSort={changeSort}
+            onView={setViewSalesUser}
+            onEdit={openEditModal}
+            onToggleStatus={handleToggleStatus}
+            formatBranchLabel={formatBranchLabel}
+          />
+        )}
+        <footer className="flex flex-col justify-between gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500 dark:border-slate-800 sm:flex-row sm:items-center">
+          <span>
+            Showing {filteredSalesUsers.length ? (page - 1) * pageSize + 1 : 0}–
+            {Math.min(page * pageSize, filteredSalesUsers.length)} of{" "}
+            {filteredSalesUsers.length} sales users
+          </span>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2">
+              Rows
+              <CustomDropdown
+                value={String(pageSize)}
+                onChange={(value) => setPageSize(Number(value))}
+                options={[10, 20, 50].map((count) => ({
+                  value: String(count),
+                  label: String(count),
+                }))}
+                label="Rows per page"
+                searchable={false}
+              />
+            </label>
+            <button
+              type="button"
+              aria-label="Previous page"
+              disabled={page <= 1}
+              onClick={() => setPage((current) => current - 1)}
+              className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-slate-700"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <span>
+              {page} / {pages}
+            </span>
+            <button
+              type="button"
+              aria-label="Next page"
+              disabled={page >= pages}
+              onClick={() => setPage((current) => current + 1)}
+              className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-slate-700"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        </footer>
+      </section>
       {showFormModal && (
         <FormModal
           title={editId ? "Update Sales User" : "Create Sales User"}
           description={
             editId
-              ? "Update branch/name/email. Fill password only if you want to reset it."
+              ? "Update salesUser details. Fill password only if you want to reset it."
               : "Select existing branch or create a new branch from same page."
           }
-          icon={<Users size={21} />}
+          icon={<ShieldCheck size={22} />}
           onClose={closeFormModal}
         >
           <SalesUserForm
@@ -523,85 +606,75 @@ function SalesUsers() {
             branches={branches}
             editId={editId}
             formatBranchLabel={formatBranchLabel}
+            loading={loading}
             handleChange={handleChange}
             handleSubmit={handleSubmit}
             onCancel={closeFormModal}
           />
         </FormModal>
       )}
-
-      {viewUser && (
+      {viewSalesUser && (
         <SalesUserViewModal
-          user={viewUser}
+          salesUser={viewSalesUser}
           formatBranchLabel={formatBranchLabel}
-          onClose={() => setViewUser(null)}
+          onClose={() => setViewSalesUser(null)}
         />
       )}
-
       {showBranchModal && (
         <FormModal
           title="Add New Branch"
-          description="Create branch without leaving sales user page."
-          icon={<GitBranch size={21} />}
+          description="Create a branch without leaving the sales user page."
+          icon={<GitBranch size={22} />}
           onClose={() => setShowBranchModal(false)}
         >
-          <BranchForm
+          <BranchMiniForm
             branchForm={branchForm}
-            branchLoading={branchLoading}
             handleBranchChange={handleBranchChange}
             handleCreateBranch={handleCreateBranch}
+            branchLoading={branchLoading}
             onCancel={() => setShowBranchModal(false)}
           />
         </FormModal>
       )}
-
       <style>{`
-        .input {
+        .salesUsers-workspace .input {
           width: 100%;
-          border: 1px solid #cbd5e1;
-          padding: 10px 12px;
-          border-radius: 12px;
-          font-size: 14px;
+          border: 1px solid #e2e8f0;
+          padding: 12px 14px;
+          border-radius: 8px;
+          font-size: 15px;
           outline: none;
           background: #ffffff;
           color: #334155;
           transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
         }
-
-        .input::placeholder {
+        .salesUsers-workspace .input::placeholder {
           color: #94a3b8;
         }
-
-        .input:focus {
+        .salesUsers-workspace .input:focus {
           border-color: #2563eb;
           box-shadow: 0 0 0 3px #dbeafe;
         }
-
-        .dark .input {
+        .dark .salesUsers-workspace .input {
           border-color: #334155;
           background: #0f172a;
           color: #e2e8f0;
         }
-
-        .dark .input::placeholder {
+        .dark .salesUsers-workspace .input::placeholder {
           color: #64748b;
         }
-
-        .dark .input:focus {
+        .dark .salesUsers-workspace .input:focus {
           border-color: #3b82f6;
           box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.35);
-        }
-
-        button:focus,
-        button:focus-visible {
-          outline: none;
         }
       `}</style>
     </div>
   );
 }
-
 function SalesUserTable({
+  sortBy,
+  sortDirection,
+  onSort,
   salesUsers,
   onView,
   onEdit,
@@ -610,113 +683,140 @@ function SalesUserTable({
 }) {
   return (
     <div className="w-full overflow-x-auto">
-      <table className="w-full min-w-[920px] text-sm">
-        <thead className="bg-slate-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+      <table className="w-full min-w-[780px] text-left text-[15px]">
+        <thead className="bg-blue-50 text-sm tracking-wide text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           <tr>
-            {["User", "Branch", "Email", "Role", "Status", "Actions"].map(
-              (head) => (
-                <th
-                  key={head}
-                  className="p-4 text-center text-xs font-bold uppercase tracking-wide"
-                >
-                  {head}
-                </th>
-              ),
-            )}
+            {[
+              ["Team Member", "name"],
+              ["Branch", "branch_name"],
+              ["Role", "role"],
+              ["Status", "status"],
+              ["Actions", null],
+            ].map(([label, key]) => (
+              <th
+                key={label}
+                scope="col"
+                aria-sort={
+                  key === sortBy
+                    ? sortDirection === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : undefined
+                }
+                className="px-5 py-4 text-left text-sm font-medium"
+              >
+                {key && onSort ? (
+                  <button
+                    type="button"
+                    onClick={() => onSort(key)}
+                    className="inline-flex items-center gap-2"
+                  >
+                    {label}
+                    <ArrowUpDown
+                      size={14}
+                      className={
+                        sortBy === key ? "text-blue-600" : "text-blue-300"
+                      }
+                    />
+                  </button>
+                ) : (
+                  label
+                )}
+              </th>
+            ))}
           </tr>
         </thead>
-
-        <tbody>
-          {salesUsers.map((item) => {
-            const isInactive =
-              String(item.status || "active").toLowerCase() === "inactive";
-
-            return (
-              <tr
-                key={item.id}
-                className="border-t border-slate-100 transition dark:border-slate-800 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
-              >
-                <td className="p-4">
-                  <div className="flex items-center justify-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-                      <ShieldCheck size={19} />
-                    </div>
-
-                    <div>
-                      <p className="font-bold text-slate-900 dark:text-white">
-                        {item.name || "-"}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Sales team member
-                      </p>
-                    </div>
-                  </div>
-                </td>
-
-                <td className="p-4 text-center text-slate-600 dark:text-slate-300">
-                  {formatBranchLabel(item)}
-                </td>
-
-                <td className="p-4 text-center text-slate-600 dark:text-slate-300">
-                  {item.email || "-"}
-                </td>
-
-                <td className="p-4 text-center capitalize text-slate-600 dark:text-slate-300">
-                  {item.role?.replace("_", " ") || "sales user"}
-                </td>
-
-                <td className="p-4 text-center">
-                  <StatusBadge status={item.status} />
-                </td>
-
-                <td className="p-4 text-center">
-                  <div className="flex items-center justify-center gap-2">
-                    <IconButton
-                      icon={<Eye size={16} />}
-                      className="bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
-                      onClick={() => onView(item)}
-                    />
-
-                    <IconButton
-                      icon={<Pencil size={16} />}
-                      className="bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950"
-                      onClick={() => onEdit(item)}
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => onToggleStatus(item)}
-                      className={`flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold ${
-                        isInactive
-                          ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950"
-                          : "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950"
-                      }`}
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {salesUsers.map((item) => (
+            <tr
+              key={item.id}
+              className="transition hover:bg-blue-50/30 dark:hover:bg-slate-800/40"
+            >
+              <td className="px-5 py-4">
+                <button
+                  type="button"
+                  onClick={() => onView(item)}
+                  className="flex items-center gap-3 text-left"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-sm font-semibold text-blue-600 dark:bg-blue-950">
+                    {String(item.name || "A")
+                      .split(" ")
+                      .map((word) => word[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block max-w-[200px] truncate text-base font-semibold text-slate-800 hover:text-blue-600 dark:text-slate-100">
+                      {item.name || "—"}
+                    </span>
+                    <span
+                      className="mt-1 block max-w-[210px] truncate text-sm text-slate-500"
+                      title={item.email}
                     >
-                      {isInactive ? (
-                        <CheckCircle2 size={15} />
-                      ) : (
-                        <XCircle size={15} />
-                      )}
-                      {isInactive ? "Activate" : "Deactivate"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-
-          {salesUsers.length === 0 && (
-            <tr>
-              <td colSpan="6" className="p-10 text-center">
-                <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-950 p-6">
-                  <Users className="mx-auto text-slate-400" size={34} />
-                  <p className="mt-3 font-semibold text-slate-700 dark:text-slate-200">
-                    No sales users found
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Try changing search or filters.
-                  </p>
+                      {item.email || "—"}
+                    </span>
+                  </span>
+                </button>
+              </td>
+              <td className="px-5 py-4">
+                <span
+                  className="block max-w-[170px] truncate text-sm text-slate-600 dark:text-slate-300"
+                  title={formatBranchLabel(item)}
+                >
+                  {formatBranchLabel(item)}
+                </span>
+              </td>
+              <td className="px-5 py-4">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-violet-50 px-2.5 py-1.5 text-sm font-medium capitalize text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                  <ShieldCheck size={13} />
+                  {(item.role || "sales_user").replaceAll("_", " ")}
+                </span>
+              </td>
+              <td className="px-5 py-4">
+                <StatusBadge status={item.status} />
+              </td>
+              <td className="px-5 py-4">
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="View profile"
+                    aria-label={`View ${item.name}`}
+                    onClick={() => onView(item)}
+                    className="rounded-lg bg-blue-50 p-2.5 text-blue-600 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300"
+                  >
+                    <Eye size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Edit sales user"
+                    aria-label={`Edit ${item.name}`}
+                    onClick={() => onEdit(item)}
+                    className="rounded-lg bg-amber-50 p-2.5 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+                  >
+                    <Pencil size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onToggleStatus(item)}
+                    className={`ml-2 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-sm font-medium ${item.status === "inactive" ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300" : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"}`}
+                  >
+                    {item.status === "inactive" ? "Activate" : "Deactivate"}
+                  </button>
                 </div>
+              </td>
+            </tr>
+          ))}
+          {!salesUsers.length && (
+            <tr>
+              <td colSpan={5} className="p-12 text-center">
+                <Users size={32} className="mx-auto mb-3 text-slate-300" />
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  No sales users found
+                </p>
+                <p className="mt-2 text-sm text-slate-500">
+                  Add a team member or adjust your filters.
+                </p>
               </td>
             </tr>
           )}
@@ -731,22 +831,31 @@ function SalesUserForm({
   branches,
   editId,
   formatBranchLabel,
+  loading,
   handleChange,
   handleSubmit,
   onCancel,
 }) {
   const [showPassword, setShowPassword] = useState(false);
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit}>
+      <div className="mb-6 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
+        <ShieldCheck size={20} className="mt-0.5 shrink-0 text-blue-600" />
+        <div>
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+            Sales team access
+          </p>
+          <p className="mt-1 text-sm leading-5 text-slate-500">
+            Assign a branch and enter the sales user’s login details.
+          </p>
+        </div>
+      </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Field icon={<Building2 size={16} />} label="Branch">
           <BranchSelect
             branches={branches}
             value={formData.branch_id}
             formatBranchLabel={formatBranchLabel}
-            canAddBranch
-            placeholder="Select Branch"
             onChange={(value) =>
               handleChange({
                 target: {
@@ -757,27 +866,24 @@ function SalesUserForm({
             }
           />
         </Field>
-
         <Input
           icon={<Users size={16} />}
-          label="Name"
+          label="Sales User Name"
           type="text"
           name="name"
-          placeholder="Sales user name"
+          placeholder="Enter sales user name"
           value={formData.name}
           onChange={handleChange}
         />
-
         <Input
           icon={<Mail size={16} />}
-          label="Email"
+          label="Sales User Email"
           type="email"
           name="email"
-          placeholder="Sales user email"
+          placeholder="Enter sales user email"
           value={formData.email}
           onChange={handleChange}
         />
-
         <Field
           icon={<Lock size={16} />}
           label={editId ? "New Password Optional" : "Password"}
@@ -794,11 +900,10 @@ function SalesUserForm({
               autoComplete="new-password"
               className="input !pr-12"
             />
-
             <button
               type="button"
               onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-500 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
               title={showPassword ? "Hide Password" : "Show Password"}
               aria-label={showPassword ? "Hide Password" : "Show Password"}
               aria-pressed={showPassword}
@@ -808,8 +913,7 @@ function SalesUserForm({
           </div>
         </Field>
       </div>
-
-      <div className="mt-6 flex flex-col-reverse gap-2 border-t border-slate-200 pt-5 dark:border-slate-800 sm:flex-row sm:justify-end">
+      <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 dark:border-slate-800 sm:flex-row sm:justify-end">
         <button
           type="button"
           onClick={onCancel}
@@ -818,29 +922,32 @@ function SalesUserForm({
           <X size={16} />
           Cancel
         </button>
-
         <button
           type="submit"
-          className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:ring-0"
+          disabled={loading}
+          className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-0 active:ring-0 disabled:bg-blue-400"
         >
           <UserPlus size={16} />
-          {editId ? "Update Sales User" : "Create Sales User"}
+          {loading
+            ? "Saving..."
+            : editId
+              ? "Save Changes"
+              : "Create Sales User"}
         </button>
       </div>
     </form>
   );
 }
-
-function BranchForm({
+function BranchMiniForm({
   branchForm,
-  branchLoading,
   handleBranchChange,
   handleCreateBranch,
+  branchLoading,
   onCancel,
 }) {
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ModalInput
           icon={<Building2 size={16} />}
           label="Branch Name"
@@ -906,7 +1013,6 @@ function BranchForm({
           value={branchForm.zip_code}
           onChange={handleBranchChange}
         />
-
         <Field icon={<CheckCircle2 size={16} />} label="Status">
           <CustomDropdown
             value={branchForm.status}
@@ -918,20 +1024,17 @@ function BranchForm({
                 },
               })
             }
-            icon={<CheckCircle2 size={16} />}
             options={[
               { value: "active", label: "Active" },
               { value: "inactive", label: "Inactive" },
             ]}
           />
         </Field>
-
         <div className="md:col-span-2 xl:col-span-3">
-          <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
             <MapPin size={16} />
             Address
           </label>
-
           <textarea
             name="address"
             value={branchForm.address}
@@ -941,22 +1044,20 @@ function BranchForm({
           />
         </div>
       </div>
-
-      <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+      <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
         <button
           type="button"
           onClick={onCancel}
-          className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
+          className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
         >
           <X size={16} />
           Cancel
         </button>
-
         <button
           type="button"
           onClick={handleCreateBranch}
           disabled={branchLoading}
-          className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:ring-0 disabled:bg-blue-400"
+          className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-0 active:ring-0 disabled:bg-blue-400"
         >
           <Save size={16} />
           {branchLoading ? "Saving..." : "Save Branch"}
@@ -965,372 +1066,163 @@ function BranchForm({
     </>
   );
 }
-
-function SalesUserViewModal({ user, formatBranchLabel, onClose }) {
-  return createPortal(
-    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
-      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-              <ShieldCheck size={28} />
-            </div>
-
+function SalesUserViewModal({ salesUser, formatBranchLabel, onClose }) {
+  return (
+    <FormModal
+      title="Sales User Profile"
+      description="Team member information and branch assignment."
+      icon={<ShieldCheck size={22} />}
+      onClose={onClose}
+    >
+      <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className="h-20 bg-gradient-to-r from-blue-600 to-indigo-600" />
+        <div className="px-6 pb-6">
+          <div className="-mt-8 flex h-16 w-16 items-center justify-center rounded-2xl border-4 border-white bg-blue-50 text-lg font-semibold text-blue-600 dark:border-slate-900">
+            {String(salesUser.name || "A")
+              .split(" ")
+              .map((word) => word[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase()}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                {user.name || "-"}
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Sales user profile details
+              <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                {salesUser.name || "—"}
+              </h3>
+              <p className="mt-1 break-all text-sm text-slate-500">
+                {salesUser.email || "—"}
               </p>
             </div>
+            <StatusBadge status={salesUser.status} />
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto bg-white dark:bg-slate-900">
-          <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
-            <ViewField label="Name" value={user.name} />
-            <ViewField label="Email" value={user.email} />
-
+          <div className="mt-6 grid grid-cols-1 gap-5 border-t border-slate-100 pt-5 dark:border-slate-800 sm:grid-cols-2">
             <ViewField
               label="Role"
-              value={user.role?.replace("_", " ") || "sales user"}
+              value={(salesUser.role || "sales_user").replaceAll("_", " ")}
             />
-
             <ViewField
-              label="Status"
-              value={<StatusBadge status={user.status} />}
+              label="Assigned Branch"
+              value={formatBranchLabel(salesUser)}
             />
-
-            <ViewField label="Branch" value={formatBranchLabel(user)} />
+            <ViewField label="Email Address" value={salesUser.email} />
+            <ViewField
+              label="Account Status"
+              value={<StatusBadge status={salesUser.status} />}
+            />
           </div>
         </div>
       </div>
-    </div>,
-    document.body,
+    </FormModal>
   );
 }
 
 function FormModal({ title, description, icon, onClose, children }) {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const close = (event) => {
+      if (event.key === "Escape") {
+        const dialogs = document.querySelectorAll("[data-sales-user-dialog]");
+        if (dialogs[dialogs.length - 1]?.getAttribute("aria-label") === title)
+          onClose();
+      }
+    };
+    document.addEventListener("keydown", close);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", close);
+    };
+  }, [onClose, title]);
   return createPortal(
-    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-              {icon}
+    <div className="salesUsers-workspace">
+      <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-6">
+        <section
+          data-sales-user-dialog
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+          className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        >
+          <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 p-5 dark:border-slate-800 sm:px-7">
+            <div className="flex gap-3">
+              <span className="hidden h-fit rounded-xl bg-blue-50 p-2.5 text-blue-600 sm:block">
+                {icon}
+              </span>
+              <div>
+                <p className="mb-1 text-sm font-medium uppercase tracking-widest text-slate-500">
+                  Sales Team
+                </p>
+                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+                  {title}
+                </h2>
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+                  {description}
+                </p>
+              </div>
             </div>
-
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                {title}
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {description}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto bg-white p-5 dark:bg-slate-900">
-          {children}
-        </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={`Close ${title}`}
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <X size={20} />
+            </button>
+          </header>
+          <div className="min-h-0 overflow-y-auto p-5 sm:p-7">{children}</div>
+        </section>
       </div>
     </div>,
     document.body,
   );
 }
 
-function StatsCard({ title, value, icon, color, onClick }) {
+function SummaryCard({ title, value, icon, color, onClick }) {
+  const Tag = onClick ? "button" : "div";
+  const tone = color.includes("emerald")
+    ? "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900 dark:from-emerald-950/40 dark:to-slate-900"
+    : color.includes("amber")
+      ? "border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900 dark:from-amber-950/40 dark:to-slate-900"
+      : color.includes("violet")
+        ? "border-violet-200 bg-gradient-to-br from-violet-50 to-white dark:border-violet-900 dark:from-violet-950/40 dark:to-slate-900"
+        : "border-blue-200 bg-gradient-to-br from-blue-50 to-white dark:border-blue-900 dark:from-blue-950/40 dark:to-slate-900";
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group min-w-0 w-full cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-white hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-white"
+    <Tag
+      {...(onClick ? { type: "button", onClick } : {})}
+      className={`flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3 text-left shadow-sm ${tone} ${
+        onClick ? "transition hover:border-blue-300" : ""
+      }`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-            {title}
-          </p>
+      <span className={`shrink-0 rounded-lg p-2.5 ${color}`}>{icon}</span>
 
-          <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
-            {value}
-          </h2>
-        </div>
+      <span className="min-w-0">
+        <span className="block text-sm text-slate-500">{title}</span>
 
-        <div className={`shrink-0 rounded-xl p-3 ${color}`}>{icon}</div>
+        <span className="mt-1 block text-2xl font-semibold leading-tight text-slate-900 dark:text-white">
+          {value}
+        </span>
+
+        <span className="mt-0.5 block text-sm text-slate-500">
+          {onClick ? "View team members" : "Company branches"}
+        </span>
+      </span>
+    </Tag>
+  );
+}
+
+function ViewField({ label, value, full }) {
+  return (
+    <div className={full ? "md:col-span-2" : ""}>
+      <p className="mb-1.5 text-sm font-medium text-slate-600 dark:text-slate-300">
+        {label}
+      </p>
+      <div className="break-words text-sm text-slate-800 dark:text-slate-200">
+        {value || "-"}
       </div>
-    </button>
-  );
-}
-
-function BranchSelect({
-  branches,
-  value,
-  onChange,
-  formatBranchLabel,
-  canAddBranch = true,
-  placeholder = "Select Branch",
-}) {
-  const [open, setOpen] = useState(false);
-  const [branchSearch, setBranchSearch] = useState("");
-  const [dropdownStyle, setDropdownStyle] = useState({});
-
-  const buttonRef = useRef(null);
-  const dropdownRef = useRef(null);
-
-  const selectedBranch = branches.find(
-    (branch) => String(branch.id) === String(value),
-  );
-
-  const filteredBranches = branches.filter((branch) =>
-    `${branch.branch_name || ""} ${branch.branch_code || ""} ${branch.email || ""}`
-      .toLowerCase()
-      .includes(branchSearch.trim().toLowerCase()),
-  );
-
-  const updateDropdownPosition = () => {
-    if (!buttonRef.current) return;
-
-    const rect = buttonRef.current.getBoundingClientRect();
-    const dropdownHeight = 330;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const shouldOpenUp =
-      spaceBelow < dropdownHeight && rect.top > dropdownHeight;
-
-    setDropdownStyle({
-      position: "fixed",
-      left: rect.left,
-      width: rect.width,
-      top: shouldOpenUp ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
-      maxHeight: dropdownHeight,
-      zIndex: 30000,
-    });
-  };
-
-  useEffect(() => {
-    if (!open) return;
-
-    updateDropdownPosition();
-
-    const handleClickOutside = (event) => {
-      if (
-        buttonRef.current?.contains(event.target) ||
-        dropdownRef.current?.contains(event.target)
-      ) {
-        return;
-      }
-
-      setOpen(false);
-      setBranchSearch("");
-    };
-
-    window.addEventListener("scroll", updateDropdownPosition, true);
-    window.addEventListener("resize", updateDropdownPosition);
-    document.addEventListener("mousedown", handleClickOutside);
-
-    return () => {
-      window.removeEventListener("scroll", updateDropdownPosition, true);
-      window.removeEventListener("resize", updateDropdownPosition);
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [open]);
-
-  const handleSelect = (selectedValue) => {
-    onChange(selectedValue);
-    setOpen(false);
-    setBranchSearch("");
-  };
-
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
-      >
-        <span className="min-w-0 truncate">
-          {selectedBranch ? formatBranchLabel(selectedBranch) : placeholder}
-        </span>
-
-        <ChevronDown
-          size={17}
-          className={`shrink-0 text-slate-400 transition ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-
-      {open && (
-        <div
-          ref={dropdownRef}
-          style={dropdownStyle}
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div className="border-b border-slate-100 p-2 dark:border-slate-800">
-            <div className="relative">
-              <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
-              />
-
-              <input
-                type="text"
-                value={branchSearch}
-                onChange={(event) => setBranchSearch(event.target.value)}
-                placeholder="Search branch..."
-                autoFocus
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
-              />
-            </div>
-          </div>
-
-          <div className="max-h-56 overflow-y-auto p-2">
-            {filteredBranches.map((branch) => (
-              <button
-                key={branch.id}
-                type="button"
-                onClick={() => handleSelect(String(branch.id))}
-                className={`w-full rounded-xl px-3 py-2 text-left transition hover:bg-blue-50 dark:hover:bg-slate-800 ${
-                  String(value) === String(branch.id)
-                    ? "bg-blue-50 dark:bg-blue-950/40"
-                    : ""
-                }`}
-              >
-                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  {formatBranchLabel(branch)}
-                </p>
-
-                <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {branch.is_main === 1 || branch.is_main === true
-                    ? "HQ Branch"
-                    : "Company branch"}
-                </p>
-              </button>
-            ))}
-
-            {filteredBranches.length === 0 && (
-              <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
-                No branch found
-              </div>
-            )}
-          </div>
-
-          {canAddBranch && (
-            <div className="border-t border-slate-100 p-2 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => handleSelect("__add_branch__")}
-                className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
-              >
-                <Plus size={16} />
-                Add New Branch
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-function CustomDropdown({ value, onChange, options, icon }) {
-  const [open, setOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  const selected = options.find(
-    (option) => String(option.value) === String(value),
-  );
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  return (
-    <div ref={dropdownRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {icon && (
-            <span className="shrink-0 text-slate-400 dark:text-slate-500">
-              {icon}
-            </span>
-          )}
-          <span className="truncate">{selected?.label || "Select"}</span>
-        </span>
-
-        <ChevronDown
-          size={18}
-          className={`shrink-0 text-slate-500 dark:text-slate-400 transition ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          {options.map((option) => {
-            const active = String(value) === String(option.value);
-
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-blue-50 dark:hover:bg-slate-800 hover:text-blue-700 ${
-                  active
-                    ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-                    : "text-slate-700 dark:text-slate-200"
-                }`}
-              >
-                <span className="truncate">{option.label}</span>
-
-                {active && <CheckCircle2 size={16} className="shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
-
 function ModalInput({
   icon,
   label,
@@ -1342,42 +1234,41 @@ function ModalInput({
 }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
         {icon}
         {label}
         {required && <span className="text-red-500">*</span>}
       </label>
-
       <input
+        aria-label={label}
         type={type}
         name={name}
-        value={value || ""}
+        value={value}
         onChange={onChange}
         className="input"
       />
     </div>
   );
 }
-
 function Input({ icon, label, type, name, placeholder, value, onChange }) {
   return (
     <Field icon={icon} label={label}>
       <input
+        aria-label={label}
         type={type}
         name={name}
         placeholder={placeholder}
-        value={value || ""}
+        value={value}
         onChange={onChange}
         className="input"
       />
     </Field>
   );
 }
-
 function Field({ icon, label, children }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
         {icon}
         {label}
       </label>
@@ -1385,45 +1276,258 @@ function Field({ icon, label, children }) {
     </div>
   );
 }
-
-function ViewField({ label, value }) {
+function CustomDropdown({
+  value,
+  onChange,
+  options,
+  icon,
+  label = "Choose an option",
+  searchable = true,
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const [position, setPosition] = useState({});
+  const buttonRef = useRef(null),
+    panelRef = useRef(null),
+    searchRef = useRef(null);
+  const listId = useId();
+  const selected = options.find(
+    (option) => String(option.value) === String(value),
+  );
+  const filtered = options.filter(
+    (option) =>
+      option.value === "__add_branch__" ||
+      option.label.toLowerCase().includes(query.toLowerCase()),
+  );
+  const choose = (option) => {
+    if (!option) return;
+    onChange(option.value);
+    setOpen(false);
+    setQuery("");
+    buttonRef.current?.focus();
+  };
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const availableBelow = window.innerHeight - rect.bottom - 12;
+      const above = availableBelow < 220 && rect.top > availableBelow;
+      const maxHeight = Math.max(
+        100,
+        Math.min(340, above ? rect.top - 16 : availableBelow),
+      );
+      setPosition({
+        position: "fixed",
+        left: Math.max(
+          8,
+          Math.min(
+            rect.left,
+            window.innerWidth - Math.max(rect.width, 180) - 8,
+          ),
+        ),
+        width: Math.min(Math.max(rect.width, 180), window.innerWidth - 16),
+        maxHeight,
+        zIndex: 100010,
+        ...(above
+          ? { bottom: window.innerHeight - rect.top + 6 }
+          : { top: rect.bottom + 6 }),
+      });
+    };
+    const outside = (event) => {
+      if (
+        !buttonRef.current?.contains(event.target) &&
+        !panelRef.current?.contains(event.target)
+      ) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    const escape = (event) => {
+      if (event.key === "Escape") {
+        event.stopImmediatePropagation();
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+    place();
+    searchRef.current?.focus();
+    if (!searchable)
+      panelRef.current?.querySelector('[role="listbox"]')?.focus();
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape, true);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape, true);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+  const keyboard = (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive((index) =>
+        Math.max(
+          0,
+          Math.min(
+            filtered.length - 1,
+            index + (event.key === "ArrowDown" ? 1 : -1),
+          ),
+        ),
+      );
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      choose(filtered[active]);
+    }
+    if (event.key === "Tab") setOpen(false);
+  };
   return (
-    <div>
-      <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
-        {label}
-      </p>
-      <div className="min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm capitalize text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-        {value || "-"}
-      </div>
-    </div>
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => {
+          setOpen(!open);
+          setQuery("");
+          setActive(0);
+        }}
+        className={`flex min-h-11 w-full min-w-0 items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2.5 text-left text-sm text-slate-700 shadow-sm transition focus-visible:ring-2 focus-visible:ring-blue-400 dark:bg-slate-900 dark:text-slate-200 ${open ? "border-blue-400 ring-2 ring-blue-100 dark:ring-blue-950" : "border-slate-200 hover:border-blue-300 dark:border-slate-700"}`}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          {icon && (
+            <span className="shrink-0 text-blue-600 dark:text-blue-300">
+              {icon}
+            </span>
+          )}
+          <span className="truncate">{selected?.label || label}</span>
+        </span>
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={position}
+            className="flex flex-col overflow-hidden rounded-xl border border-blue-100 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            {searchable && (
+              <div className="shrink-0 border-b border-slate-100 p-2 dark:border-slate-800">
+                <div className="relative">
+                  <Search
+                    size={16}
+                    className="absolute left-3 top-3 text-slate-400"
+                  />
+                  <input
+                    ref={searchRef}
+                    value={query}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setActive(0);
+                    }}
+                    onKeyDown={keyboard}
+                    aria-label={`Search ${label}`}
+                    aria-controls={listId}
+                    aria-activedescendant={
+                      filtered[active] ? `${listId}-${active}` : undefined
+                    }
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-800 outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    placeholder="Search…"
+                  />
+                </div>
+              </div>
+            )}
+            <div
+              id={listId}
+              role="listbox"
+              aria-label={label}
+              tabIndex={searchable ? -1 : 0}
+              onKeyDown={searchable ? undefined : keyboard}
+              className="min-h-0 overflow-y-auto p-1.5"
+            >
+              {filtered.map((option, index) => (
+                <button
+                  key={option.value}
+                  id={`${listId}-${index}`}
+                  role="option"
+                  aria-selected={String(value) === String(option.value)}
+                  type="button"
+                  onMouseEnter={() => setActive(index)}
+                  onClick={() => choose(option)}
+                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${option.value === "__add_branch__" ? "mt-1 border-t border-blue-100 font-medium text-blue-600 dark:border-blue-900" : ""} ${String(value) === String(option.value) ? "bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300" : index === active ? "bg-slate-50 text-slate-800 dark:bg-slate-800 dark:text-slate-100" : "text-slate-600 dark:text-slate-300"}`}
+                >
+                  <span className="break-words">{option.label}</span>
+                  {String(value) === String(option.value) && (
+                    <CheckCircle2
+                      size={16}
+                      className="shrink-0 text-blue-600"
+                    />
+                  )}
+                </button>
+              ))}
+              {!filtered.length && (
+                <p className="px-3 py-5 text-center text-sm text-slate-500">
+                  No matches found
+                </p>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
-
+function BranchSelect({ branches, value, onChange, formatBranchLabel }) {
+  return (
+    <CustomDropdown
+      value={value}
+      onChange={onChange}
+      label="Select Branch"
+      icon={<GitBranch size={16} />}
+      options={[
+        ...branches.map((branch) => ({
+          value: String(branch.id),
+          label:
+            formatBranchLabel(branch) +
+            (branch.is_main === 1 || branch.is_main === true ? " · HQ" : ""),
+        })),
+        { value: "__add_branch__", label: "+ Add New Branch" },
+      ]}
+    />
+  );
+}
 function IconButton({ icon, className, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg p-2 transition ${className}`}
+      className={`rounded-lg p-2 ${className}`}
     >
       {icon}
     </button>
   );
 }
-
 function StatusBadge({ status }) {
   const value = String(status || "active").toLowerCase();
-
   const styles = {
     active:
       "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
     inactive:
       "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300",
   };
-
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold capitalize shadow-sm ${
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium capitalize shadow-sm ${
         styles[value] || styles.active
       }`}
     >
@@ -1431,5 +1535,4 @@ function StatusBadge({ status }) {
     </span>
   );
 }
-
 export default SalesUsers;

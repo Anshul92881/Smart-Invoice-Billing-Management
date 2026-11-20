@@ -444,7 +444,6 @@ export const createCompany = async (req, res) => {
         city,
         country,
         zip_code,
-        branch_limit,
         status,
         kyc_status,
         kyc_attempts,
@@ -453,7 +452,6 @@ export const createCompany = async (req, res) => {
       VALUES
       (
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        NULL,
         'inactive',
         'pending',
         0,
@@ -578,7 +576,7 @@ export const createCompany = async (req, res) => {
 export const getCompanies = async (req, res) => {
   try {
     const page = clampPagination(req.query.page, 1, 100000);
-    const limit = clampPagination(req.query.limit, 10, 100);
+    const limit = clampPagination(req.query.limit, 10, 1000);
     const offset = (page - 1) * limit;
 
     const search = normalizeText(req.query.search);
@@ -708,29 +706,36 @@ export const getMyCompany = async (req, res) => {
 
     const [companies] = await db.query(
       `
-  SELECT
-    id,
-    name,
-    gst_number,
-    address,
-    city,
-    currency,
-    status,
-    email,
-    phone,
-    pan_number,
-    website,
-    state,
-    country,
-    zip_code,
-    logo,
-    kyc_status,
-    kyc_attempts,
-    last_activity_at
-  FROM tbl_companies
-  WHERE id = ?
-  LIMIT 1
-  `,
+      SELECT
+        c.id,
+        c.name,
+        c.gst_number,
+        c.address,
+        c.city,
+        c.currency,
+        c.status,
+        c.email,
+        c.phone,
+        c.pan_number,
+        c.website,
+        c.state,
+        c.country,
+        c.zip_code,
+        c.logo,
+        c.kyc_status,
+        c.kyc_attempts,
+        c.last_activity_at,
+        (
+          SELECT b.branch_code
+          FROM tbl_company_branches b
+          WHERE b.company_id = c.id
+            AND b.is_main = 1
+          LIMIT 1
+        ) AS hq_branch_code
+      FROM tbl_companies c
+      WHERE c.id = ?
+      LIMIT 1
+      `,
       [companyId],
     );
 
@@ -1327,7 +1332,7 @@ export const uploadCompanyLogo = async (req, res) => {
 export const getInactiveCompanies = async (req, res) => {
   try {
     const page = clampPagination(req.query.page, 1, 100000);
-    const limit = clampPagination(req.query.limit, 10, 100);
+    const limit = clampPagination(req.query.limit, 10, 1000);
     const offset = (page - 1) * limit;
 
     const bucket = normalizeText(req.query.bucket).toLowerCase() || "all";
@@ -1398,7 +1403,13 @@ export const getInactiveCompanies = async (req, res) => {
         email,
         phone,
         status,
-        branch_limit,
+        (
+  SELECT branch.branch_code
+  FROM tbl_company_branches AS branch
+  WHERE branch.company_id = tbl_companies.id
+    AND branch.is_main = 1
+  LIMIT 1
+) AS hq_branch_code,
         last_activity_at,
         CASE
           WHEN last_activity_at IS NULL THEN 'never_active'
@@ -1926,75 +1937,6 @@ export const sendTestEmail = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: "Test email failed",
-      error: error.message,
-    });
-  }
-};
-
-export const updateCompanyBranchLimit = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { branch_limit } = req.body;
-
-    if (!isPositiveInteger(id)) {
-      return res.status(400).json({
-        message: "Valid company id is required",
-      });
-    }
-
-    if (!isPositiveInteger(branch_limit)) {
-      return res.status(400).json({
-        message: "Branch limit must be a positive integer",
-      });
-    }
-
-    const [companyRows] = await db.query(
-      `
-      SELECT id, name, branch_limit
-      FROM tbl_companies
-      WHERE id = ?
-      LIMIT 1
-      `,
-      [id],
-    );
-
-    if (companyRows.length === 0) {
-      return res.status(404).json({
-        message: "Company not found",
-      });
-    }
-
-    const newBranchLimit = Number(branch_limit);
-
-    await db.query(
-      `
-      UPDATE tbl_companies
-      SET branch_limit = ?
-      WHERE id = ?
-      `,
-      [newBranchLimit, id],
-    );
-
-    await createAuditLog({
-      company_id: id,
-      user_id: req.user.id,
-      role: req.user.role,
-      action: "UPDATE",
-      module_name: "Company",
-      record_id: id,
-      description: `Branch limit updated to ${newBranchLimit} for ${companyRows[0].name}`,
-      ip_address: req.ip,
-      user_agent: getUserAgent(req),
-    });
-
-    return res.json({
-      message: "Branch limit updated successfully",
-      company_id: Number(id),
-      branch_limit: newBranchLimit,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: "Update branch limit error",
       error: error.message,
     });
   }

@@ -1,15 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-
 import { createPortal } from "react-dom";
-
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-
 import toast from "react-hot-toast";
-
 import api from "../services/api";
-
 import socket, { connectSocket } from "../services/socket";
-
 import {
   LayoutDashboard,
   Users,
@@ -36,363 +30,226 @@ import {
   Sun,
   WalletCards,
 } from "lucide-react";
-
 const BASE_URL = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, "")
   : "http://localhost:5000";
-
 // BASE ROLE PERMISSIONS
-
 // Default module authority for each role
-
 const BASE_ROLE_PERMISSIONS = {
   company_admin: "all",
-
   accountant: {
     branches: true, // view-only default in page
-
     customers: true, // view-only default in page
-
     products: true, // view-only default in page
-
     invoices: true,
-
     payments: true,
-
     expenses: true,
-
     taxes: true,
-
     reports: true,
   },
-
   sales_user: {
     branches: true, // view-only default in page
-
     customers: true,
-
     products: true, // view-only default in page
-
     quotations: true,
-
     invoices: true,
   },
 };
-
 const FORMAT_ROLE = {
   company_admin: "Company Admin",
-
   accountant: "Accountant",
-
   sales_user: "Sales User",
 };
-
 const MENU_GROUPS = [
   {
     key: "dashboard",
-
     label: null,
-
     items: [
       {
         name: "Dashboard",
-
         path: "/dashboard",
-
         icon: <LayoutDashboard size={19} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
       },
     ],
   },
-
   {
     key: "greetings",
-
     label: null,
-
     items: [
       {
         name: "Greetings",
-
         path: "/dashboard/greetings",
-
         icon: <Mail size={19} />,
-
         roles: ["company_admin"],
       },
     ],
   },
-
   {
     key: "users",
-
     label: "Users",
-
     icon: <Users size={19} />,
-
     items: [
       {
         name: "Accountants",
-
         path: "/dashboard/accountants",
-
         icon: <UserCog size={18} />,
-
         roles: ["company_admin"],
       },
-
       {
         name: "Sales Users",
-
         path: "/dashboard/sales-users",
-
         icon: <Users size={18} />,
-
         roles: ["company_admin"],
       },
-
       {
         name: "Role Permissions",
-
         path: "/dashboard/role-permissions",
-
         icon: <ShieldCheck size={18} />,
-
         roles: ["company_admin"],
       },
     ],
   },
-
   {
     key: "business",
-
     label: "Business",
-
     icon: <Building2 size={19} />,
-
     items: [
       {
         name: "Customers",
-
         path: "/dashboard/customers",
-
         icon: <Users size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
       },
-
       {
         name: "Products",
-
         path: "/dashboard/products",
-
         icon: <Package size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
       },
-
       {
         name: "Vendors",
-
         path: "/dashboard/vendors",
-
         icon: <Truck size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
-
         permissionKey: "vendors",
       },
-
       {
         name: "Branches",
-
         path: "/dashboard/branches",
-
         icon: <Building2 size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
-
         permissionKey: "branches",
       },
-
       {
         name: "Company Profile",
-
         path: "/dashboard/company",
-
         icon: <Building2 size={18} />,
-
         roles: ["company_admin"],
       },
     ],
   },
-
   {
     key: "sales",
-
     label: "Sales",
-
     icon: <Receipt size={19} />,
-
     items: [
       {
         name: "Quotations",
-
         path: "/dashboard/quotations",
-
         icon: <FileText size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
-
         permissionKey: "quotations",
       },
-
       {
         name: "Invoices",
-
         path: "/dashboard/invoices",
-
         icon: <FileText size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
       },
-
       {
         name: "Payments",
-
         path: "/dashboard/payments",
-
         icon: <Receipt size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
-
         permissionKey: "payments",
       },
     ],
   },
-
   {
     key: "finance",
-
     label: "Finance",
-
     icon: <BarChart3 size={19} />,
-
     items: [
       {
         name: "Expenses",
-
         path: "/dashboard/expenses",
-
         icon: <Wallet size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
-
         permissionKey: "expenses",
       },
-
       {
         name: "Taxes",
-
         path: "/dashboard/taxes",
-
         icon: <Percent size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
-
         permissionKey: "taxes",
       },
-
       {
         name: "Reports",
-
         path: "/dashboard/reports",
-
         icon: <BarChart3 size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
-
         permissionKey: "reports",
       },
-
       {
         name: "Billing / Subscription",
-
         path: "/dashboard/billing",
-
         icon: <ShieldCheck size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
-
         permissionKey: "billing",
       },
     ],
   },
-
   {
     key: "settings",
-
     label: "Settings",
-
     icon: <Settings size={19} />,
-
     items: [
       {
         name: "Profile",
-
         path: "/dashboard/profile",
-
         icon: <UserCircle size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
       },
-
       {
         name: "Notifications",
-
         path: "/dashboard/notifications",
-
         icon: <Bell size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
       },
-
       {
         name: "Billing Template",
-
         path: "/dashboard/billing-template",
-
         icon: <WalletCards size={18} />,
-
         roles: ["company_admin"],
       },
-
       {
         name: "Company Settings",
-
         path: "/dashboard/company-settings",
-
         icon: <Settings size={18} />,
-
         roles: ["company_admin"],
       },
-
       {
         name: "Audit Logs",
-
         path: "/dashboard/audit-logs",
-
         icon: <Activity size={18} />,
-
         roles: ["company_admin", "accountant", "sales_user"],
-
         permissionKey: "audit_logs",
       },
     ],
   },
 ];
-
 const readStoredUser = () => {
   try {
     return JSON.parse(localStorage.getItem("user"));
@@ -400,87 +257,55 @@ const readStoredUser = () => {
     return null;
   }
 };
-
 function DashboardLayout() {
   const location = useLocation();
-
   const navigate = useNavigate();
-
   const profileMenuRef = useRef(null);
-
   const notificationRef = useRef(null);
-
   const [user, setUser] = useState(readStoredUser);
-
   const [rolePermissions, setRolePermissions] = useState({});
-
   const role = user?.role;
-
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
   const [openMenuGroups, setOpenMenuGroups] = useState({});
-
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-
   const [darkMode, setDarkMode] = useState(
     () => localStorage.getItem("theme") === "dark",
   );
-
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
-
   const [showSubscriptionExpiredModal, setShowSubscriptionExpiredModal] =
     useState(false);
   const [showKycPendingModal, setShowKycPendingModal] = useState(false);
-
   const [kycPendingMessage, setKycPendingMessage] = useState(
     "Your KYC is pending. Complete KYC to use this feature.",
   );
-
   const [unreadCount, setUnreadCount] = useState(0);
-
   const [notificationOpen, setNotificationOpen] = useState(false);
-
   const [notifications, setNotifications] = useState([]);
-
   // NO USER -> LOGIN
-
   useEffect(() => {
     if (!user) {
       navigate("/", { replace: true });
     }
   }, [user, navigate]);
-
   // USER REFRESH
-
   // Profile page: localStorage update karke window.dispatchEvent(new Event("userUpdated"))
-
   useEffect(() => {
     const refreshUser = () => setUser(readStoredUser());
-
     window.addEventListener("userUpdated", refreshUser);
-
     window.addEventListener("storage", refreshUser);
-
     return () => {
       window.removeEventListener("userUpdated", refreshUser);
-
       window.removeEventListener("storage", refreshUser);
     };
   }, []);
-
   // SUBSCRIPTION STATUS (company admin only)
-
   useEffect(() => {
     if (role !== "company_admin") return;
-
     const fetchSubscriptionStatus = async () => {
       try {
         const res = await api.get("/subscriptions/my/current");
-
         const subscription = res.data?.subscription || res.data;
-
         setSubscriptionStatus(subscription);
-
         if (
           subscription?.status === "expired" ||
           subscription?.trial_status === "expired"
@@ -491,47 +316,34 @@ function DashboardLayout() {
         console.log(error);
       }
     };
-
     fetchSubscriptionStatus();
   }, [role]);
-
   // THEME
-
   useEffect(() => {
     const root = document.documentElement;
-
     if (darkMode) {
       root.classList.add("dark");
-
       localStorage.setItem("theme", "dark");
     } else {
       root.classList.remove("dark");
-
       localStorage.setItem("theme", "light");
     }
   }, [darkMode]);
-
   // KYC REQUIRED EVENT
-
   useEffect(() => {
     const handleKycRequired = (event) => {
       setKycPendingMessage(
         event?.detail?.message ||
           "Your KYC is pending. Complete KYC to use this feature.",
       );
-
       setShowKycPendingModal(true);
     };
-
     window.addEventListener("kycRequired", handleKycRequired);
-
     return () => {
       window.removeEventListener("kycRequired", handleKycRequired);
     };
   }, []);
-
   // CLICK OUTSIDE (profile + notifications)
-
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -540,7 +352,6 @@ function DashboardLayout() {
       ) {
         setProfileMenuOpen(false);
       }
-
       if (
         notificationRef.current &&
         !notificationRef.current.contains(event.target)
@@ -548,292 +359,203 @@ function DashboardLayout() {
         setNotificationOpen(false);
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
-
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
-
   // FETCH ROLE PERMISSIONS
-
   // Optional permissions saved by Company Admin for current role
-
   useEffect(() => {
     const fetchRolePermissions = async () => {
       try {
         if (!user?.company_id || role === "company_admin") {
           setRolePermissions({});
-
           return;
         }
-
         const res = await api.get("/companies/role-permissions");
-
         setRolePermissions(res.data?.permissions || {});
       } catch {
         setRolePermissions({});
       }
     };
-
     fetchRolePermissions();
   }, [user?.company_id, role]);
-
   // CHECK MODULE PERMISSION
-
   // Allowed if role has default access or Company Admin granted optional access
-
   const hasPermission = (key) => {
     if (!key) return true;
-
     if (role === "company_admin") return true;
-
     const base = BASE_ROLE_PERMISSIONS[role];
-
     if (base === "all" || base?.[key]) return true;
-
     return Boolean(rolePermissions?.[role]?.[key]);
   };
-
   const initials =
     user?.name
-
       ?.split(" ")
-
       .map((word) => word[0])
-
       .join("")
-
       .slice(0, 2)
-
       .toUpperCase() || "U";
   const profileImageUrl = (() => {
     const image = user?.profile_image;
-
     if (!image) return "";
-
     const value = String(image);
-
     if (value.startsWith("http")) return value;
-
     if (value.startsWith("/uploads") || value.startsWith("/upload")) {
       return `${BASE_URL}${value}`;
     }
-
     return `${BASE_URL}/uploads/profiles/${value}`;
   })();
-
   const settingsPath =
     role === "company_admin"
       ? "/dashboard/company-settings"
       : "/dashboard/profile";
   const formatBranchLabel = (item) => {
     if (!item?.branch_name) return "";
-
     return item.branch_code
       ? `${item.branch_name} (${item.branch_code})`
       : item.branch_name;
   };
-
   const isMenuItemActive = (item) =>
     location.pathname === item.path ||
     (item.path !== "/dashboard" &&
       location.pathname.startsWith(`${item.path}/`));
   const visibleMenuGroups = MENU_GROUPS.map((group) => ({
     ...group,
-
     items: group.items.filter((item) => {
       if (!item.roles.includes(role)) return false;
-
       if (!hasPermission(item.permissionKey)) return false;
-
       return true;
     }),
   })).filter((group) => group.items.length > 0);
-
   // AUTO OPEN ACTIVE GROUP ON ROUTE CHANGE
-
   useEffect(() => {
     const activeGroup = visibleMenuGroups.find(
       (group) =>
         group.label && group.items.some((item) => isMenuItemActive(item)),
     );
-
     if (!activeGroup) return;
-
     setOpenMenuGroups((prev) => ({
       ...prev,
-
       [activeGroup.key]: true,
     }));
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, role, rolePermissions]);
-
   const toggleMenuGroup = (groupKey) => {
     setOpenMenuGroups((prev) => ({
       ...prev,
-
       [groupKey]: !prev[groupKey],
     }));
   };
-
   const closeSidebar = () => setSidebarOpen(false);
-
-  // NOTE: unreadCount abhi sirf latest 20 notifications se nikal raha hai.
-
-  // Better: backend se unread_count return karwao.
-
   const fetchUnreadNotifications = async () => {
     try {
       const res = await api.get("/notifications", {
         params: {
           page: 1,
-
           limit: 20,
-
           type: "all",
-
           status: "all",
         },
       });
-
       const list = res.data.notifications || [];
-
       const sorted = [...list].sort((a, b) => {
         const readA = Number(a.is_read || 0);
-
         const readB = Number(b.is_read || 0);
-
         if (readA !== readB) return readA - readB;
-
         return new Date(b.created_at || 0) - new Date(a.created_at || 0);
       });
-
       setUnreadCount(list.filter((item) => Number(item.is_read) === 0).length);
-
       setNotifications(sorted);
     } catch (error) {
       console.log(error.response?.data || error);
     }
   };
-
   // SOCKET + NOTIFICATIONS
-
   useEffect(() => {
     if (!user?.id) return;
-
     connectSocket(user);
-
     if (["company_admin", "accountant", "sales_user"].includes(user.role)) {
       fetchUnreadNotifications();
     }
-
     const handleNotificationsUpdated = () => {
       fetchUnreadNotifications();
-
       window.dispatchEvent(new Event("notificationsUpdated"));
     };
-
     socket.on("notification_updated", handleNotificationsUpdated);
-
     return () => {
       socket.off("notification_updated", handleNotificationsUpdated);
     };
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.role, user?.company_id]);
-
   const handleMarkAllRead = async () => {
     try {
       await api.patch("/notifications/read-all");
-
       await fetchUnreadNotifications();
-
       window.dispatchEvent(new Event("notificationsUpdated"));
     } catch (error) {
       console.log(error);
     }
   };
-
   const handleNotificationClick = async (item) => {
     if (Number(item.is_read) !== 0) return;
-
     try {
       await api.patch(`/notifications/${item.id}/read`);
-
       await fetchUnreadNotifications();
-
       window.dispatchEvent(new Event("notificationsUpdated"));
     } catch (error) {
       console.log(error);
     }
   };
-
   const handleCompleteKyc = () => {
     setShowKycPendingModal(false);
-
     const companyId =
       user?.company_id || localStorage.getItem("pending_company_id");
-
     if (!companyId) {
       toast.error("Company information not found. Please login again.");
-
       return;
     }
-
     navigate(`/kyc-verification/${companyId}`, {
       state: {
         manualKyc: false,
-
         email: user?.email || "",
       },
     });
   };
-
   const handleLogout = async () => {
     try {
       await api.post("/auth/logout");
     } catch {
       // Logout should still clear local session even if server logout fails.
     }
-
     try {
       socket.disconnect?.();
     } catch {
       // ignore socket errors on logout
     }
-
     localStorage.removeItem("token");
-
     localStorage.removeItem("user");
-
     localStorage.removeItem("pending_company_id");
-
     navigate("/", { replace: true });
   };
-
   const sidebarContent = (
     <div className="flex h-full flex-col">
-      <div className="flex h-[73px] shrink-0 items-center border-b border-slate-800/80 px-6 dark:border-slate-800">
+      <div className="flex h-20 shrink-0 items-center border-b border-slate-800/80 px-4 dark:border-slate-800">
         <div className="flex w-full items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700 shadow-xl shadow-blue-950/30">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 shadow-sm">
               <FileText size={21} className="text-white" />
             </div>
-
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-bold leading-tight tracking-tight text-white">
+              <h1 className="truncate text-lg font-semibold leading-tight tracking-tight text-white">
                 Smart Invoice
               </h1>
-
-              <p className="mt-1 truncate text-sm font-medium leading-5 text-slate-400">
+              <p className="mt-0.5 truncate text-sm font-normal leading-5 text-slate-400">
                 Multi-Branch Billing
               </p>
             </div>
           </div>
-
           <button
             type="button"
             onClick={closeSidebar}
@@ -844,45 +566,43 @@ function DashboardLayout() {
           </button>
         </div>
       </div>
-
-      <nav className="sidebar-scroll flex-1 space-y-1 overflow-y-auto p-4">
+      <nav
+        aria-label="Workspace navigation"
+        className="sidebar-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4"
+      >
         {visibleMenuGroups.map((group) => {
           if (!group.label) {
             return group.items.map((item) => {
               const isActive = isMenuItemActive(item);
-
               return (
                 <Link
                   key={item.name}
+                  aria-current={isActive ? "page" : undefined}
                   to={item.path}
                   onClick={closeSidebar}
-                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
                     isActive
-                      ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
+                      ? "bg-blue-600 text-white shadow-sm"
                       : "text-slate-300 hover:bg-slate-800/90 hover:text-white"
                   }`}
                 >
                   {item.icon}
-
                   <span className="truncate">{item.name}</span>
                 </Link>
               );
             });
           }
-
           const hasActiveItem = group.items.some((item) =>
             isMenuItemActive(item),
           );
-
           const isGroupOpen = Boolean(openMenuGroups[group.key]);
-
           return (
             <div key={group.key} className="space-y-1">
               <button
                 type="button"
                 onClick={() => toggleMenuGroup(group.key)}
                 aria-expanded={isGroupOpen}
-                className={`flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
+                className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
                   hasActiveItem
                     ? "bg-slate-800 text-white"
                     : "text-slate-300 hover:bg-slate-800/90 hover:text-white"
@@ -890,10 +610,8 @@ function DashboardLayout() {
               >
                 <span className="flex min-w-0 items-center gap-3">
                   <span className="shrink-0">{group.icon}</span>
-
                   <span className="truncate">{group.label}</span>
                 </span>
-
                 <ChevronDown
                   size={17}
                   className={`shrink-0 transition-transform duration-200 ${
@@ -901,7 +619,6 @@ function DashboardLayout() {
                   }`}
                 />
               </button>
-
               <div
                 className={`grid overflow-hidden transition-all duration-200 ${
                   isGroupOpen
@@ -913,20 +630,19 @@ function DashboardLayout() {
                   <div className="ml-4 space-y-1 border-l border-slate-700/80 py-1 pl-3">
                     {group.items.map((item) => {
                       const isActive = isMenuItemActive(item);
-
                       return (
                         <Link
                           key={item.name}
+                          aria-current={isActive ? "page" : undefined}
                           to={item.path}
                           onClick={closeSidebar}
-                          className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
+                          className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-normal transition-colors duration-200 ${
                             isActive
-                              ? "bg-blue-600 text-white shadow-md shadow-blue-950/20"
+                              ? "bg-blue-600 text-white shadow-sm"
                               : "text-slate-400 hover:bg-slate-800/80 hover:text-white"
                           }`}
                         >
                           <span className="shrink-0">{item.icon}</span>
-
                           <span className="truncate">{item.name}</span>
                         </Link>
                       );
@@ -940,31 +656,26 @@ function DashboardLayout() {
       </nav>
     </div>
   );
-
   if (!user) return null;
-
   return (
-    <div className="h-screen overflow-hidden bg-slate-100 text-slate-800 transition-colors dark:bg-slate-950 dark:text-slate-100">
+    <div className="h-dvh overflow-hidden bg-slate-50 text-slate-800 transition-colors dark:bg-slate-950 dark:text-slate-100 [&_button:focus-visible]:outline [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-blue-500 [&_a:focus-visible]:outline [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-blue-500">
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden"
           onClick={closeSidebar}
         />
       )}
-
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 transform border-r border-slate-800 bg-slate-900 text-white shadow-2xl shadow-slate-950/30 transition-transform duration-200 dark:border-slate-800 dark:bg-slate-950 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform overflow-hidden border-r border-slate-800 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white shadow-2xl shadow-slate-950/30 transition-transform duration-200 dark:border-slate-800 dark:bg-slate-950 lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {sidebarContent}
       </aside>
-
-      <section className="flex h-screen flex-col overflow-hidden lg:pl-72">
-        <header className="flex h-[73px] shrink-0 items-center border-b border-slate-200 bg-white px-3 transition-colors dark:border-slate-800 dark:bg-slate-900 sm:px-5 lg:px-6 xl:px-8">
+      <section className="flex h-dvh min-w-0 flex-col overflow-hidden lg:pl-64">
+        <header className="relative z-30 flex h-20 shrink-0 items-center border-b border-slate-200 bg-white px-3 transition-colors dark:border-slate-800 dark:bg-slate-900 sm:px-5 lg:px-6 xl:px-8">
           <div className="flex w-full min-w-0 items-center justify-between gap-3">
             {/* LEFT SIDE */}
-
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <button
                 type="button"
@@ -974,27 +685,23 @@ function DashboardLayout() {
               >
                 <Menu size={20} />
               </button>
-
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white sm:text-lg xl:text-xl">
-                  Welcome back, {user?.name || "User"}
+                <h2 className="truncate text-base font-semibold leading-tight tracking-tight text-slate-900 dark:text-white sm:text-lg">
+                  Welcome back<span role="img" aria-label="hello">👋</span> {user?.name || "User"}
+                 
                 </h2>
-
-                <p className="mt-0.5 hidden truncate text-xs font-medium leading-5 text-slate-500 dark:text-slate-400 md:block xl:text-sm">
+                <p className="mt-0.5 hidden truncate text-sm font-medium leading-5 text-slate-500 dark:text-slate-400 md:block xl:text-sm">
                   Manage invoices, GST, payments and reports
                 </p>
               </div>
             </div>
-
             {/* RIGHT SIDE */}
-
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               {/* THEME */}
-
               <button
                 type="button"
                 onClick={() => setDarkMode((prev) => !prev)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-300 dark:hover:bg-slate-700 dark:hover:text-yellow-200 sm:h-11 sm:w-11"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-300 dark:hover:bg-slate-700 dark:hover:text-yellow-200"
                 title={
                   darkMode ? "Switch to light mode" : "Switch to dark mode"
                 }
@@ -1004,68 +711,59 @@ function DashboardLayout() {
               >
                 {darkMode ? <Sun size={18} /> : <Moon size={18} />}
               </button>
-
               {/* NOTIFICATIONS */}
-
               <div ref={notificationRef} className="relative">
                 <button
                   type="button"
                   onClick={() => {
                     setNotificationOpen((prev) => !prev);
-
                     setProfileMenuOpen(false);
                   }}
                   aria-label="Open notifications"
-                  className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white sm:h-11 sm:w-11"
+                  aria-expanded={notificationOpen}
+                  className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
                 >
                   <Bell size={18} />
-
                   {unreadCount > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
                   )}
                 </button>
-
                 {notificationOpen && (
-                  <div className="fixed left-3 right-3 top-[78px] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[22rem]">
-                    <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+                  <div className="fixed left-3 right-3 top-[88px] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-3 sm:w-96">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 dark:bg-slate-900 dark:border-slate-700">
                       <div className="min-w-0">
-                        <h3 className="truncate text-sm font-bold text-slate-900 dark:text-white">
+                        <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                           Notifications
                         </h3>
-
-                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
                           {unreadCount} unread alerts
                         </p>
                       </div>
-
                       <div className="flex shrink-0 items-center gap-3">
                         {unreadCount > 0 && (
                           <button
                             type="button"
                             onClick={handleMarkAllRead}
-                            className="whitespace-nowrap text-xs font-semibold text-emerald-600 transition hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+                            className="whitespace-nowrap text-sm font-semibold text-emerald-600 transition hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
                           >
                             Mark all read
                           </button>
                         )}
-
                         <Link
                           to="/dashboard/notifications"
                           onClick={() => setNotificationOpen(false)}
-                          className="whitespace-nowrap text-xs font-semibold text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                          className="whitespace-nowrap text-sm font-semibold text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                         >
                           View all
                         </Link>
                       </div>
                     </div>
-
-                    <div className="max-h-[min(420px,calc(100vh-160px))] overflow-y-auto">
+                    <div className="max-h-[min(420px,60dvh)] overflow-y-auto overscroll-contain">
                       {notifications.length > 0 ? (
                         notifications.map((item) => {
                           const unread = Number(item.is_read) === 0;
-
                           return (
                             <div
                               key={item.id}
@@ -1082,31 +780,27 @@ function DashboardLayout() {
                                     <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
                                   )}
                                 </div>
-
                                 <div className="min-w-0 flex-1">
                                   <p
                                     className={`truncate text-sm text-slate-900 dark:text-white ${
-                                      unread ? "font-bold" : "font-semibold"
+                                      unread ? "font-semibold" : "font-semibold"
                                     }`}
                                   >
                                     {item.title || "-"}
                                   </p>
-
-                                  <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                  <p className="mt-1 line-clamp-2 text-sm font-normal text-slate-500 dark:text-slate-400">
                                     {item.message || "-"}
                                   </p>
-
                                   <div className="mt-2 flex items-center justify-between gap-3">
-                                    <p className="truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                                    <p className="truncate text-sm font-medium text-slate-400 dark:text-slate-500">
                                       {item.created_at
                                         ? new Date(
                                             item.created_at,
                                           ).toLocaleString()
                                         : "-"}
                                     </p>
-
                                     {unread && (
-                                      <span className="shrink-0 text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                                      <span className="shrink-0 text-sm font-semibold text-blue-600 dark:text-blue-400">
                                         New
                                       </span>
                                     )}
@@ -1122,7 +816,6 @@ function DashboardLayout() {
                             className="mx-auto text-slate-300 dark:text-slate-600"
                             size={30}
                           />
-
                           <p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
                             No notifications found
                           </p>
@@ -1132,56 +825,40 @@ function DashboardLayout() {
                   </div>
                 )}
               </div>
-
               {/* PROFILE */}
-
               <div ref={profileMenuRef} className="relative">
                 <button
                   type="button"
                   onClick={() => {
                     setProfileMenuOpen((prev) => !prev);
-
                     setNotificationOpen(false);
                   }}
                   aria-label="Open profile menu"
-                  className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 sm:h-11 sm:px-1.5 xl:max-w-[230px] xl:gap-2.5 xl:px-2"
+                  aria-expanded={profileMenuOpen}
+                  className="flex min-h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white p-1 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 sm:px-1.5 xl:max-w-[230px] xl:gap-2.5 xl:px-2"
                 >
                   {profileImageUrl ? (
                     <img
                       src={profileImageUrl}
                       alt={user?.name || "User"}
-                      className="h-8 w-8 shrink-0 rounded-full border border-slate-200 object-cover dark:border-slate-700 sm:h-9 sm:w-9"
+                      className="h-8 w-8 shrink-0 rounded-xl border border-slate-200 object-cover dark:border-slate-700 sm:h-9 sm:w-9"
                     />
                   ) : (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white sm:h-9 sm:w-9">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-sm font-semibold text-white sm:h-9 sm:w-9">
                       {initials}
                     </div>
                   )}
-
                   <div className="hidden min-w-0 flex-1 text-left xl:block">
                     <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                       {user?.name || "User"}
                     </p>
-
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <p className="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <p className="shrink-0 text-sm text-slate-500 dark:text-slate-400">
                         {FORMAT_ROLE[role] || "User"}
                       </p>
 
-                      {formatBranchLabel(user) && (
-                        <>
-                          <span className="text-[10px] text-slate-300 dark:text-slate-600">
-                            •
-                          </span>
-
-                          <p className="truncate text-[11px] font-semibold text-blue-700 dark:text-blue-300">
-                            {formatBranchLabel(user)}
-                          </p>
-                        </>
-                      )}
                     </div>
                   </div>
-
                   <ChevronDown
                     size={15}
                     className={`hidden shrink-0 text-slate-500 transition dark:text-slate-400 xl:block ${
@@ -1189,31 +866,23 @@ function DashboardLayout() {
                     }`}
                   />
                 </button>
-
                 {profileMenuOpen && (
-                  <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                  <div className="absolute right-0 z-50 mt-3 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
                     <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700">
-                      <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                         {user?.name || "User"}
                       </p>
-
-                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                      <p className="truncate text-sm text-slate-500 dark:text-slate-400">
                         {user?.email || ""}
                       </p>
-
                       <div className="mt-2 flex min-w-0 items-center gap-1.5">
-                        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {FORMAT_ROLE[role] || "User"}
-                        </span>
-
                         {formatBranchLabel(user) && (
-                          <span className="truncate rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                          <span className="truncate rounded-full bg-blue-50 px-2 py-0.5 text-sm font-normal text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
                             {formatBranchLabel(user)}
                           </span>
                         )}
                       </div>
                     </div>
-
                     <Link
                       to="/dashboard/profile"
                       onClick={() => setProfileMenuOpen(false)}
@@ -1222,7 +891,6 @@ function DashboardLayout() {
                       <UserCircle size={17} />
                       My Profile
                     </Link>
-
                     {role === "company_admin" && (
                       <Link
                         to={settingsPath}
@@ -1233,7 +901,6 @@ function DashboardLayout() {
                         Settings
                       </Link>
                     )}
-
                     <button
                       type="button"
                       onClick={handleLogout}
@@ -1248,81 +915,50 @@ function DashboardLayout() {
             </div>
           </div>
         </header>
-
-        <main className="min-w-0 flex-1 overflow-y-auto bg-slate-100 p-4 transition-colors dark:bg-slate-950 sm:p-6 lg:p-8">
+        <main className="min-w-0 flex-1 overflow-y-auto overscroll-contain bg-slate-50 p-4 transition-colors dark:bg-slate-950 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </section>
-
       <style>{`
-
     .sidebar-scroll::-webkit-scrollbar {
-
       display: none;
-
     }
-
-
-
     .sidebar-scroll {
-
       -ms-overflow-style: none;
-
       scrollbar-width: none;
-
-    }
-
-
-
-    button:focus,
-
-    button:focus-visible,
-
-    a:focus,
-
-    a:focus-visible {
-
-      outline: none;
-
     }
 
   `}</style>
-
       {showKycPendingModal &&
         createPortal(
           <div
-            className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
             role="dialog"
             aria-modal="true"
             aria-labelledby="kyc-pending-title"
           >
-            <div className="relative z-[100000] w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
+            <div className="relative z-[100000] max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
                 <ShieldCheck size={27} />
               </div>
-
               <h2
                 id="kyc-pending-title"
-                className="mt-5 text-xl font-bold text-slate-900 dark:text-white"
+                className="mt-5 text-xl font-semibold text-slate-900 dark:text-white"
               >
                 KYC Pending
               </h2>
-
               <p className="mt-3 text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">
                 {kycPendingMessage}
               </p>
-
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
                 <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
                   This action was blocked.
                 </p>
-
                 <p className="mt-1 text-sm leading-6 text-amber-700 dark:text-amber-300">
                   You can explore the dashboard, but complete your KYC to unlock
                   full access.
                 </p>
               </div>
-
               <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
@@ -1331,7 +967,6 @@ function DashboardLayout() {
                 >
                   No
                 </button>
-
                 <button
                   type="button"
                   onClick={handleCompleteKyc}
@@ -1342,60 +977,51 @@ function DashboardLayout() {
               </div>
             </div>
           </div>,
-
           document.body,
         )}
-
       {showSubscriptionExpiredModal && (
         <div
-          className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="subscription-expired-title"
         >
-          <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
+          <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
             <h2
               id="subscription-expired-title"
-              className="text-xl font-bold text-slate-900 dark:text-white"
+              className="text-xl font-semibold text-slate-900 dark:text-white"
             >
               Subscription Expired
             </h2>
-
             <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
               {subscriptionStatus?.plan_name
                 ? `Your ${subscriptionStatus.plan_name} plan has expired.`
                 : "Your current subscription plan has expired."}
             </p>
-
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               You can still view your existing records. To create or update
               records, please purchase an active subscription plan.
             </p>
-
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/40">
               <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
                 View mode is still available
               </p>
-
               <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
                 Your sidebar and existing data will remain accessible. Only
                 restricted create, update and delete actions will be blocked.
               </p>
             </div>
-
-            <div className="mt-6 flex gap-3">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={() => {
                   setShowSubscriptionExpiredModal(false);
-
                   navigate("/dashboard/billing");
                 }}
                 className="flex-1 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700"
               >
                 View Plans
               </button>
-
               <button
                 type="button"
                 onClick={() => setShowSubscriptionExpiredModal(false)}
@@ -1410,5 +1036,4 @@ function DashboardLayout() {
     </div>
   );
 }
-
 export default DashboardLayout;

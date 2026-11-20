@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
-import { createPortal } from "react-dom";
-
 import {
   Pencil,
   X,
@@ -27,8 +26,12 @@ import {
   Plus,
   ChevronDown,
   EyeOff,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpRight,
+  ArrowUpDown,
 } from "lucide-react";
-
 function Accountants() {
   const initialForm = {
     name: "",
@@ -36,7 +39,6 @@ function Accountants() {
     password: "",
     branch_id: "",
   };
-
   const initialBranchForm = {
     branch_name: "",
     branch_code: "",
@@ -50,112 +52,98 @@ function Accountants() {
     zip_code: "",
     status: "active",
   };
-
   const [accountants, setAccountants] = useState([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState("name");
+  const [sortDirection, setSortDirection] = useState("asc");
   const [branches, setBranches] = useState([]);
-
   const [formData, setFormData] = useState(initialForm);
   const [branchForm, setBranchForm] = useState(initialBranchForm);
-
   const [editId, setEditId] = useState(null);
   const [viewAccountant, setViewAccountant] = useState(null);
-
   const [showFormModal, setShowFormModal] = useState(false);
   const [showBranchModal, setShowBranchModal] = useState(false);
-
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
-
   const [loading, setLoading] = useState(false);
   const [branchLoading, setBranchLoading] = useState(false);
-
   const isActiveBranch = (branch) =>
     branch.status === "active" || branch.status === 1 || branch.status === true;
-
   const formatBranchLabel = (item) => {
     if (!item?.branch_name) return "-";
-
     return item.branch_code
       ? `${item.branch_name} (${item.branch_code})`
       : item.branch_name;
   };
-
   const getDefaultBranchId = () => {
     const hqBranch = branches.find(
       (branch) => branch.is_main === 1 || branch.is_main === true,
     );
-
     return hqBranch?.id ? String(hqBranch.id) : "";
   };
-
   const fetchData = async () => {
+    setListLoading(true);
+    setListError("");
     const [accountantResult, branchResult] = await Promise.allSettled([
       api.get("/users/accountants"),
       api.get("/branches"),
     ]);
-
     if (accountantResult.status === "fulfilled") {
       const accountantData = Array.isArray(accountantResult.value.data)
         ? accountantResult.value.data
         : accountantResult.value.data?.accountants || [];
-
       setAccountants(accountantData);
     } else {
       const error = accountantResult.reason;
-
+      setListError(
+        error.response?.data?.message || "Failed to fetch accountants",
+      );
       console.error(
         "Accountants API failed:",
         error.response?.status,
         error.response?.data,
       );
-
       toast.error(
         error.response?.data?.message || "Failed to fetch accountants",
       );
     }
-
     if (branchResult.status === "fulfilled") {
       const branchData = Array.isArray(branchResult.value.data)
         ? branchResult.value.data
         : branchResult.value.data?.branches || [];
-
       setBranches(branchData.filter(isActiveBranch));
     } else {
       const error = branchResult.reason;
-
       console.error(
         "Branches API failed:",
         error.response?.status,
         error.response?.data,
       );
-
       toast.error(error.response?.data?.message || "Failed to fetch branches");
     }
+    setListLoading(false);
   };
-
   useEffect(() => {
     fetchData();
   }, []);
-
   const stats = useMemo(() => {
     const active = accountants.filter(
       (item) => (item.status || "active") === "active",
     ).length;
-
     return {
       total: accountants.length,
       active,
       inactive: accountants.length - active,
     };
   }, [accountants]);
-
   const filteredAccountants = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-
     return accountants.filter((item) => {
       const status = item.status || "active";
-
       const matchesSearch =
         !keyword ||
         (item.name || "").toLowerCase().includes(keyword) ||
@@ -163,23 +151,44 @@ function Accountants() {
         (item.role || "").toLowerCase().includes(keyword) ||
         (item.branch_name || "").toLowerCase().includes(keyword) ||
         (item.branch_code || "").toLowerCase().includes(keyword);
-
       const matchesStatus = statusFilter === "all" || status === statusFilter;
-
       const matchesBranch =
         branchFilter === "all" ||
         String(item.branch_id) === String(branchFilter);
-
       return matchesSearch && matchesStatus && matchesBranch;
     });
   }, [accountants, search, statusFilter, branchFilter]);
-
+  const pages = Math.max(1, Math.ceil(filteredAccountants.length / pageSize));
+  const sortedAccountants = useMemo(
+    () =>
+      [...filteredAccountants].sort((a, b) => {
+        const comparison = String(a[sortBy] || "").localeCompare(
+          String(b[sortBy] || ""),
+          undefined,
+          { numeric: true, sensitivity: "base" },
+        );
+        return sortDirection === "asc" ? comparison : -comparison;
+      }),
+    [filteredAccountants, sortBy, sortDirection],
+  );
+  const visibleAccountants = sortedAccountants.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
+  const changeSort = (key) => {
+    setSortDirection(
+      sortBy === key && sortDirection === "asc" ? "desc" : "asc",
+    );
+    setSortBy(key);
+    setPage(1);
+  };
+  useEffect(() => setPage(1), [search, statusFilter, branchFilter, pageSize]);
+  useEffect(() => setPage((current) => Math.min(current, pages)), [pages]);
   const confirmToast = (message, onConfirm) => {
     toast(
       (t) => (
         <div className="space-y-3">
           <p className="text-sm font-semibold text-slate-900">{message}</p>
-
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -188,7 +197,6 @@ function Accountants() {
             >
               No
             </button>
-
             <button
               type="button"
               onClick={() => {
@@ -205,25 +213,20 @@ function Accountants() {
       { duration: 6000 },
     );
   };
-
   const handleChange = (e) => {
     const { name, value } = e.target;
-
     if (name === "branch_id" && value === "__add_branch__") {
       setShowBranchModal(true);
       return;
     }
-
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
-
   const handleBranchChange = (e) => {
     setBranchForm((prev) => ({
       ...prev,
       [e.target.name]: e.target.value,
     }));
   };
-
   const resetForm = () => {
     setFormData({
       ...initialForm,
@@ -231,16 +234,13 @@ function Accountants() {
     });
     setEditId(null);
   };
-
   const resetBranchForm = () => {
     setBranchForm(initialBranchForm);
   };
-
   const openCreateModal = () => {
     resetForm();
     setShowFormModal(true);
   };
-
   const openEditModal = (accountant) => {
     setEditId(accountant.id);
     setFormData({
@@ -251,34 +251,26 @@ function Accountants() {
     });
     setShowFormModal(true);
   };
-
   const closeFormModal = () => {
     resetForm();
     setShowFormModal(false);
   };
-
   const handleCreateBranch = async () => {
     if (!branchForm.branch_name.trim()) {
       toast.error("Branch name is required");
       return;
     }
-
     try {
       setBranchLoading(true);
-
       const payload = {
         ...branchForm,
         branch_name: branchForm.branch_name.trim(),
       };
-
       const res = await api.post("/branches", payload);
       const newBranch = res.data?.branch || res.data;
-
       const branchRes = await api.get("/branches");
       const updatedBranches = (branchRes.data || []).filter(isActiveBranch);
-
       setBranches(updatedBranches);
-
       const selectedBranch =
         newBranch?.id ||
         newBranch?.branch_id ||
@@ -287,14 +279,12 @@ function Accountants() {
             branch.branch_name?.toLowerCase() ===
             payload.branch_name.toLowerCase(),
         )?.id;
-
       if (selectedBranch) {
         setFormData((prev) => ({
           ...prev,
           branch_id: String(selectedBranch),
         }));
       }
-
       resetBranchForm();
       setShowBranchModal(false);
       toast.success("Branch added successfully");
@@ -304,28 +294,22 @@ function Accountants() {
       setBranchLoading(false);
     }
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!formData.name.trim() || !formData.email.trim()) {
       toast.error("Name and email are required");
       return;
     }
-
     if (!formData.branch_id) {
       toast.error("Please select branch");
       return;
     }
-
     if (!editId && !formData.password) {
       toast.error("Password is required");
       return;
     }
-
     try {
       setLoading(true);
-
       if (editId) {
         await api.put(`/users/team/${editId}`, formData);
         toast.success("Accountant updated successfully");
@@ -333,7 +317,6 @@ function Accountants() {
         await api.post("/users/accountant", formData);
         toast.success("Accountant created successfully");
       }
-
       closeFormModal();
       fetchData();
     } catch (error) {
@@ -342,11 +325,9 @@ function Accountants() {
       setLoading(false);
     }
   };
-
   const handleToggleStatus = (accountant) => {
     const currentStatus = accountant.status || "active";
     const nextStatus = currentStatus === "inactive" ? "active" : "inactive";
-
     confirmToast(
       `${nextStatus === "active" ? "Activate" : "Deactivate"} this accountant?`,
       async () => {
@@ -354,7 +335,6 @@ function Accountants() {
           await api.patch(`/users/team/${accountant.id}/status`, {
             status: nextStatus,
           });
-
           toast.success(`Accountant ${nextStatus} successfully`);
           fetchData();
         } catch (error) {
@@ -363,128 +343,214 @@ function Accountants() {
       },
     );
   };
-
   return (
-    <div className="w-full min-w-0 space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
-              <Users size={17} />
-              Finance Team Management
-            </div>
-
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Accountants
-            </h1>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Create, update and assign branch-wise finance users for your
-              company.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-0 active:ring-0"
-          >
-            <Plus size={17} />
-            Add Accountant
-          </button>
+    <div className="accountants-workspace w-full min-w-0 space-y-5">
+      <header className="flex flex-col justify-between gap-4 py-1 sm:flex-row sm:items-center">
+        <div>
+          <p className="mb-2 text-sm text-slate-500">Team / Accountants</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            Accountants
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Manage your finance team and branch assignments.
+          </p>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <button
+          type="button"
+          onClick={openCreateModal}
+          className="inline-flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+        >
+          <Plus size={17} />
+          New Accountant
+        </button>
+      </header>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           title="Total Accountants"
           value={stats.total}
           icon={<Users size={20} />}
-          color="bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-          onClick={() => setStatusFilter("all")}
+          color="bg-blue-50 text-blue-600"
+          onClick={() => {
+            setStatusFilter("all");
+            setBranchFilter("all");
+          }}
         />
-
         <SummaryCard
-          title="Active Accountants"
+          title="Active Members"
           value={stats.active}
           icon={<CheckCircle2 size={20} />}
-          color="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-          onClick={() => setStatusFilter("active")}
+          color="bg-emerald-50 text-emerald-600"
+          onClick={() => {
+            setStatusFilter("active");
+            setBranchFilter("all");
+          }}
         />
-
         <SummaryCard
-          title="Inactive Accountants"
+          title="Inactive Members"
           value={stats.inactive}
           icon={<XCircle size={20} />}
-          color="bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
-          onClick={() => setStatusFilter("inactive")}
+          color="bg-amber-50 text-amber-600"
+          onClick={() => {
+            setStatusFilter("inactive");
+            setBranchFilter("all");
+          }}
+        />
+        <SummaryCard
+          title="Active Branches"
+          value={branches.length}
+          icon={<GitBranch size={20} />}
+          color="bg-violet-50 text-violet-600"
         />
       </div>
-
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 p-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Accountant List
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Search, view and manage finance team status.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="relative">
-                <Search
-                  size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
-                />
-
-                <input
-                  type="text"
-                  placeholder="Search accountant"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="input !pl-10"
-                />
-              </div>
-
-              <CustomDropdown
-                value={statusFilter}
-                onChange={setStatusFilter}
-                icon={<Filter size={16} />}
-                options={[
-                  { value: "all", label: "All Status" },
-                  { value: "active", label: "Active" },
-                  { value: "inactive", label: "Inactive" },
-                ]}
-              />
-
-              <CustomDropdown
-                value={branchFilter}
-                onChange={setBranchFilter}
-                icon={<GitBranch size={16} />}
-                options={[
-                  { value: "all", label: "All Branches" },
-                  ...branches.map((branch) => ({
-                    value: String(branch.id),
-                    label: formatBranchLabel(branch),
-                  })),
-                ]}
-              />
-            </div>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 pt-4 dark:border-slate-800">
+          <div
+            className="flex gap-5 overflow-x-auto"
+            role="tablist"
+            aria-label="Accountant status"
+          >
+            {[
+              ["all", "All Accountants"],
+              ["active", "Active"],
+              ["inactive", "Inactive"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={statusFilter === value}
+                onClick={() => {
+                  setStatusFilter(value);
+                }}
+                className={`whitespace-nowrap border-b-2 pb-4 text-sm font-medium ${statusFilter === value ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={fetchData}
+            disabled={listLoading}
+            aria-label="Refresh accountants"
+            className="mb-3 rounded-lg p-2 text-slate-500 hover:bg-slate-50 hover:text-blue-600 disabled:opacity-40 dark:hover:bg-slate-800"
+          >
+            <RefreshCw
+              size={16}
+              className={listLoading ? "animate-spin" : ""}
+            />
+          </button>
+        </div>
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 dark:border-slate-800 sm:flex-row">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              size={17}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+            />
+            <input
+              type="search"
+              aria-label="Search accountants"
+              placeholder="Search by name, email or branch…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="input !pl-10"
+            />
+          </div>
+          <div className="sm:w-60">
+            <CustomDropdown
+              value={branchFilter}
+              onChange={setBranchFilter}
+              icon={<GitBranch size={15} />}
+              options={[
+                { value: "all", label: "All Branches" },
+                ...branches.map((branch) => ({
+                  value: String(branch.id),
+                  label: formatBranchLabel(branch),
+                })),
+              ]}
+            />
           </div>
         </div>
-
-        <AccountantTable
-          accountants={filteredAccountants}
-          onView={setViewAccountant}
-          onEdit={openEditModal}
-          onToggleStatus={handleToggleStatus}
-          formatBranchLabel={formatBranchLabel}
-        />
-      </div>
-
+        {listError ? (
+          <div role="alert" className="p-10 text-center">
+            <p className="text-sm text-red-500">{listError}</p>
+            <button
+              type="button"
+              onClick={fetchData}
+              className="mt-3 text-sm text-blue-600"
+            >
+              Try again
+            </button>
+          </div>
+        ) : listLoading ? (
+          <div
+            role="status"
+            aria-label="Loading accountants"
+            className="space-y-4 p-6"
+          >
+            {[1, 2, 3].map((row) => (
+              <div
+                key={row}
+                className="h-14 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800"
+              />
+            ))}
+          </div>
+        ) : (
+          <AccountantTable
+            accountants={visibleAccountants}
+            sortBy={sortBy}
+            sortDirection={sortDirection}
+            onSort={changeSort}
+            onView={setViewAccountant}
+            onEdit={openEditModal}
+            onToggleStatus={handleToggleStatus}
+            formatBranchLabel={formatBranchLabel}
+          />
+        )}
+        <footer className="flex flex-col justify-between gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500 dark:border-slate-800 sm:flex-row sm:items-center">
+          <span>
+            Showing {filteredAccountants.length ? (page - 1) * pageSize + 1 : 0}
+            –{Math.min(page * pageSize, filteredAccountants.length)} of{" "}
+            {filteredAccountants.length} accountants
+          </span>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2">
+              Rows
+              <CustomDropdown
+                value={String(pageSize)}
+                onChange={(value) => setPageSize(Number(value))}
+                options={[10, 20, 50].map((count) => ({
+                  value: String(count),
+                  label: String(count),
+                }))}
+                label="Rows per page"
+                searchable={false}
+              />
+            </label>
+            <button
+              type="button"
+              aria-label="Previous page"
+              disabled={page <= 1}
+              onClick={() => setPage((current) => current - 1)}
+              className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-slate-700"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <span>
+              {page} / {pages}
+            </span>
+            <button
+              type="button"
+              aria-label="Next page"
+              disabled={page >= pages}
+              onClick={() => setPage((current) => current + 1)}
+              className="rounded-lg border border-slate-200 p-2 disabled:opacity-30 dark:border-slate-700"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        </footer>
+      </section>
       {showFormModal && (
         <FormModal
           title={editId ? "Update Accountant" : "Create Accountant"}
@@ -508,7 +574,6 @@ function Accountants() {
           />
         </FormModal>
       )}
-
       {viewAccountant && (
         <AccountantViewModal
           accountant={viewAccountant}
@@ -516,11 +581,10 @@ function Accountants() {
           onClose={() => setViewAccountant(null)}
         />
       )}
-
       {showBranchModal && (
         <FormModal
           title="Add New Branch"
-          description="Create branch without leaving accountant page."
+          description="Create a branch without leaving the accountant page."
           icon={<GitBranch size={22} />}
           onClose={() => setShowBranchModal(false)}
         >
@@ -533,40 +597,34 @@ function Accountants() {
           />
         </FormModal>
       )}
-
       <style>{`
-        .input {
+        .accountants-workspace .input {
           width: 100%;
-          border: 1px solid #cbd5e1;
-          padding: 10px 12px;
-          border-radius: 12px;
-          font-size: 14px;
+          border: 1px solid #e2e8f0;
+          padding: 12px 14px;
+          border-radius: 8px;
+          font-size: 15px;
           outline: none;
           background: #ffffff;
           color: #334155;
           transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
         }
-
-        .input::placeholder {
+        .accountants-workspace .input::placeholder {
           color: #94a3b8;
         }
-
-        .input:focus {
+        .accountants-workspace .input:focus {
           border-color: #2563eb;
           box-shadow: 0 0 0 3px #dbeafe;
         }
-
-        .dark .input {
+        .dark .accountants-workspace .input {
           border-color: #334155;
           background: #0f172a;
           color: #e2e8f0;
         }
-
-        .dark .input::placeholder {
+        .dark .accountants-workspace .input::placeholder {
           color: #64748b;
         }
-
-        .dark .input:focus {
+        .dark .accountants-workspace .input:focus {
           border-color: #3b82f6;
           box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.35);
         }
@@ -574,8 +632,10 @@ function Accountants() {
     </div>
   );
 }
-
 function AccountantTable({
+  sortBy,
+  sortDirection,
+  onSort,
   accountants,
   onView,
   onEdit,
@@ -584,114 +644,140 @@ function AccountantTable({
 }) {
   return (
     <div className="w-full overflow-x-auto">
-      <table className="w-full min-w-[950px] text-sm">
-        <thead className="bg-slate-50 text-slate-600 dark:text-slate-300 dark:bg-slate-950 dark:text-slate-300">
+      <table className="w-full min-w-[780px] text-left text-[15px]">
+        <thead className="bg-blue-50 text-sm tracking-wide text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           <tr>
-            {["User", "Branch", "Email", "Role", "Status", "Actions"].map(
-              (head) => (
-                <th
-                  key={head}
-                  className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300"
-                >
-                  {head}
-                </th>
-              ),
-            )}
+            {[
+              ["Team Member", "name"],
+              ["Branch", "branch_name"],
+              ["Role", "role"],
+              ["Status", "status"],
+              ["Actions", null],
+            ].map(([label, key]) => (
+              <th
+                key={label}
+                scope="col"
+                aria-sort={
+                  key === sortBy
+                    ? sortDirection === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : undefined
+                }
+                className="px-5 py-4 text-left text-sm font-medium"
+              >
+                {key && onSort ? (
+                  <button
+                    type="button"
+                    onClick={() => onSort(key)}
+                    className="inline-flex items-center gap-2"
+                  >
+                    {label}
+                    <ArrowUpDown
+                      size={14}
+                      className={
+                        sortBy === key ? "text-blue-600" : "text-blue-300"
+                      }
+                    />
+                  </button>
+                ) : (
+                  label
+                )}
+              </th>
+            ))}
           </tr>
         </thead>
-
-        <tbody>
-          {accountants.map((item) => {
-            const isInactive = item.status === "inactive";
-
-            return (
-              <tr
-                key={item.id}
-                className="border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
-              >
-                <td className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-                      <ShieldCheck size={19} />
-                    </div>
-
-                    <div>
-                      <p className="font-bold text-slate-900 dark:text-white">
-                        {item.name || "-"}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Finance team leader
-                      </p>
-                    </div>
-                  </div>
-                </td>
-
-                <td className="p-4 text-center text-slate-600 dark:text-slate-300">
-                  {formatBranchLabel(item)}
-                </td>
-
-                <td className="p-4 text-center text-slate-600 dark:text-slate-300">
-                  {item.email || "-"}
-                </td>
-
-                <td className="p-4 text-center text-slate-600 dark:text-slate-300">
-                  <span className="capitalize">
-                    {(item.role || "accountant").replaceAll("_", " ")}
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {accountants.map((item) => (
+            <tr
+              key={item.id}
+              className="transition hover:bg-blue-50/30 dark:hover:bg-slate-800/40"
+            >
+              <td className="px-5 py-4">
+                <button
+                  type="button"
+                  onClick={() => onView(item)}
+                  className="flex items-center gap-3 text-left"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-sm font-semibold text-blue-600 dark:bg-blue-950">
+                    {String(item.name || "A")
+                      .split(" ")
+                      .map((word) => word[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()}
                   </span>
-                </td>
-
-                <td className="p-4 text-center">
-                  <StatusBadge status={item.status} />
-                </td>
-
-                <td className="p-4 text-center">
-                  <div className="flex items-center gap-2">
-                    <IconButton
-                      icon={<Eye size={16} />}
-                      className="bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 hover:bg-blue-100"
-                      onClick={() => onView(item)}
-                    />
-
-                    <IconButton
-                      icon={<Pencil size={16} />}
-                      className="bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950"
-                      onClick={() => onEdit(item)}
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => onToggleStatus(item)}
-                      className={`flex items-center gap-1 rounded-xl border px-3 py-2 text-xs font-semibold shadow-sm transition ${
-                        isInactive
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950"
-                          : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950"
-                      }`}
+                  <span className="min-w-0">
+                    <span className="block max-w-[200px] truncate text-base font-semibold text-slate-800 hover:text-blue-600 dark:text-slate-100">
+                      {item.name || "—"}
+                    </span>
+                    <span
+                      className="mt-1 block max-w-[210px] truncate text-sm text-slate-500"
+                      title={item.email}
                     >
-                      {isInactive ? (
-                        <CheckCircle2 size={15} />
-                      ) : (
-                        <XCircle size={15} />
-                      )}
-                      {isInactive ? "Activate" : "Deactivate"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-
-          {accountants.length === 0 && (
-            <tr>
-              <td colSpan="6" className="p-10 text-center">
-                <div className="mx-auto max-w-sm rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-950">
-                  <Users className="mx-auto text-slate-400" size={34} />
-                  <p className="mt-3 font-semibold text-slate-700">
-                    No accountants found
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Try changing search, status or branch filter.
-                  </p>
+                      {item.email || "—"}
+                    </span>
+                  </span>
+                </button>
+              </td>
+              <td className="px-5 py-4">
+                <span
+                  className="block max-w-[170px] truncate text-sm text-slate-600 dark:text-slate-300"
+                  title={formatBranchLabel(item)}
+                >
+                  {formatBranchLabel(item)}
+                </span>
+              </td>
+              <td className="px-5 py-4">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-violet-50 px-2.5 py-1.5 text-sm font-medium capitalize text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                  <ShieldCheck size={13} />
+                  {(item.role || "accountant").replaceAll("_", " ")}
+                </span>
+              </td>
+              <td className="px-5 py-4 ">
+                <StatusBadge status={item.status} />
+              </td>
+              <td className="px-5 py-4">
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="View profile"
+                    aria-label={`View ${item.name}`}
+                    onClick={() => onView(item)}
+                    className="rounded-lg bg-blue-50 p-2.5 text-blue-600 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300"
+                  >
+                    <Eye size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Edit accountant"
+                    aria-label={`Edit ${item.name}`}
+                    onClick={() => onEdit(item)}
+                    className="rounded-lg bg-amber-50 p-2.5 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+                  >
+                    <Pencil size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onToggleStatus(item)}
+                    className={`ml-2 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-sm font-medium ${item.status === "inactive" ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300" : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"}`}
+                  >
+                    {item.status === "inactive" ? "Activate" : "Deactivate"}
+                  </button>
                 </div>
+              </td>
+            </tr>
+          ))}
+          {!accountants.length && (
+            <tr>
+              <td colSpan={5} className="p-12 text-center">
+                <Users size={32} className="mx-auto mb-3 text-slate-300" />
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  No accountants found
+                </p>
+                <p className="mt-2 text-sm text-slate-500">
+                  Add a team member or adjust your filters.
+                </p>
               </td>
             </tr>
           )}
@@ -700,7 +786,6 @@ function AccountantTable({
     </div>
   );
 }
-
 function AccountantForm({
   formData,
   branches,
@@ -714,6 +799,17 @@ function AccountantForm({
   const [showPassword, setShowPassword] = useState(false);
   return (
     <form onSubmit={handleSubmit}>
+      <div className="mb-6 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
+        <ShieldCheck size={20} className="mt-0.5 shrink-0 text-blue-600" />
+        <div>
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+            Sales team access
+          </p>
+          <p className="mt-1 text-sm leading-5 text-slate-500">
+            Assign a branch and enter the accountant’s login details.
+          </p>
+        </div>
+      </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Field icon={<Building2 size={16} />} label="Branch">
           <BranchSelect
@@ -730,7 +826,6 @@ function AccountantForm({
             }
           />
         </Field>
-
         <Input
           icon={<Users size={16} />}
           label="Accountant Name"
@@ -740,7 +835,6 @@ function AccountantForm({
           value={formData.name}
           onChange={handleChange}
         />
-
         <Input
           icon={<Mail size={16} />}
           label="Accountant Email"
@@ -750,7 +844,6 @@ function AccountantForm({
           value={formData.email}
           onChange={handleChange}
         />
-
         <Field
           icon={<Lock size={16} />}
           label={editId ? "New Password Optional" : "Password"}
@@ -767,11 +860,10 @@ function AccountantForm({
               autoComplete="new-password"
               className="input !pr-12"
             />
-
             <button
               type="button"
               onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-500 transition hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400"
               title={showPassword ? "Hide Password" : "Show Password"}
               aria-label={showPassword ? "Hide Password" : "Show Password"}
               aria-pressed={showPassword}
@@ -781,7 +873,6 @@ function AccountantForm({
           </div>
         </Field>
       </div>
-
       <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 dark:border-slate-800 sm:flex-row sm:justify-end">
         <button
           type="button"
@@ -791,7 +882,6 @@ function AccountantForm({
           <X size={16} />
           Cancel
         </button>
-
         <button
           type="submit"
           disabled={loading}
@@ -808,7 +898,6 @@ function AccountantForm({
     </form>
   );
 }
-
 function BranchMiniForm({
   branchForm,
   handleBranchChange,
@@ -818,7 +907,7 @@ function BranchMiniForm({
 }) {
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ModalInput
           icon={<Building2 size={16} />}
           label="Branch Name"
@@ -827,7 +916,6 @@ function BranchMiniForm({
           onChange={handleBranchChange}
           required
         />
-
         <ModalInput
           icon={<Hash size={16} />}
           label="Branch Code"
@@ -835,7 +923,6 @@ function BranchMiniForm({
           value={branchForm.branch_code}
           onChange={handleBranchChange}
         />
-
         <ModalInput
           icon={<Mail size={16} />}
           label="Email"
@@ -844,7 +931,6 @@ function BranchMiniForm({
           value={branchForm.email}
           onChange={handleBranchChange}
         />
-
         <ModalInput
           icon={<Phone size={16} />}
           label="Phone"
@@ -852,7 +938,6 @@ function BranchMiniForm({
           value={branchForm.phone}
           onChange={handleBranchChange}
         />
-
         <ModalInput
           icon={<BadgePercent size={16} />}
           label="GST Number"
@@ -860,7 +945,6 @@ function BranchMiniForm({
           value={branchForm.gst_number}
           onChange={handleBranchChange}
         />
-
         <ModalInput
           icon={<MapPin size={16} />}
           label="City"
@@ -868,7 +952,6 @@ function BranchMiniForm({
           value={branchForm.city}
           onChange={handleBranchChange}
         />
-
         <ModalInput
           icon={<MapPin size={16} />}
           label="State"
@@ -876,7 +959,6 @@ function BranchMiniForm({
           value={branchForm.state}
           onChange={handleBranchChange}
         />
-
         <ModalInput
           icon={<Globe size={16} />}
           label="Country"
@@ -884,7 +966,6 @@ function BranchMiniForm({
           value={branchForm.country}
           onChange={handleBranchChange}
         />
-
         <ModalInput
           icon={<Hash size={16} />}
           label="ZIP Code"
@@ -892,7 +973,6 @@ function BranchMiniForm({
           value={branchForm.zip_code}
           onChange={handleBranchChange}
         />
-
         <Field icon={<CheckCircle2 size={16} />} label="Status">
           <CustomDropdown
             value={branchForm.status}
@@ -910,13 +990,11 @@ function BranchMiniForm({
             ]}
           />
         </Field>
-
         <div className="md:col-span-2 xl:col-span-3">
-          <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
             <MapPin size={16} />
             Address
           </label>
-
           <textarea
             name="address"
             value={branchForm.address}
@@ -926,7 +1004,6 @@ function BranchMiniForm({
           />
         </div>
       </div>
-
       <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
         <button
           type="button"
@@ -936,7 +1013,6 @@ function BranchMiniForm({
           <X size={16} />
           Cancel
         </button>
-
         <button
           type="button"
           onClick={handleCreateBranch}
@@ -950,139 +1026,160 @@ function BranchMiniForm({
     </>
   );
 }
-
 function AccountantViewModal({ accountant, formatBranchLabel, onClose }) {
-  return createPortal(
-    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
-      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-              <ShieldCheck size={28} />
-            </div>
-
+  return (
+    <FormModal
+      title="Accountant Profile"
+      description="Team member information and branch assignment."
+      icon={<ShieldCheck size={22} />}
+      onClose={onClose}
+    >
+      <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className="h-20 bg-gradient-to-r from-blue-600 to-indigo-600" />
+        <div className="px-6 pb-6">
+          <div className="-mt-8 flex h-16 w-16 items-center justify-center rounded-2xl border-4 border-white bg-blue-50 text-lg font-semibold text-blue-600 dark:border-slate-900">
+            {String(accountant.name || "A")
+              .split(" ")
+              .map((word) => word[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase()}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                {accountant.name || "-"}
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Accountant profile details
+              <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                {accountant.name || "—"}
+              </h3>
+              <p className="mt-1 break-all text-sm text-slate-500">
+                {accountant.email || "—"}
               </p>
             </div>
+            <StatusBadge status={accountant.status} />
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto bg-white p-5 dark:bg-slate-900">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ViewField label="Name" value={accountant.name} />
-
-            <ViewField label="Email" value={accountant.email} />
-
+          <div className="mt-6 grid grid-cols-1 gap-5 border-t border-slate-100 pt-5 dark:border-slate-800 sm:grid-cols-2">
             <ViewField
               label="Role"
-              value={(accountant.role || "accountant")
-                .replaceAll("_", " ")
-                .replace(/\b\w/g, (char) => char.toUpperCase())}
+              value={(accountant.role || "accountant").replaceAll("_", " ")}
             />
-
             <ViewField
-              label="Status"
+              label="Assigned Branch"
+              value={formatBranchLabel(accountant)}
+            />
+            <ViewField label="Email Address" value={accountant.email} />
+            <ViewField
+              label="Account Status"
               value={<StatusBadge status={accountant.status} />}
             />
-
-            <ViewField label="Branch" value={formatBranchLabel(accountant)} />
           </div>
         </div>
       </div>
-    </div>,
-    document.body,
+    </FormModal>
   );
 }
-
 function FormModal({ title, description, icon, onClose, children }) {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const close = (event) => {
+      if (event.key === "Escape") {
+        const dialogs = document.querySelectorAll("[data-accountant-dialog]");
+        if (dialogs[dialogs.length - 1]?.getAttribute("aria-label") === title)
+          onClose();
+      }
+    };
+    document.addEventListener("keydown", close);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", close);
+    };
+  }, [onClose, title]);
   return createPortal(
-    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-              {icon}
+    <div className="accountants-workspace">
+      <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-6">
+        <section
+          data-accountant-dialog
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+          className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        >
+          <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 p-5 dark:border-slate-800 sm:px-7">
+            <div className="flex gap-3">
+              <span className="hidden h-fit rounded-xl bg-blue-50 p-2.5 text-blue-600 sm:block">
+                {icon}
+              </span>
+              <div>
+                <p className="mb-1 text-sm font-medium uppercase tracking-widest text-slate-500">
+                  Sales Team
+                </p>
+                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+                  {title}
+                </h2>
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+                  {description}
+                </p>
+              </div>
             </div>
-
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                {title}
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {description}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto bg-white p-5 dark:bg-slate-900">
-          {children}
-        </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={`Close ${title}`}
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <X size={20} />
+            </button>
+          </header>
+          <div className="min-h-0 overflow-y-auto p-5 sm:p-7">{children}</div>
+        </section>
       </div>
     </div>,
     document.body,
   );
 }
-
 function SummaryCard({ title, value, icon, color, onClick }) {
+  const Tag = onClick ? "button" : "div";
+  const tone = color.includes("emerald")
+    ? "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900 dark:from-emerald-950/40 dark:to-slate-900"
+    : color.includes("amber")
+      ? "border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900 dark:from-amber-950/40 dark:to-slate-900"
+      : color.includes("violet")
+        ? "border-violet-200 bg-gradient-to-br from-violet-50 to-white dark:border-violet-900 dark:from-violet-950/40 dark:to-slate-900"
+        : "border-blue-200 bg-gradient-to-br from-blue-50 to-white dark:border-blue-900 dark:from-blue-950/40 dark:to-slate-900";
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm dark:border-slate-800 dark:bg-slate-900 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+    <Tag
+      {...(onClick ? { type: "button", onClick } : {})}
+      className={`flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3 text-left shadow-sm ${tone} ${
+        onClick ? "transition hover:border-blue-300" : ""
+      }`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-            {title}
-          </p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
-            {value}
-          </h2>
-        </div>
+      <span className={`shrink-0 rounded-lg p-2.5 ${color}`}>{icon}</span>
 
-        <div className={`rounded-xl p-3 ${color}`}>{icon}</div>
-      </div>
-    </button>
+      <span className="min-w-0">
+        <span className="block text-sm text-slate-500">{title}</span>
+
+        <span className="mt-1 block text-2xl font-semibold leading-tight text-slate-900 dark:text-white">
+          {value}
+        </span>
+
+        <span className="mt-0.5 block text-sm text-slate-500">
+          {onClick ? "View team members" : "Company branches"}
+        </span>
+      </span>
+    </Tag>
   );
 }
-
 function ViewField({ label, value, full }) {
   return (
     <div className={full ? "md:col-span-2" : ""}>
-      <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <p className="mb-1.5 text-sm font-medium text-slate-600 dark:text-slate-300">
         {label}
       </p>
-      <div className="min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200">
+      <div className="break-words text-sm text-slate-800 dark:text-slate-200">
         {value || "-"}
       </div>
     </div>
   );
 }
-
 function ModalInput({
   icon,
   label,
@@ -1094,13 +1191,13 @@ function ModalInput({
 }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
         {icon}
         {label}
         {required && <span className="text-red-500">*</span>}
       </label>
-
       <input
+        aria-label={label}
         type={type}
         name={name}
         value={value}
@@ -1110,11 +1207,11 @@ function ModalInput({
     </div>
   );
 }
-
 function Input({ icon, label, type, name, placeholder, value, onChange }) {
   return (
     <Field icon={icon} label={label}>
       <input
+        aria-label={label}
         type={type}
         name={name}
         placeholder={placeholder}
@@ -1125,11 +1222,10 @@ function Input({ icon, label, type, name, placeholder, value, onChange }) {
     </Field>
   );
 }
-
 function Field({ icon, label, children }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
         {icon}
         {label}
       </label>
@@ -1137,236 +1233,236 @@ function Field({ icon, label, children }) {
     </div>
   );
 }
-
-function CustomDropdown({ value, onChange, options, icon }) {
+function CustomDropdown({
+  value,
+  onChange,
+  options,
+  icon,
+  label = "Choose an option",
+  searchable = true,
+}) {
   const [open, setOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const [position, setPosition] = useState({});
+  const buttonRef = useRef(null),
+    panelRef = useRef(null),
+    searchRef = useRef(null);
+  const listId = useId();
   const selected = options.find(
     (option) => String(option.value) === String(value),
   );
-
-  useEffect(() => {
-    const closeDropdown = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", closeDropdown);
-    return () => document.removeEventListener("mousedown", closeDropdown);
-  }, []);
-
-  return (
-    <div ref={dropdownRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {icon && <span className="text-slate-400">{icon}</span>}
-          <span className="truncate">{selected?.label || "Select"}</span>
-        </span>
-
-        <ChevronDown
-          size={18}
-          className={`shrink-0 text-slate-500 dark:text-slate-400 transition ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 ${
-                String(value) === String(option.value)
-                  ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-                  : "text-slate-700 dark:text-slate-200"
-              }`}
-            >
-              {option.label}
-              {String(value) === String(option.value) && (
-                <CheckCircle2 size={16} />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+  const filtered = options.filter(
+    (option) =>
+      option.value === "__add_branch__" ||
+      option.label.toLowerCase().includes(query.toLowerCase()),
   );
-}
-
-function BranchSelect({ branches, value, onChange, formatBranchLabel }) {
-  const [open, setOpen] = useState(false);
-  const [branchSearch, setBranchSearch] = useState("");
-  const [dropdownStyle, setDropdownStyle] = useState({});
-
-  const buttonRef = useRef(null);
-  const dropdownRef = useRef(null);
-
-  const selectedBranch = branches.find(
-    (branch) => String(branch.id) === String(value),
-  );
-
-  const filteredBranches = branches.filter((branch) =>
-    `${branch.branch_name || ""} ${branch.branch_code || ""} ${branch.email || ""}`
-      .toLowerCase()
-      .includes(branchSearch.toLowerCase()),
-  );
-
-  const updateDropdownPosition = () => {
-    if (!buttonRef.current) return;
-
-    const rect = buttonRef.current.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const dropdownHeight = 330;
-    const shouldOpenUp =
-      spaceBelow < dropdownHeight && rect.top > dropdownHeight;
-
-    setDropdownStyle({
-      position: "fixed",
-      left: rect.left,
-      width: rect.width,
-      top: shouldOpenUp ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
-      maxHeight: dropdownHeight,
-      zIndex: 9999,
-    });
+  const choose = (option) => {
+    if (!option) return;
+    onChange(option.value);
+    setOpen(false);
+    setQuery("");
+    buttonRef.current?.focus();
   };
-
   useEffect(() => {
     if (!open) return;
-
-    updateDropdownPosition();
-
-    const handleClickOutside = (e) => {
-      if (
-        buttonRef.current?.contains(e.target) ||
-        dropdownRef.current?.contains(e.target)
-      ) {
-        return;
-      }
-
-      setOpen(false);
-      setBranchSearch("");
+    const place = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const availableBelow = window.innerHeight - rect.bottom - 12;
+      const above = availableBelow < 220 && rect.top > availableBelow;
+      const maxHeight = Math.max(
+        100,
+        Math.min(340, above ? rect.top - 16 : availableBelow),
+      );
+      setPosition({
+        position: "fixed",
+        left: Math.max(
+          8,
+          Math.min(
+            rect.left,
+            window.innerWidth - Math.max(rect.width, 180) - 8,
+          ),
+        ),
+        width: Math.min(Math.max(rect.width, 180), window.innerWidth - 16),
+        maxHeight,
+        zIndex: 100010,
+        ...(above
+          ? { bottom: window.innerHeight - rect.top + 6 }
+          : { top: rect.bottom + 6 }),
+      });
     };
-
-    window.addEventListener("scroll", updateDropdownPosition, true);
-    window.addEventListener("resize", updateDropdownPosition);
-    document.addEventListener("mousedown", handleClickOutside);
-
+    const outside = (event) => {
+      if (
+        !buttonRef.current?.contains(event.target) &&
+        !panelRef.current?.contains(event.target)
+      ) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    const escape = (event) => {
+      if (event.key === "Escape") {
+        event.stopImmediatePropagation();
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+    place();
+    searchRef.current?.focus();
+    if (!searchable)
+      panelRef.current?.querySelector('[role="listbox"]')?.focus();
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape, true);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
     return () => {
-      window.removeEventListener("scroll", updateDropdownPosition, true);
-      window.removeEventListener("resize", updateDropdownPosition);
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape, true);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
     };
   }, [open]);
-
-  const handleSelect = (selectedValue) => {
-    onChange(selectedValue);
-    setOpen(false);
-    setBranchSearch("");
+  const keyboard = (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive((index) =>
+        Math.max(
+          0,
+          Math.min(
+            filtered.length - 1,
+            index + (event.key === "ArrowDown" ? 1 : -1),
+          ),
+        ),
+      );
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      choose(filtered[active]);
+    }
+    if (event.key === "Tab") setOpen(false);
   };
-
   return (
     <>
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => {
+          setOpen(!open);
+          setQuery("");
+          setActive(0);
+        }}
+        className={`flex min-h-11 w-full min-w-0 items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2.5 text-left text-sm text-slate-700 shadow-sm transition focus-visible:ring-2 focus-visible:ring-blue-400 dark:bg-slate-900 dark:text-slate-200 ${open ? "border-blue-400 ring-2 ring-blue-100 dark:ring-blue-950" : "border-slate-200 hover:border-blue-300 dark:border-slate-700"}`}
       >
-        <span className="min-w-0 truncate">
-          {selectedBranch ? formatBranchLabel(selectedBranch) : "Select Branch"}
+        <span className="flex min-w-0 items-center gap-2">
+          {icon && (
+            <span className="shrink-0 text-blue-600 dark:text-blue-300">
+              {icon}
+            </span>
+          )}
+          <span className="truncate">{selected?.label || label}</span>
         </span>
-
         <ChevronDown
-          size={17}
-          className={`shrink-0 text-slate-400 transition ${
-            open ? "rotate-180" : ""
-          }`}
+          size={16}
+          className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`}
         />
       </button>
-
-      {open && (
-        <div
-          ref={dropdownRef}
-          style={dropdownStyle}
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div className="border-b border-slate-100 p-2 dark:border-slate-800">
-            <div className="relative">
-              <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
-              />
-
-              <input
-                type="text"
-                value={branchSearch}
-                onChange={(e) => setBranchSearch(e.target.value)}
-                placeholder="Search branch..."
-                autoFocus
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
-              />
-            </div>
-          </div>
-
-          <div className="max-h-56 overflow-y-auto p-2">
-            {filteredBranches.map((branch) => (
-              <button
-                key={branch.id}
-                type="button"
-                onClick={() => handleSelect(String(branch.id))}
-                className={`w-full rounded-xl px-3 py-2 text-left transition hover:bg-blue-50 dark:hover:bg-slate-800 ${
-                  String(value) === String(branch.id)
-                    ? "bg-blue-50 dark:bg-blue-950/40"
-                    : ""
-                }`}
-              >
-                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  {formatBranchLabel(branch)}
-                </p>
-
-                <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {branch.is_main === 1 || branch.is_main === true
-                    ? "HQ Branch"
-                    : "Company branch"}
-                </p>
-              </button>
-            ))}
-
-            {filteredBranches.length === 0 && (
-              <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
-                No branch found
+      {open &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={position}
+            className="flex flex-col overflow-hidden rounded-xl border border-blue-100 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            {searchable && (
+              <div className="shrink-0 border-b border-slate-100 p-2 dark:border-slate-800">
+                <div className="relative">
+                  <Search
+                    size={16}
+                    className="absolute left-3 top-3 text-slate-400"
+                  />
+                  <input
+                    ref={searchRef}
+                    value={query}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setActive(0);
+                    }}
+                    onKeyDown={keyboard}
+                    aria-label={`Search ${label}`}
+                    aria-controls={listId}
+                    aria-activedescendant={
+                      filtered[active] ? `${listId}-${active}` : undefined
+                    }
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-800 outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    placeholder="Search…"
+                  />
+                </div>
               </div>
             )}
-          </div>
-
-          <div className="border-t border-slate-100 p-2 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={() => handleSelect("__add_branch__")}
-              className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
+            <div
+              id={listId}
+              role="listbox"
+              aria-label={label}
+              tabIndex={searchable ? -1 : 0}
+              onKeyDown={searchable ? undefined : keyboard}
+              className="min-h-0 overflow-y-auto p-1.5"
             >
-              <Plus size={16} />
-              Add New Branch
-            </button>
-          </div>
-        </div>
-      )}
+              {filtered.map((option, index) => (
+                <button
+                  key={option.value}
+                  id={`${listId}-${index}`}
+                  role="option"
+                  aria-selected={String(value) === String(option.value)}
+                  type="button"
+                  onMouseEnter={() => setActive(index)}
+                  onClick={() => choose(option)}
+                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${option.value === "__add_branch__" ? "mt-1 border-t border-blue-100 !font-normal text-blue-600 dark:border-blue-900" : ""} ${String(value) === String(option.value) ? "bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300" : index === active ? "bg-slate-50 text-slate-800 dark:bg-slate-800 dark:text-slate-100" : "text-slate-600 dark:text-slate-300"}`}
+                >
+                  <span className="break-words">{option.label}</span>
+                  {String(value) === String(option.value) && (
+                    <CheckCircle2
+                      size={16}
+                      className="shrink-0 text-blue-600"
+                    />
+                  )}
+                </button>
+              ))}
+              {!filtered.length && (
+                <p className="px-3 py-5 text-center text-sm text-slate-500">
+                  No matches found
+                </p>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
-
+function BranchSelect({ branches, value, onChange, formatBranchLabel }) {
+  return (
+    <CustomDropdown
+      value={value}
+      onChange={onChange}
+      label="Select Branch"
+      icon={<GitBranch size={16} />}
+      options={[
+        ...branches.map((branch) => ({
+          value: String(branch.id),
+          label:
+            formatBranchLabel(branch) +
+            (branch.is_main === 1 || branch.is_main === true ? " · HQ" : ""),
+        })),
+        { value: "__add_branch__", label: "+ Add New Branch" },
+      ]}
+    />
+  );
+}
 function IconButton({ icon, className, onClick }) {
   return (
     <button
@@ -1378,20 +1474,17 @@ function IconButton({ icon, className, onClick }) {
     </button>
   );
 }
-
 function StatusBadge({ status }) {
   const value = String(status || "active").toLowerCase();
-
   const styles = {
     active:
       "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
     inactive:
       "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300",
   };
-
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold capitalize shadow-sm ${
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium capitalize shadow-sm ${
         styles[value] || styles.active
       }`}
     >
@@ -1399,5 +1492,4 @@ function StatusBadge({ status }) {
     </span>
   );
 }
-
 export default Accountants;

@@ -2375,21 +2375,20 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
 
   return (
     <div
-      className={`w-full max-w-full min-w-0 space-y-5 ${
+      className={`create-quotation-workspace w-full max-w-full min-w-0 space-y-5 text-[15px] text-slate-700 dark:text-slate-200 ${
         modalMode
-          ? "h-full min-h-0 overflow-y-auto bg-slate-50 p-5 dark:bg-slate-950"
+          ? "h-full min-h-0 overflow-y-auto bg-slate-50 p-4 dark:bg-slate-950 sm:p-6"
           : ""
       }`}
     >
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <header className="border-b border-slate-200 pb-5 dark:border-slate-800">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
-              <FileText size={17} />
-              Quotation Management
+              Sales / Quotations
             </div>
 
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl text-slate-900 dark:text-white">
               {isEditMode
                 ? `Edit Quotation${
                     editingQuotationNumber ? ` - ${editingQuotationNumber}` : ""
@@ -2415,15 +2414,16 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
             }}
             className="flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
-            <X size={16} className={modalMode ? "Close" : "Back"} />
+            {modalMode ? <X size={17} /> : <ArrowLeft size={17} />}
+            {modalMode ? "Close" : "Back to Quotations"}
           </button>
         </div>
-      </div>
+      </header>
 
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="mb-4">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
               Branch, Customer & Dates
             </h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -2431,7 +2431,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Field icon={<Building2 size={16} />} label="Branch">
               <BranchSelect
                 branches={branches}
@@ -2482,10 +2482,10 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                 Items
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -2496,7 +2496,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
             <button
               type="button"
               onClick={addItem}
-              className="flex w-fit items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700"
+              className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700"
             >
               <Plus size={16} />
               Add Item
@@ -2510,10 +2510,10 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
               return (
                 <div
                   key={index}
-                  className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950"
+                  className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
                 >
                   <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
                       Item #{index + 1}
                     </h3>
 
@@ -2528,7 +2528,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
                   </div>
 
                   <div
-                    className={`quotation-item-fields grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 [&_.input]:min-h-9 [&_.input]:rounded-lg [&_.input]:px-2.5 [&_.input]:py-2 [&_label]:mb-1 [&_label]:text-xs ${
+                    className={`quotation-item-fields grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 [&_.input]:min-h-9 [&_.input]:rounded-lg [&_.input]:px-2.5 [&_.input]:py-2 [&_label]:mb-1 [&_label]:text-sm ${
                       item.product_id &&
                       (variantsByProduct[String(item.product_id)]?.length ||
                         variantLoading[String(item.product_id)] ||
@@ -2653,10 +2653,10 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:col-span-2">
+        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-3">
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 dark:border-slate-800 dark:bg-slate-900 xl:col-span-2">
             <div className="mb-4">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                 Notes & Terms
               </h2>
             </div>
@@ -2684,8 +2684,8 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 dark:border-slate-800 dark:bg-slate-900">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
               Quotation Summary
             </h2>
 
@@ -2705,7 +2705,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
 
               <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
                 <div className="flex items-center justify-between">
-                  <span className="text-base font-bold text-slate-900 dark:text-white">
+                  <span className="text-base font-semibold text-slate-900 dark:text-white">
                     Total
                   </span>
                   <span className="text-xl font-bold text-blue-700 dark:text-blue-300">
@@ -2744,7 +2744,10 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
           icon={<User size={21} />}
           onClose={() => setShowCustomerModal(false)}
         >
-          <Section title="Basic Details">
+          <ProductSection
+            title="Basic Customer Details"
+            description="Customer identity and account preferences."
+          >
             <ModalInput
               icon={<User size={16} />}
               label="Customer Name"
@@ -2829,9 +2832,12 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
                 ]}
               />
             </Field>
-          </Section>
+          </ProductSection>
 
-          <Section title="Contact Information">
+          <ProductSection
+            title="Contact Information"
+            description="Where to reach this customer."
+          >
             <ModalInput
               icon={<Mail size={16} />}
               label="Email"
@@ -2851,9 +2857,12 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
               onChange={handleCustomerFormChange}
               error={customerErrors.phone}
             />
-          </Section>
+          </ProductSection>
 
-          <Section title="Tax & Billing">
+          <ProductSection
+            title="Tax & Billing Details"
+            description="Tax registration, payment terms and credit settings."
+          >
             <ModalInput
               icon={<BadgePercent size={16} />}
               label="GSTIN"
@@ -2911,9 +2920,12 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
               onChange={handleCustomerFormChange}
               error={customerErrors.credit_limit}
             />
-          </Section>
+          </ProductSection>
 
-          <Section title="Address">
+          <ProductSection
+            title="Address Details"
+            description="Addresses used on customer documents."
+          >
             <ModalInput
               icon={<MapPin size={16} />}
               label="Billing Address"
@@ -2929,7 +2941,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
               value={customerForm.shipping_address}
               onChange={handleCustomerFormChange}
             />
-          </Section>
+          </ProductSection>
 
           <ModalActions
             onCancel={() => setShowCustomerModal(false)}
@@ -2942,7 +2954,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
       {showProductModal && (
         <Modal
           title="Add Product"
-          description="Fill product details, image, GST mapping and stock information."
+          description="Fill product details, GST mapping and stock information."
           icon={<Package size={22} />}
           onClose={closeProductModal}
         >
@@ -2994,7 +3006,10 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
               </label>
             </div>
           </div>
-          <Section title="Basic Product Details">
+          <ProductSection
+            title="Basic Product Details"
+            description="Identity, branch, category and HSN/SAC."
+          >
             <div className="relative min-w-0">
               <ModalInput
                 icon={<Package size={16} />}
@@ -3136,12 +3151,12 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
                 ]}
               />
             </Field>
-          </Section>
+          </ProductSection>
 
           {variantMode && (
             <div className="mt-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                   Product Variants
                 </h3>
 
@@ -3374,7 +3389,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
                                   ),
                                 )
                               }
-                              className="text-lg font-bold text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
+                              className="text-lg font-semibold text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
                             >
                               ×
                             </button>
@@ -3389,7 +3404,10 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
           )}
 
           <div className="mt-5">
-            <Section title="Pricing & Tax Details">
+            <ProductSection
+              title="Pricing & Tax Details"
+              description="Unit price, GST rule and applicable rate."
+            >
               <Field
                 icon={<Percent size={16} />}
                 label="GST / Tax Rule"
@@ -3521,7 +3539,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
                   ]}
                 />
               </Field>
-            </Section>
+            </ProductSection>
 
             <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
               <AmountBox title="Taxable Value" value={productTaxableValue} />
@@ -3529,51 +3547,6 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
               <AmountBox title="Tax Amount" value={productTaxAmount} />
 
               <AmountBox title="Final Value" value={productFinalValue} />
-            </div>
-          </div>
-
-          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-            <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              <Image size={16} />
-              Product Image
-            </label>
-
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-                {productImageFile ? (
-                  <img
-                    src={URL.createObjectURL(productImageFile)}
-                    alt="Product preview"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <Image size={26} className="text-slate-400" />
-                )}
-              </div>
-
-              <div className="flex-1">
-                <input
-                  ref={productImageInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp"
-                  onChange={(event) => {
-                    setProductImageFile(event.target.files?.[0] || null);
-
-                    clearProductError("image");
-                  }}
-                  className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800 dark:text-slate-300 dark:file:bg-slate-700 dark:hover:file:bg-slate-600"
-                />
-
-                {productErrors.image ? (
-                  <p className="mt-2 text-xs font-semibold text-red-600 dark:text-red-400">
-                    {productErrors.image}
-                  </p>
-                ) : (
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Upload PNG, JPG or WebP image. Max size 2MB.
-                  </p>
-                )}
-              </div>
             </div>
           </div>
 
@@ -3775,7 +3748,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
           onClose={() => setShowBranchModal(false)}
           topMost
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ModalInput
               icon={<Building2 size={16} />}
               label="Branch Name"
@@ -3878,7 +3851,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
               />
             </Field>
 
-            <div className="md:col-span-2 xl:col-span-3">
+            <div className="md:col-span-2">
               <label className=" flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
                 <MapPin size={16} />
                 Address
@@ -3903,9 +3876,9 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
       )}
 
       <style>{`
-        .quotation-item-fields > div > label { margin-bottom: 4px; font-size: 12px; }
-        .quotation-item-fields > div button { min-height: 36px; padding: 7px 9px; font-size: 13px; }
-        .input {
+        .create-quotation-workspace .quotation-item-fields > div > label { margin-bottom: 4px; font-size: 14px; }
+        .create-quotation-workspace .quotation-item-fields > div button { min-height: 38px; padding: 8px 10px; font-size: 14px; }
+        .create-quotation-workspace .input {
           width: 100%;
           border: 1px solid #cbd5e1;
           padding: 10px 12px;
@@ -3916,50 +3889,50 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
           color: #334155;
         }
 
-        .input::placeholder {
+        .create-quotation-workspace .input::placeholder {
           color: #94a3b8;
         }
 
-        .input:focus {
+        .create-quotation-workspace .input:focus {
           border-color: #2563eb;
           box-shadow: 0 0 0 3px #dbeafe;
         }
 
-        .input:disabled {
+        .create-quotation-workspace .input:disabled {
           background: #f8fafc;
           cursor: not-allowed;
         }
 
-        .input-error {
+        .create-quotation-workspace .input-error {
           border-color: #f87171 !important;
         }
 
-        .input-error:focus {
+        .create-quotation-workspace .input-error:focus {
           border-color: #ef4444 !important;
           box-shadow: 0 0 0 3px #fee2e2 !important;
         }
 
-        .dark .input {
+        .dark .create-quotation-workspace .input {
           border-color: #334155;
           background: #0f172a;
           color: #e2e8f0;
         }
 
-        .dark .input::placeholder {
+        .dark .create-quotation-workspace .input::placeholder {
           color: #64748b;
         }
 
-        .dark .input:focus {
+        .dark .create-quotation-workspace .input:focus {
           border-color: #3b82f6;
           box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.35);
         }
 
-        .dark .input:disabled {
+        .dark .create-quotation-workspace .input:disabled {
           background: #1e293b;
           color: #94a3b8;
         }
 
-        .dark .input-error {
+        .dark .create-quotation-workspace .input-error {
           border-color: #f87171 !important;
         }
       `}</style>
@@ -4357,12 +4330,12 @@ function ProductSelect({
 
 function AmountBox({ title, value }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+    <div className="rounded-xl border border-slate-200 bg-blue-50/40 p-3 dark:border-slate-700 dark:bg-blue-950/20">
+      <p className="text-sm font-normal text-slate-500 dark:text-slate-400">
         {title}
       </p>
 
-      <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+      <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">
         ₹ {Number(value || 0).toFixed(2)}
       </p>
     </div>
@@ -4371,7 +4344,7 @@ function AmountBox({ title, value }) {
 
 function TotalRow({ label, value }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-wrap items-center justify-between gap-2">
       <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
         {label}
       </span>
@@ -4393,19 +4366,27 @@ function Modal({
 }) {
   return createPortal(
     <div
-      className={`fixed inset-0 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md ${
+      className={`create-quotation-workspace fixed inset-0 flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-6 ${
         topMost ? "z-[60000]" : "z-[50000]"
       }`}
     >
-      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 ${title === "Add New Branch" || title === "Add New Tax Rule" ? "max-w-3xl" : "max-w-5xl"}`}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-4 py-4 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 shadow-sm dark:bg-blue-950/40 dark:text-blue-300">
               {icon || <FileText size={21} />}
             </div>
 
             <div className="min-w-0">
-              <h2 className="truncate text-xl font-bold text-slate-900 dark:text-white">
+              <p className="mb-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                Quotation Workspace
+              </p>
+              <h2 className="break-words text-xl font-semibold text-slate-900 dark:text-white">
                 {title}
               </h2>
 
@@ -4417,6 +4398,7 @@ function Modal({
 
           <button
             type="button"
+            aria-label={`Close ${title}`}
             onClick={onClose}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
@@ -4424,10 +4406,10 @@ function Modal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/50 p-6 dark:bg-slate-950/20">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {children}
         </div>
-      </div>
+      </section>
     </div>,
     document.body,
   );
@@ -4457,10 +4439,27 @@ function ModalActions({ onCancel, onSave, saveText }) {
   );
 }
 
+// Same section layout as the Products page, without image upload.
+function ProductSection({ title, description, children }) {
+  return (
+    <section className="mb-6 grid grid-cols-1 gap-5 border-b border-slate-100 pb-6 dark:border-slate-800 md:grid-cols-[175px_minmax(0,1fr)]">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+          {title}
+        </h3>
+        <p className="mt-2 text-sm leading-5 text-slate-400">{description}</p>
+      </div>
+      <div className="grid min-w-0 grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+        {children}
+      </div>
+    </section>
+  );
+}
+
 function Section({ title, children }) {
   return (
-    <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-      <h3 className="mb-4 text-base font-bold text-slate-900 dark:text-white">
+    <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <h3 className="mb-4 border-b border-slate-100 pb-3 dark:border-slate-800 text-base font-semibold text-slate-900 dark:text-white">
         {title}
       </h3>
 
@@ -4488,6 +4487,7 @@ function SearchableDropdown({
 
   const buttonRef = useRef(null);
   const dropdownRef = useRef(null);
+  const searchRef = useRef(null);
 
   const selected = options.find(
     (option) => String(option.value) === String(value),
@@ -4519,7 +4519,7 @@ function SearchableDropdown({
       width,
       top: shouldOpenUp ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
       maxHeight: dropdownHeight,
-      zIndex: 30000,
+      zIndex: 70000,
     });
   };
 
@@ -4527,6 +4527,7 @@ function SearchableDropdown({
     if (!open) return;
 
     updateDropdownPosition();
+    searchRef.current?.focus({ preventScroll: true });
 
     const handleClickOutside = (event) => {
       if (
@@ -4541,12 +4542,14 @@ function SearchableDropdown({
     };
 
     const handleScroll = (event) => {
-      if (dropdownRef.current?.contains(event.target)) {
+      if (
+        event.target instanceof window.Node &&
+        dropdownRef.current?.contains(event.target)
+      ) {
         return;
       }
 
-      setOpen(false);
-      setKeyword("");
+      updateDropdownPosition();
     };
 
     window.addEventListener("scroll", handleScroll, true);
@@ -4561,9 +4564,9 @@ function SearchableDropdown({
   }, [open, wide]);
 
   const handleSelect = (nextValue) => {
-    onChange(nextValue);
     setOpen(false);
     setKeyword("");
+    onChange(nextValue);
   };
 
   return (
@@ -4571,6 +4574,8 @@ function SearchableDropdown({
       <button
         ref={buttonRef}
         type="button"
+        aria-label={placeholder}
+        aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
         className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
       >
@@ -4586,79 +4591,81 @@ function SearchableDropdown({
         />
       </button>
 
-      {open && (
-        <div
-          ref={dropdownRef}
-          style={dropdownStyle}
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div className="border-b border-slate-100 p-2 dark:border-slate-800">
-            <div className="relative">
-              <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
+      {open &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={dropdownStyle}
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <div className="border-b border-slate-100 p-2 dark:border-slate-800">
+              <div className="relative">
+                <Search
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
 
-              <input
-                type="text"
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                placeholder={searchPlaceholder}
-                autoFocus
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
-              />
+                <input
+                  type="text"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  ref={searchRef}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="max-h-56 overflow-y-auto p-2">
-            {filteredOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => handleSelect(option.value)}
-                className={`w-full rounded-xl px-3 py-2 text-left transition hover:bg-blue-50 dark:hover:bg-slate-800 ${
-                  String(value || "") === String(option.value)
-                    ? "bg-blue-50 dark:bg-blue-950/40"
-                    : ""
-                }`}
-              >
-                <p
-                  className={`${wide ? "whitespace-normal break-words" : "truncate"} text-sm font-semibold text-slate-800 dark:text-slate-100`}
+            <div className="max-h-56 overflow-y-auto p-2">
+              {filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleSelect(option.value)}
+                  className={`w-full rounded-xl px-3 py-2 text-left transition hover:bg-blue-50 dark:hover:bg-slate-800 ${
+                    String(value || "") === String(option.value)
+                      ? "bg-blue-50 dark:bg-blue-950/40"
+                      : ""
+                  }`}
                 >
-                  {option.title}
-                </p>
-
-                {option.subtitle && (
                   <p
-                    className={`${wide || wrapSubtitle ? "whitespace-normal break-words" : "truncate"} text-xs font-medium text-slate-500 dark:text-slate-400`}
+                    className={`${wide ? "whitespace-normal break-words" : "truncate"} text-sm font-normal text-slate-800 dark:text-slate-100`}
                   >
-                    {option.subtitle}
+                    {option.title}
                   </p>
-                )}
-              </button>
-            ))}
 
-            {filteredOptions.length === 0 && (
-              <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
-                {emptyText}
+                  {option.subtitle && (
+                    <p
+                      className={`${wide || wrapSubtitle ? "whitespace-normal break-words" : "truncate"} text-sm font-normal text-slate-500 dark:text-slate-400`}
+                    >
+                      {option.subtitle}
+                    </p>
+                  )}
+                </button>
+              ))}
+
+              {filteredOptions.length === 0 && (
+                <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
+                  {emptyText}
+                </div>
+              )}
+            </div>
+
+            {addAction && (
+              <div className="border-t border-slate-100 p-2 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleSelect(addAction.value)}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-normal text-black transition hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+                >
+                  <Plus size={16} />
+                  {addAction.label}
+                </button>
               </div>
             )}
-          </div>
-
-          {addAction && (
-            <div className="border-t border-slate-100 p-2 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => handleSelect(addAction.value)}
-                className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
-              >
-                <Plus size={16} />
-                {addAction.label}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
@@ -4666,6 +4673,8 @@ function SearchableDropdown({
 function CustomDropdown({ value, onChange, options, icon }) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const buttonRef = useRef(null);
+  const [position, setPosition] = useState({});
 
   const addTaxOption = options.find((option) => option.value === "__add_tax__");
 
@@ -4678,28 +4687,61 @@ function CustomDropdown({ value, onChange, options, icon }) {
   );
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    if (!open) return;
+    const place = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const availableBelow = window.innerHeight - rect.bottom - 12;
+      const above = availableBelow < 220 && rect.top > availableBelow;
+      setPosition({
+        position: "fixed",
+        left: Math.max(
+          8,
+          Math.min(rect.left, window.innerWidth - rect.width - 8),
+        ),
+        width: Math.min(rect.width, window.innerWidth - 16),
+        maxHeight: Math.max(
+          80,
+          Math.min(320, above ? rect.top - 12 : availableBelow),
+        ),
+        zIndex: 70000,
+        ...(above
+          ? { bottom: window.innerHeight - rect.top + 6 }
+          : { top: rect.bottom + 6 }),
+      });
+    };
+    const outside = (event) => {
+      if (
+        !buttonRef.current?.contains(event.target) &&
+        !dropdownRef.current?.contains(event.target)
+      ) {
         setOpen(false);
       }
     };
-
-    document.addEventListener("mousedown", handleClickOutside);
-
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    place();
+    document.addEventListener("pointerdown", outside);
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
 
   const handleSelect = (nextValue) => {
-    onChange(nextValue);
     setOpen(false);
+    onChange(nextValue);
   };
 
   return (
-    <div ref={dropdownRef} className="relative min-w-0">
+    <div className="relative min-w-0">
       <button
+        ref={buttonRef}
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-normal text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
       >
         <span className="flex min-w-0 items-center gap-2">
           {icon && (
@@ -4719,46 +4761,52 @@ function CustomDropdown({ value, onChange, options, icon }) {
         />
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          <div className="max-h-60 overflow-y-auto">
-            {regularOptions.map((option) => {
-              const active = String(value) === String(option.value);
+      {open &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={position}
+            className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {regularOptions.map((option) => {
+                const active = String(value) === String(option.value);
 
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => handleSelect(option.value)}
-                  className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 ${
-                    active
-                      ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-                      : "text-slate-700 dark:text-slate-200"
-                  }`}
-                >
-                  <span className="truncate">{option.label}</span>
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleSelect(option.value)}
+                    className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-normal transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 ${
+                      active
+                        ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                        : "text-slate-700 dark:text-slate-200"
+                    }`}
+                  >
+                    <span className="truncate">{option.label}</span>
 
-                  {active && <CheckCircle2 size={16} className="shrink-0" />}
-                </button>
-              );
-            })}
-          </div>
-
-          {addTaxOption && (
-            <div className="border-t border-slate-100 p-2 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => handleSelect(addTaxOption.value)}
-                className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
-              >
-                <Plus size={16} />
-
-                {addTaxOption.label.replace(/^\+\s*/, "")}
-              </button>
+                    {active && <CheckCircle2 size={16} className="shrink-0" />}
+                  </button>
+                );
+              })}
             </div>
-          )}
-        </div>
-      )}
+
+            {addTaxOption && (
+              <div className="border-t border-slate-100 p-2 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleSelect(addTaxOption.value)}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-normal text-black transition hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+                >
+                  <Plus size={16} />
+
+                  {addTaxOption.label.replace(/^\+\s*/, "")}
+                </button>
+              </div>
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

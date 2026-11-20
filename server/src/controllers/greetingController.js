@@ -207,6 +207,48 @@ const prepareGreetingPayload = (payload) => {
   };
 };
 
+const checkCompanySmtpConfiguration = async (companyId) => {
+  const [companyRows] = await db.query(
+    `
+    SELECT
+      id,
+      smtp_host,
+      smtp_port,
+      smtp_user,
+      smtp_pass
+    FROM tbl_companies
+    WHERE id = ?
+    LIMIT 1
+    `,
+    [companyId],
+  );
+
+  if (companyRows.length === 0) {
+    return {
+      error: "Company not found",
+    };
+  }
+
+  const company = companyRows[0];
+
+  const smtpConfigured =
+    String(company.smtp_host || "").trim() &&
+    Number(company.smtp_port) > 0 &&
+    String(company.smtp_user || "").trim() &&
+    String(company.smtp_pass || "").trim();
+
+  if (!smtpConfigured) {
+    return {
+      error:
+        "Company SMTP is not configured. Please configure email settings before scheduling greetings.",
+    };
+  }
+
+  return {
+    company,
+  };
+};
+
 const getGreetingForScope = async (req, greetingId) => {
   const scope = getGreetingScope(req, "g");
 
@@ -331,6 +373,16 @@ export const createGreeting = async (req, res) => {
       });
     }
 
+    if (req.user.role === "company_admin" && greeting.status === "scheduled") {
+      const smtpCheck = await checkCompanySmtpConfiguration(companyId);
+
+      if (smtpCheck.error) {
+        return res.status(400).json({
+          message: smtpCheck.error,
+        });
+      }
+    }
+
     const [result] = await db.query(
       `
       INSERT INTO tbl_greetings
@@ -431,6 +483,20 @@ export const createBulkGreetings = async (req, res) => {
       return res.status(400).json({
         message: "Company information is missing",
       });
+    }
+
+    const hasScheduledGreeting = preparedGreetings.some(
+      (greeting) => greeting.status === "scheduled",
+    );
+
+    if (req.user.role === "company_admin" && hasScheduledGreeting) {
+      const smtpCheck = await checkCompanySmtpConfiguration(companyId);
+
+      if (smtpCheck.error) {
+        return res.status(400).json({
+          message: smtpCheck.error,
+        });
+      }
     }
 
     connection = await db.getConnection();
@@ -664,6 +730,18 @@ export const updateGreeting = async (req, res) => {
     }
 
     const greeting = prepared.data;
+
+    if (req.user.role === "company_admin" && greeting.status === "scheduled") {
+      const smtpCheck = await checkCompanySmtpConfiguration(
+        existingGreeting.company_id,
+      );
+
+      if (smtpCheck.error) {
+        return res.status(400).json({
+          message: smtpCheck.error,
+        });
+      }
+    }
 
     await db.query(
       `

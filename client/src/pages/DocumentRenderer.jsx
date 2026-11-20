@@ -1,4 +1,6 @@
-const APP_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, "");
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+
+const APP_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
 const DEFAULT_TEMPLATE = {
   show_logo: true,
@@ -721,9 +723,9 @@ function DocumentRenderer({
               </div>
 
               <div className="text-center">
-                <p className="text-[12px] font-bold">For {companyView.name}</p>
+                <p className="text-[12px] font-bold">From {companyView.name}</p>
 
-                <p className="mt-2 text-[13px] font-semibold text-slate-600">
+                <p className="mt-1 text-[13px] font-semibold text-slate-700">
                   {companyView.authorizedSignatoryName ||
                     bankView.authorizedSignatoryName ||
                     "Authorized Signatory"}

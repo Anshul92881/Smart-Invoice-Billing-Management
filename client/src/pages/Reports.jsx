@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
+import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
-
 import {
   IndianRupee,
   Users,
@@ -27,7 +27,6 @@ import {
   CalendarDays,
   Check,
 } from "lucide-react";
-
 import {
   ResponsiveContainer,
   BarChart,
@@ -37,24 +36,19 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
-
 const getList = (value) => (Array.isArray(value) ? value : []);
-
 const toSafeNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
 };
-
 function Reports() {
   const [report, setReport] = useState(null);
   const [branchId, setBranchId] = useState("");
   const [loading, setLoading] = useState(false);
-
   const [selectedCard, setSelectedCard] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [allInvoiceModal, setAllInvoiceModal] = useState(false);
   const [allPaymentModal, setAllPaymentModal] = useState(false);
-
   const fetchReports = async (selectedBranchId = branchId) => {
     try {
       setLoading(true);
@@ -67,17 +61,14 @@ function Reports() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     fetchReports("");
   }, []);
-
   const downloadCSV = (filename, rows) => {
     if (!Array.isArray(rows) || rows.length === 0) {
       toast.error("No data available to export");
       return;
     }
-
     const list = getList(rows);
     const headers = Object.keys(list[0] || {});
     const csvRows = [
@@ -88,27 +79,21 @@ function Reports() {
           .join(","),
       ),
     ];
-
     const blob = new Blob([csvRows.join("\n")], {
       type: "text/csv;charset=utf-8;",
     });
-
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-
     link.href = url;
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
-
     toast.success("CSV exported successfully");
   };
-
   const handleBranchChange = (value) => {
     setBranchId(value);
     fetchReports(value);
   };
-
   if (!report) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -119,7 +104,6 @@ function Reports() {
       </div>
     );
   }
-
   const summary = report.summary || {};
   const branches = getList(report.branches);
   const recentInvoices = getList(report.recentInvoices);
@@ -129,34 +113,25 @@ function Reports() {
   const branchPerformance = getList(report.branchPerformance);
   const outstandingCollections = getList(report.outstandingCollections);
   const taxReport = getList(report.taxReport);
-
   const monthlySales = getList(report.monthlySales);
   const monthlyExpenses = getList(report.monthlyExpenses);
   const monthlyInvoices = getList(report.monthlyInvoices);
-
   const monthlyProfit = monthlySales.map((sale) => {
-    const expense = monthlyExpenses.find(
-      (item) => item.month === sale.month,
-    );
-
+    const expense = monthlyExpenses.find((item) => item.month === sale.month);
     return {
       month: sale.month,
       profit: Number(sale.sales || 0) - Number(expense?.expenses || 0),
     };
   });
-
   const bestMonth = [...monthlySales].sort(
     (a, b) => Number(b.sales || 0) - Number(a.sales || 0),
   )[0];
-
   const bestCustomer = topCustomers[0];
-
   const highestBranch = [...branchPerformance].sort(
     (a, b) =>
       Number(b.revenue || b.total_sales || 0) -
       Number(a.revenue || a.total_sales || 0),
   )[0];
-
   const cards = [
     {
       type: "revenue",
@@ -181,7 +156,8 @@ function Reports() {
       value: formatAmount(summary.pending_amount),
       subtitle: "Pending collection",
       icon: <AlertCircle size={20} />,
-      color: "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:bg-red-950/40 dark:text-red-300",
+      color:
+        "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:bg-red-950/40 dark:text-red-300",
     },
     {
       type: "expenses",
@@ -244,27 +220,23 @@ function Reports() {
         "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
     },
   ];
-
   return (
-    <div className="w-full min-w-0 space-y-5 overflow-x-hidden">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="w-full min-w-0 space-y-6 text-sm text-slate-700 dark:text-slate-200">
+      <div className="px-1">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
-            <div className="mb-2 flex items-center gap-2 text-sm font-bold text-blue-700 dark:text-blue-300">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
               <BarChart3 size={17} />
-              Reports & Analytics
+              Workspace / Reports
             </div>
-
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
               Company Reports
             </h1>
-
             <p className="mt-1 max-w-3xl text-sm font-medium leading-5 text-slate-500 dark:text-slate-400">
               Revenue, invoices, payments, customers, products, branch
               performance and tax insights.
             </p>
           </div>
-
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="w-full sm:w-64">
               <BranchSelect
@@ -273,18 +245,16 @@ function Reports() {
                 onChange={handleBranchChange}
               />
             </div>
-
             <button
               onClick={() => fetchReports(branchId)}
               disabled={loading}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               {loading ? "Refreshing..." : "Refresh"}
             </button>
-
             <button
               onClick={() => downloadCSV("recent-invoices.csv", recentInvoices)}
-              className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+              className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
             >
               <Download size={16} />
               Export
@@ -292,15 +262,13 @@ function Reports() {
           </div>
         </div>
       </div>
-
       <QuickInsights
         bestMonth={bestMonth}
         bestCustomer={bestCustomer}
         highestBranch={highestBranch}
         summary={summary}
       />
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => (
           <SummaryCard
             key={card.type}
@@ -309,31 +277,26 @@ function Reports() {
           />
         ))}
       </div>
-
       <InvoiceStatusAnalytics summary={summary} />
-
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-4">
         <ChartCard
           title="Monthly Revenue"
           subtitle="Invoice amount month-wise"
           data={monthlySales}
           dataKey="sales"
         />
-
         <ChartCard
           title="Monthly Expenses"
           subtitle="Expense amount month-wise"
           data={monthlyExpenses}
           dataKey="expenses"
         />
-
         <ChartCard
           title="Monthly Profit"
           subtitle="Sales minus expenses"
           data={monthlyProfit}
           dataKey="profit"
         />
-
         <ChartCard
           title="Invoice Trend"
           subtitle="Monthly invoice count"
@@ -341,34 +304,27 @@ function Reports() {
           dataKey="invoice_count"
         />
       </div>
-
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <TopCustomers customers={topCustomers} />
         <TopProducts products={topProducts} />
       </div>
-
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <BranchPerformance branches={branchPerformance} />
         <OutstandingCollection collections={outstandingCollections} />
       </div>
-
       <TaxReport taxReport={taxReport} summary={summary} />
-
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5">
         <RecentInvoices
           invoices={recentInvoices}
           onView={setSelectedInvoice}
           onViewAll={() => setAllInvoiceModal(true)}
         />
-
         <RecentPayments
           payments={recentPayments}
           onViewAll={() => setAllPaymentModal(true)}
         />
       </div>
-
       <ExportCenter report={report} downloadCSV={downloadCSV} />
-
       {selectedCard && (
         <CardDetailsModal
           type={selectedCard}
@@ -377,14 +333,12 @@ function Reports() {
           onClose={() => setSelectedCard(null)}
         />
       )}
-
       {selectedInvoice && (
         <InvoiceModal
           invoice={selectedInvoice}
           onClose={() => setSelectedInvoice(null)}
         />
       )}
-
       {allInvoiceModal && (
         <AllInvoicesModal
           invoices={recentInvoices}
@@ -392,15 +346,24 @@ function Reports() {
           onView={setSelectedInvoice}
         />
       )}
-
       {allPaymentModal && (
         <AllPaymentsModal
           payments={recentPayments}
           onClose={() => setAllPaymentModal(false)}
         />
       )}
-
       <style>{`
+        .report-fit-table th, .report-fit-table td { overflow-wrap: anywhere; }
+        @media (max-width: 767px) {
+          .report-fit-table, .report-fit-table tbody { display: block; width: 100%; }
+          .report-fit-table thead { display: none; }
+          .report-fit-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px; }
+          .report-fit-table td { display: block; min-width: 0; padding: 8px; }
+          .report-fit-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 4px; font-size: 14px; font-weight: 500; color: #64748b; }
+          .dark .report-fit-table td[data-label]::before { color: #94a3b8; }
+          .report-fit-table td[colspan] { grid-column: 1 / -1; }
+        }
+
         .input {
           width: 100%;
           border: 1px solid #cbd5e1;
@@ -412,26 +375,21 @@ function Reports() {
           color: #0f172a;
           transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
         }
-
         .input::placeholder {
           color: #94a3b8;
         }
-
         .input:focus {
           border-color: #2563eb;
           box-shadow: 0 0 0 3px #dbeafe;
         }
-
         .dark .input {
           border-color: #334155;
           background: #0f172a;
           color: #e2e8f0;
         }
-
         .dark .input::placeholder {
           color: #64748b;
         }
-
         .dark .input:focus {
           border-color: #3b82f6;
           box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.35);
@@ -440,48 +398,60 @@ function Reports() {
     </div>
   );
 }
-
 function BranchSelect({ branches, value, onChange }) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
-
+  const buttonRef = useRef(null);
+  const [position, setPosition] = useState({});
   useEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(rect.width, window.innerWidth - 24);
+      const openUp = window.innerHeight - rect.bottom < 264 && rect.top > 264;
+      setPosition({
+        position: "fixed",
+        width,
+        left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
+        top: openUp ? undefined : rect.bottom + 6,
+        bottom: openUp ? window.innerHeight - rect.top + 6 : undefined,
+        zIndex: 70000,
+      });
+    };
+    updatePosition();
     const handleClickOutside = (event) => {
       if (
         dropdownRef.current &&
-        !dropdownRef.current.contains(event.target)
+        !dropdownRef.current.contains(event.target) &&
+        !buttonRef.current?.contains(event.target)
       ) {
         setOpen(false);
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
-
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
     };
-  }, []);
-
+  }, [open]);
   const branchList = getList(branches);
-
   const formatBranchLabel = (branch) => {
     if (!branch?.branch_name) return "Selected Branch";
-
     return branch.branch_code
       ? `${branch.branch_name} (${branch.branch_code})`
       : branch.branch_name;
   };
-
   const selectedBranch = branchList.find(
-    (branch) => String(branch.id) === String(value)
+    (branch) => String(branch.id) === String(value),
   );
-
   return (
-    <div
-      ref={dropdownRef}
-      className="relative w-full min-w-0 sm:min-w-[220px]"
-    >
+    <div className="relative w-full min-w-0 sm:min-w-[220px]">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
@@ -489,72 +459,61 @@ function BranchSelect({ branches, value, onChange }) {
         className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-600"
       >
         <span className="min-w-0 truncate">
-          {value === ""
-            ? "All Branches"
-            : formatBranchLabel(selectedBranch)}
+          {value === "" ? "All Branches" : formatBranchLabel(selectedBranch)}
         </span>
-
         <ChevronDown
           size={16}
-          className={`shrink-0 transition ${
-            open ? "rotate-180" : ""
-          }`}
+          className={`shrink-0 transition ${open ? "rotate-180" : ""}`}
         />
       </button>
-
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          <div className="max-h-64 overflow-y-auto">
-            <button
-              type="button"
-              onClick={() => {
-                onChange("");
-                setOpen(false);
-              }}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <span>All Branches</span>
-
-              {value === "" && (
-                <Check
-                  size={15}
-                  className="shrink-0 text-green-600"
-                />
-              )}
-            </button>
-
-            {branchList.map((branch) => (
+      {open &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={position}
+            className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <div className="max-h-64 overflow-y-auto">
               <button
-                key={branch.id}
                 type="button"
                 onClick={() => {
-                  onChange(String(branch.id));
+                  onChange("");
                   setOpen(false);
                 }}
                 className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
               >
-                <span className="min-w-0 truncate">
-                  {formatBranchLabel(branch)}
-                  {(branch.is_main === true ||
-                    branch.is_main === 1) &&
-                    " • HQ"}
-                </span>
-
-                {String(value) === String(branch.id) && (
-                  <Check
-                    size={15}
-                    className="shrink-0 text-green-600"
-                  />
+                <span>All Branches</span>
+                {value === "" && (
+                  <Check size={15} className="shrink-0 text-green-600" />
                 )}
               </button>
-            ))}
-          </div>
-        </div>
-      )}
+              {branchList.map((branch) => (
+                <button
+                  key={branch.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(String(branch.id));
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <span className="min-w-0 truncate">
+                    {formatBranchLabel(branch)}
+                    {(branch.is_main === true || branch.is_main === 1) &&
+                      " • HQ"}
+                  </span>
+                  {String(value) === String(branch.id) && (
+                    <Check size={15} className="shrink-0 text-green-600" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
-
 
 function QuickInsights({ bestMonth, bestCustomer, highestBranch, summary }) {
   const insights = [
@@ -562,13 +521,19 @@ function QuickInsights({ bestMonth, bestCustomer, highestBranch, summary }) {
       title: "Best Month",
       value: bestMonth?.month || "-",
       sub: formatAmount(bestMonth?.sales || 0),
-      icon: <CalendarDays size={18} />,
+      icon: <CalendarDays size={19} />,
+      tone: "border-blue-200 from-blue-50 dark:border-blue-900 dark:from-blue-950/40",
+      iconColor:
+        "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
     },
     {
       title: "Top Customer",
       value: bestCustomer?.customer_name || "-",
       sub: formatAmount(bestCustomer?.total_sales || 0),
-      icon: <Crown size={18} />,
+      icon: <Crown size={19} />,
+      tone: "border-violet-200 from-violet-50 dark:border-violet-900 dark:from-violet-950/40",
+      iconColor:
+        "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
     },
     {
       title: "Best Branch",
@@ -576,40 +541,48 @@ function QuickInsights({ bestMonth, bestCustomer, highestBranch, summary }) {
       sub: formatAmount(
         highestBranch?.revenue || highestBranch?.total_sales || 0,
       ),
-      icon: <Building2 size={18} />,
+      icon: <Building2 size={19} />,
+      tone: "border-emerald-200 from-emerald-50 dark:border-emerald-900 dark:from-emerald-950/40",
+      iconColor:
+        "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
     },
     {
       title: "Collection Due",
       value: formatAmount(summary.pending_amount),
       sub: `${summary.pending_invoices || 0} Pending Invoices`,
-      icon: <AlertCircle size={18} />,
+      icon: <AlertCircle size={19} />,
+      tone: "border-amber-200 from-amber-50 dark:border-amber-900 dark:from-amber-950/40",
+      iconColor:
+        "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {insights.map((item) => (
         <div
           key={item.title}
-          className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+          className={`flex min-w-0 items-start gap-3 rounded-xl border bg-gradient-to-br to-white px-4 py-3 shadow-sm dark:to-slate-900 ${item.tone}`}
         >
-          <div className="flex items-center gap-2">
-            <div className="inline-flex shrink-0 rounded-lg bg-blue-50 p-2 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-              {item.icon}
-            </div>
+          <span
+            className={`mt-0.5 shrink-0 rounded-lg p-2.5 ${item.iconColor}`}
+          >
+            {item.icon}
+          </span>
 
-            <p className="truncate text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
               {item.title}
             </p>
+
+            <h3 className="mt-1 break-words text-lg font-semibold leading-snug text-slate-900 dark:text-white">
+              {item.value}
+            </h3>
+
+            <p className="mt-1 break-words text-sm text-slate-600 dark:text-slate-300">
+              {item.sub}
+            </p>
           </div>
-
-          <h3 className="mt-3 truncate text-lg font-bold text-slate-900 dark:text-white">
-            {item.value}
-          </h3>
-
-          <p className="mt-1 truncate text-sm text-slate-700 dark:text-slate-200">
-            {item.sub}
-          </p>
         </div>
       ))}
     </div>
@@ -617,47 +590,54 @@ function QuickInsights({ bestMonth, bestCustomer, highestBranch, summary }) {
 }
 
 function SummaryCard({ title, value, subtitle, icon, color, onClick }) {
+  const tone =
+    color.includes("emerald") || color.includes("green")
+      ? "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900 dark:from-emerald-950/40 dark:to-slate-900"
+      : color.includes("red") || color.includes("rose")
+        ? "border-rose-200 bg-gradient-to-br from-rose-50 to-white dark:border-rose-900 dark:from-rose-950/40 dark:to-slate-900"
+        : color.includes("orange") || color.includes("yellow")
+          ? "border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900 dark:from-amber-950/40 dark:to-slate-900"
+          : color.includes("purple") || color.includes("violet")
+            ? "border-violet-200 bg-gradient-to-br from-violet-50 to-white dark:border-violet-900 dark:from-violet-950/40 dark:to-slate-900"
+            : "border-blue-200 bg-gradient-to-br from-blue-50 to-white dark:border-blue-900 dark:from-blue-950/40 dark:to-slate-900";
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group min-w-0 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-700"
+      title="View report details"
+      className={`flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${tone}`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-slate-500 dark:text-slate-400">
-            {title}
-          </p>
-          <h2 className="mt-1 truncate text-2xl font-bold text-slate-900 dark:text-white">
-            {value}
-          </h2>
-          <p className="mt-1 truncate text-xs font-semibold text-slate-400 dark:text-slate-500">
-            {subtitle}
-          </p>
-          <p className="mt-2 text-xs font-semibold text-blue-600 opacity-0 transition group-hover:opacity-100">
-            Click to view details
-          </p>
-        </div>
-
-        <div className={`shrink-0 rounded-xl p-3 ${color}`}>{icon}</div>
-      </div>
+      <span className={`shrink-0 rounded-lg p-2.5 ${color}`}>{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm text-slate-500 dark:text-slate-400">
+          {title}
+        </span>
+        <span className="mt-1 block break-words text-2xl font-semibold leading-tight text-slate-900 dark:text-white">
+          {value}
+        </span>
+        <span className="mt-0.5 block text-sm text-slate-500 dark:text-slate-400">
+          {subtitle}
+        </span>
+      </span>
+      <Eye size={16} className="shrink-0 text-slate-400" />
     </button>
   );
 }
-
 function InvoiceStatusAnalytics({ summary }) {
   const rows = [
     {
       label: "Paid",
       count: summary.paid_invoices || 0,
       amount: summary.paid_amount || summary.total_received || 0,
-      className: "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300",
+      className:
+        "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300",
     },
     {
       label: "Partial",
       count: summary.partial_invoices || 0,
       amount: summary.partial_amount || 0,
-      className: "bg-yellow-50 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300",
+      className:
+        "bg-yellow-50 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300",
     },
     {
       label: "Pending",
@@ -669,16 +649,16 @@ function InvoiceStatusAnalytics({ summary }) {
       label: "Overdue",
       count: summary.overdue_invoices || 0,
       amount: summary.overdue_amount || 0,
-      className: "bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300",
+      className:
+        "bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300",
     },
   ];
-
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex items-center gap-2">
         <Receipt className="text-blue-600" size={20} />
         <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Invoice Status Analytics
           </h2>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -686,12 +666,11 @@ function InvoiceStatusAnalytics({ summary }) {
           </p>
         </div>
       </div>
-
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {rows.map((row) => (
           <div key={row.label} className={`rounded-2xl p-4 ${row.className}`}>
             <p className="text-sm font-semibold">{row.label} Invoices</p>
-            <h3 className="mt-1 text-2xl font-bold">{row.count}</h3>
+            <h3 className="mt-1 text-2xl font-semibold">{row.count}</h3>
             <p className="mt-1 text-sm font-semibold">
               {formatAmount(row.amount)}
             </p>
@@ -701,28 +680,25 @@ function InvoiceStatusAnalytics({ summary }) {
     </div>
   );
 }
-
 function ChartCard({ title, subtitle, data, dataKey }) {
   const chartData = getList(data);
-
   return (
     <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:col-span-1">
       <div className="mb-4">
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
           {title}
         </h2>
         <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
           {subtitle}
         </p>
       </div>
-
       <div className="h-[250px] w-full min-w-0 overflow-hidden">
         {chartData.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="month" fontSize={12} />
-              <YAxis fontSize={12} />
+              <XAxis dataKey="month" fontSize={14} />
+              <YAxis fontSize={14} />
               <Tooltip />
               <Bar dataKey={dataKey} fill="#2563eb" radius={[8, 8, 0, 0]} />
             </BarChart>
@@ -734,10 +710,8 @@ function ChartCard({ title, subtitle, data, dataKey }) {
     </div>
   );
 }
-
 function TopCustomers({ customers }) {
   const list = getList(customers);
-
   return (
     <DataCard
       title="Top Customers"
@@ -754,16 +728,13 @@ function TopCustomers({ customers }) {
             value={formatAmount(customer.total_sales)}
           />
         ))}
-
         {list.length === 0 && <EmptyBox text="No customer sales found." />}
       </div>
     </DataCard>
   );
 }
-
 function TopProducts({ products }) {
   const list = getList(products);
-
   return (
     <DataCard
       title="Top Products"
@@ -780,7 +751,6 @@ function TopProducts({ products }) {
             value={formatAmount(product.total_sales || product.revenue || 0)}
           />
         ))}
-
         {list.length === 0 && (
           <EmptyBox text="Top product data not available yet." />
         )}
@@ -788,10 +758,8 @@ function TopProducts({ products }) {
     </DataCard>
   );
 }
-
 function BranchPerformance({ branches }) {
   const list = getList(branches);
-
   return (
     <DataCard
       title="Branch Performance"
@@ -817,10 +785,8 @@ function BranchPerformance({ branches }) {
     </DataCard>
   );
 }
-
 function OutstandingCollection({ collections }) {
   const list = getList(collections);
-
   return (
     <DataCard
       title="Outstanding Collection"
@@ -841,7 +807,6 @@ function OutstandingCollection({ collections }) {
     </DataCard>
   );
 }
-
 function TaxReport({ taxReport, summary }) {
   const list = getList(taxReport);
   const fallbackRows = [
@@ -850,7 +815,6 @@ function TaxReport({ taxReport, summary }) {
     ["IGST", formatAmount(summary.total_igst || 0)],
     ["Total Tax", formatAmount(summary.total_tax || 0)],
   ];
-
   const rows =
     list.length > 0
       ? list.map((tax) => [
@@ -858,7 +822,6 @@ function TaxReport({ taxReport, summary }) {
           formatAmount(tax.amount || tax.total_tax || 0),
         ])
       : fallbackRows;
-
   return (
     <DataCard
       title="Tax Report"
@@ -873,7 +836,6 @@ function TaxReport({ taxReport, summary }) {
     </DataCard>
   );
 }
-
 function RecentInvoices({ invoices, onView, onViewAll }) {
   const list = getList(invoices);
   const latestInvoices = [...list]
@@ -881,7 +843,6 @@ function RecentInvoices({ invoices, onView, onViewAll }) {
       (a, b) => new Date(b.invoice_date || 0) - new Date(a.invoice_date || 0),
     )
     .slice(0, 5);
-
   return (
     <DataCard
       title="Recent Invoices"
@@ -892,7 +853,7 @@ function RecentInvoices({ invoices, onView, onViewAll }) {
           <button
             type="button"
             onClick={onViewAll}
-            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
           >
             View All
           </button>
@@ -903,10 +864,8 @@ function RecentInvoices({ invoices, onView, onViewAll }) {
     </DataCard>
   );
 }
-
 function RecentPayments({ payments, onViewAll }) {
   const list = getList(payments);
-
   return (
     <DataCard
       title="Recent Payments"
@@ -917,7 +876,7 @@ function RecentPayments({ payments, onViewAll }) {
           <button
             type="button"
             onClick={onViewAll}
-            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
           >
             View All
           </button>
@@ -928,7 +887,6 @@ function RecentPayments({ payments, onViewAll }) {
     </DataCard>
   );
 }
-
 function ExportCenter({ report, downloadCSV }) {
   const exports = [
     ["Invoice CSV", "invoices.csv", report.recentInvoices || []],
@@ -942,13 +900,12 @@ function ExportCenter({ report, downloadCSV }) {
     ],
     ["Tax Report CSV", "tax-report.csv", report.taxReport || []],
   ];
-
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex items-center gap-2">
         <Download className="text-blue-600" size={20} />
         <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Export Center
           </h2>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -956,14 +913,13 @@ function ExportCenter({ report, downloadCSV }) {
           </p>
         </div>
       </div>
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {exports.map(([label, filename, rows]) => (
           <button
             key={filename}
             type="button"
             onClick={() => downloadCSV(filename, rows)}
-            className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             <Download size={16} />
             {label}
@@ -973,11 +929,9 @@ function ExportCenter({ report, downloadCSV }) {
     </div>
   );
 }
-
 function CardDetailsModal({ type, summary, report, onClose }) {
   const topCustomer = report.topCustomers?.[0];
   const topProduct = report.topProducts?.[0];
-
   const dataMap = {
     revenue: {
       title: "Revenue Details",
@@ -1079,9 +1033,7 @@ function CardDetailsModal({ type, summary, report, onClose }) {
       ],
     },
   };
-
   const data = dataMap[type] || dataMap.revenue;
-
   return (
     <BaseModal title={data.title} subtitle={data.subtitle} onClose={onClose}>
       <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
@@ -1092,37 +1044,29 @@ function CardDetailsModal({ type, summary, report, onClose }) {
     </BaseModal>
   );
 }
-
 function AllInvoicesModal({ invoices, onClose, onView }) {
   const list = getList(invoices);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const perPage = 8;
-
   const filtered = useMemo(() => {
     return list.filter((invoice) => {
       const keyword = search.toLowerCase();
-
       const matchesSearch =
         (invoice.invoice_number || "").toLowerCase().includes(keyword) ||
         (invoice.customer_name || "").toLowerCase().includes(keyword) ||
         (invoice.branch_name || "").toLowerCase().includes(keyword);
-
       const invoiceStatus = invoice.status || invoice.invoice_status;
       const matchesStatus = status ? invoiceStatus === status : true;
-
       return matchesSearch && matchesStatus;
     });
   }, [list, search, status]);
-
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
-
   useEffect(() => {
     setPage(1);
   }, [search, status]);
-
   return (
     <BaseModal
       title="All Invoices"
@@ -1143,7 +1087,6 @@ function AllInvoicesModal({ invoices, onClose, onView }) {
             className="input pl-10"
           />
         </div>
-
         <div className="relative w-full md:w-56">
           <Filter
             size={17}
@@ -1164,11 +1107,9 @@ function AllInvoicesModal({ invoices, onClose, onView }) {
           </select>
         </div>
       </div>
-
-      <div className="max-h-[58vh] overflow-y-auto">
+      <div className="min-w-0">
         <InvoiceTable invoices={paginated} onView={onView} />
       </div>
-
       <Pagination
         page={page}
         totalPages={totalPages}
@@ -1178,15 +1119,12 @@ function AllInvoicesModal({ invoices, onClose, onView }) {
     </BaseModal>
   );
 }
-
 function AllPaymentsModal({ payments, onClose }) {
   const list = getList(payments);
   const [page, setPage] = useState(1);
   const perPage = 8;
-
   const totalPages = Math.max(1, Math.ceil(list.length / perPage));
   const paginated = list.slice((page - 1) * perPage, page * perPage);
-
   return (
     <BaseModal
       title="All Payments"
@@ -1194,10 +1132,9 @@ function AllPaymentsModal({ payments, onClose }) {
       onClose={onClose}
       size="max-w-5xl"
     >
-      <div className="max-h-[60vh] overflow-y-auto">
+      <div className="min-w-0">
         <PaymentTable payments={paginated} />
       </div>
-
       <Pagination
         page={page}
         totalPages={totalPages}
@@ -1207,7 +1144,6 @@ function AllPaymentsModal({ payments, onClose }) {
     </BaseModal>
   );
 }
-
 function InvoiceModal({ invoice, onClose }) {
   return (
     <BaseModal
@@ -1215,7 +1151,7 @@ function InvoiceModal({ invoice, onClose }) {
       subtitle="Quick invoice preview."
       onClose={onClose}
       size="max-w-3xl"
-      zIndex="z-[70]"
+      zIndex="z-[60000]"
     >
       <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
         <InfoBox label="Customer" value={invoice.customer_name} />
@@ -1236,14 +1172,12 @@ function InvoiceModal({ invoice, onClose }) {
     </BaseModal>
   );
 }
-
 function InvoiceTable({ invoices, onView }) {
   const list = getList(invoices);
-
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[850px] text-sm">
-        <thead className="bg-slate-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+    <div className="min-w-0 w-full">
+      <table className="report-fit-table w-full table-fixed text-left text-sm">
+        <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           <tr>
             {[
               "Invoice",
@@ -1256,45 +1190,65 @@ function InvoiceTable({ invoices, onView }) {
             ].map((head) => (
               <th
                 key={head}
-                className="p-4 text-left text-xs font-bold uppercase tracking-wide"
+                className="px-3 py-3 text-left text-sm font-medium break-words"
               >
                 {head}
               </th>
             ))}
           </tr>
         </thead>
-
         <tbody>
           {list.map((invoice) => (
             <tr
               key={invoice.id || invoice.invoice_number}
               className="border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-800"
             >
-              <td className="p-4 font-semibold text-slate-900 dark:text-white">
+              <td
+                data-label="Invoice"
+                className="px-3 py-3 align-top [overflow-wrap:anywhere] font-semibold text-slate-900 dark:text-white"
+              >
                 {invoice.invoice_number || "-"}
               </td>
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td
+                data-label="Branch"
+                className="px-3 py-3 align-top [overflow-wrap:anywhere] text-slate-600 dark:text-slate-300"
+              >
                 {invoice.branch_name || "Main Company"}
               </td>
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td
+                data-label="Customer"
+                className="px-3 py-3 align-top [overflow-wrap:anywhere] text-slate-600 dark:text-slate-300"
+              >
                 {invoice.customer_name || "-"}
               </td>
-              <td className="p-4 font-bold text-slate-900 dark:text-white">
+              <td
+                data-label="Amount"
+                className="px-3 py-3 align-top [overflow-wrap:anywhere] font-semibold text-slate-900 dark:text-white"
+              >
                 {formatAmount(invoice.total_amount)}
               </td>
-              <td className="p-4">
+              <td
+                data-label="Status"
+                className="px-3 py-3 align-top [overflow-wrap:anywhere]"
+              >
                 <StatusBadge
                   status={invoice.status || invoice.invoice_status}
                 />
               </td>
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td
+                data-label="Date"
+                className="px-3 py-3 align-top [overflow-wrap:anywhere] text-slate-600 dark:text-slate-300"
+              >
                 {formatDate(invoice.invoice_date)}
               </td>
-              <td className="p-4">
+              <td
+                data-label="Action"
+                className="px-3 py-3 align-top [overflow-wrap:anywhere]"
+              >
                 <button
                   type="button"
                   onClick={() => onView(invoice)}
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                  className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"
                 >
                   <Eye size={14} />
                   View
@@ -1302,7 +1256,6 @@ function InvoiceTable({ invoices, onView }) {
               </td>
             </tr>
           ))}
-
           {list.length === 0 && (
             <tr>
               <td colSpan="7" className="p-8">
@@ -1315,47 +1268,55 @@ function InvoiceTable({ invoices, onView }) {
     </div>
   );
 }
-
 function PaymentTable({ payments }) {
   const list = getList(payments);
-
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[650px] text-sm">
-        <thead className="bg-slate-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+    <div className="min-w-0 w-full">
+      <table className="report-fit-table w-full table-fixed text-left text-sm">
+        <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           <tr>
             {["Invoice", "Branch", "Customer", "Amount"].map((head) => (
               <th
                 key={head}
-                className="p-4 text-left text-xs font-bold uppercase tracking-wide"
+                className="px-3 py-3 text-left text-sm font-medium break-words"
               >
                 {head}
               </th>
             ))}
           </tr>
         </thead>
-
         <tbody>
           {list.map((payment) => (
             <tr
               key={payment.id}
               className="border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-800"
             >
-              <td className="p-4 font-semibold text-slate-900 dark:text-white">
+              <td
+                data-label="Invoice"
+                className="px-3 py-3 align-top [overflow-wrap:anywhere] font-semibold text-slate-900 dark:text-white"
+              >
                 {payment.invoice_number || "-"}
               </td>
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td
+                data-label="Branch"
+                className="px-3 py-3 align-top [overflow-wrap:anywhere] text-slate-600 dark:text-slate-300"
+              >
                 {payment.branch_name || "Main Company"}
               </td>
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td
+                data-label="Customer"
+                className="px-3 py-3 align-top [overflow-wrap:anywhere] text-slate-600 dark:text-slate-300"
+              >
                 {payment.customer_name || "-"}
               </td>
-              <td className="p-4 font-bold text-emerald-600">
+              <td
+                data-label="Amount"
+                className="px-3 py-3 align-top [overflow-wrap:anywhere] font-semibold text-emerald-600"
+              >
                 {formatAmount(payment.amount)}
               </td>
             </tr>
           ))}
-
           {list.length === 0 && (
             <tr>
               <td colSpan="4" className="p-8">
@@ -1368,15 +1329,16 @@ function PaymentTable({ payments }) {
     </div>
   );
 }
-
 function DataCard({ title, subtitle, icon, action, children }) {
   return (
     <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-blue-50 p-2 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">{icon}</div>
+          <div className="rounded-xl bg-blue-50 p-2 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+            {icon}
+          </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
               {title}
             </h2>
             <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -1386,51 +1348,46 @@ function DataCard({ title, subtitle, icon, action, children }) {
         </div>
         {action}
       </div>
-
       <div className="p-4">{children}</div>
     </div>
   );
 }
-
 function RankRow({ rank, title, subtitle, value }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 dark:bg-slate-950 p-3 dark:bg-slate-800">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
           {rank}
         </div>
         <div className="min-w-0">
           <p className="truncate font-semibold text-slate-900 dark:text-white">
             {title}
           </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             {subtitle}
           </p>
         </div>
       </div>
-
-      <p className="shrink-0 text-sm font-bold text-emerald-600">{value}</p>
+      <p className="shrink-0 text-sm font-semibold text-emerald-600">{value}</p>
     </div>
   );
 }
-
 function ResponsiveTable({ heads, rows, emptyText }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[500px] text-sm">
-        <thead className="bg-slate-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+    <div className="min-w-0 w-full">
+      <table className="report-fit-table w-full table-fixed text-left text-sm">
+        <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           <tr>
             {heads.map((head) => (
               <th
                 key={head}
-                className="p-3 text-left text-xs font-bold uppercase tracking-wide"
+                className="px-3 py-3 text-left text-sm font-medium break-words"
               >
                 {head}
               </th>
             ))}
           </tr>
         </thead>
-
         <tbody>
           {rows.map((row, index) => (
             <tr
@@ -1440,7 +1397,8 @@ function ResponsiveTable({ heads, rows, emptyText }) {
               {row.map((cell, cellIndex) => (
                 <td
                   key={cellIndex}
-                  className={`p-3 ${
+                  data-label={heads[cellIndex]}
+                  className={`p-3 align-top [overflow-wrap:anywhere] ${
                     cellIndex === 0
                       ? "font-semibold text-slate-900 dark:text-white"
                       : "text-slate-600 dark:text-slate-300"
@@ -1451,7 +1409,6 @@ function ResponsiveTable({ heads, rows, emptyText }) {
               ))}
             </tr>
           ))}
-
           {rows.length === 0 && (
             <tr>
               <td colSpan={heads.length} className="p-6">
@@ -1464,7 +1421,6 @@ function ResponsiveTable({ heads, rows, emptyText }) {
     </div>
   );
 }
-
 function Pagination({ page, totalPages, totalRecords, onPageChange }) {
   return (
     <div className="flex flex-col gap-3 border-t border-slate-200 dark:border-slate-800 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1474,26 +1430,23 @@ function Pagination({ page, totalPages, totalRecords, onPageChange }) {
           {totalRecords}
         </span>
       </p>
-
       <div className="flex items-center gap-2">
         <button
           type="button"
           disabled={page === 1}
           onClick={() => onPageChange(page - 1)}
-          className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-950 disabled:opacity-50"
+          className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-950 disabled:opacity-50"
         >
           Prev
         </button>
-
-        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
           Page {page} of {totalPages}
         </span>
-
         <button
           type="button"
           disabled={page === totalPages}
           onClick={() => onPageChange(page + 1)}
-          className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-950 disabled:opacity-50"
+          className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-950 disabled:opacity-50"
         >
           Next
         </button>
@@ -1501,60 +1454,65 @@ function Pagination({ page, totalPages, totalRecords, onPageChange }) {
     </div>
   );
 }
-
 function BaseModal({
   title,
   subtitle,
   children,
   onClose,
-  size = "max-w-3xl",
-  zIndex = "z-50",
+  size = "max-w-4xl",
+  zIndex = "z-[50000]",
 }) {
-  return (
+  return createPortal(
     <div
-      className={`fixed inset-0 ${zIndex} flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm`}
+      className={`fixed inset-0 ${zIndex} flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm`}
     >
       <div
-        className={`max-h-[92vh] w-full ${size} overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`flex max-h-[92dvh] flex-col w-full ${size} overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900`}
       >
-        <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-5">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-5">
           <div>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+            <p className="mb-1 text-sm text-slate-500 dark:text-slate-400">
+              Reports Workspace
+            </p>
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
               {title}
             </h2>
             <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
               {subtitle}
             </p>
           </div>
-
           <button
             type="button"
+            aria-label={`Close ${title}`}
             onClick={onClose}
             className="rounded-lg p-2 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 dark:bg-slate-900"
           >
             <X size={20} />
           </button>
         </div>
-
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {children}
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
-
 function InfoBox({ label, value }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
       <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
         {label}
       </p>
-      <div className="mt-1 text-sm font-bold text-slate-900 dark:text-white">
+      <div className="mt-1 break-words text-sm font-semibold text-slate-900 dark:text-white">
         {value || "-"}
       </div>
     </div>
   );
 }
-
 function EmptyBox({ text }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 dark:bg-slate-950 p-6 dark:border-slate-700 dark:bg-slate-950 text-center text-sm text-slate-500 dark:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400 dark:text-slate-500">
@@ -1562,21 +1520,17 @@ function EmptyBox({ text }) {
     </div>
   );
 }
-
 function StatusBadge({ status }) {
   const value = String(status || "draft").toLowerCase();
-
   const styles = {
     draft:
       "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
-    sent:
-      "border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-300",
+    sent: "border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-300",
     viewed:
       "border-purple-200 bg-purple-100 text-purple-700 dark:border-purple-800 dark:bg-purple-950/50 dark:text-purple-300",
     partial:
       "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
-    paid:
-      "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300",
+    paid: "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300",
     overdue:
       "border-red-200 bg-red-100 text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300",
     pending:
@@ -1584,10 +1538,9 @@ function StatusBadge({ status }) {
     cancelled:
       "border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-300",
   };
-
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold capitalize shadow-sm ${
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold capitalize ${
         styles[value] || styles.draft
       }`}
     >
@@ -1595,35 +1548,29 @@ function StatusBadge({ status }) {
     </span>
   );
 }
-
 function formatDate(date) {
   if (!date) return "-";
-
   return new Date(date).toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
 }
-
 function formatAmount(value) {
   return `₹ ${toSafeNumber(value).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
   })}`;
 }
-
 function percent(value, total) {
   const v = Number(value || 0);
   const t = Number(total || 0);
   if (!t) return "0%";
   return `${((v / t) * 100).toFixed(2)}%`;
 }
-
 function avg(value, count) {
   const v = Number(value || 0);
   const c = Number(count || 0);
   if (!c) return 0;
   return v / c;
 }
-
 export default Reports;

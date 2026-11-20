@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
+import { createPortal } from "react-dom";
 
 import {
   Crown,
@@ -8,7 +9,6 @@ import {
   CalendarClock,
   CreditCard,
   RefreshCcw,
-  FileText,
   Building2,
   CheckCircle2,
   XCircle,
@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Save,
   Activity,
+  Download,
 } from "lucide-react";
 
 function getPlanDuration(plan) {
@@ -247,7 +248,7 @@ function Subscriptions() {
       price: isFreePlan(plan) ? "0" : plan.price || "",
       duration_value: String(duration.value),
       duration_unit: duration.unit,
-      max_branches: plan.max_branches || "1",
+      max_branches: String(plan.max_branches ?? 0),
       features: plan.features || "",
       is_default: isFreePlan(plan) ? 1 : 0,
     });
@@ -275,11 +276,16 @@ function Subscriptions() {
       return;
     }
 
-    if (!planForm.max_branches || Number(planForm.max_branches) <= 0) {
-      toast.error("Max branches must be greater than 0");
+    const maxBranches = Number(planForm.max_branches);
+
+    if (
+      planForm.max_branches === "" ||
+      !Number.isInteger(maxBranches) ||
+      maxBranches < 0
+    ) {
+      toast.error("Max branches must be 0 or a positive whole number");
       return;
     }
-
     try {
       const payload = {
         ...planForm,
@@ -299,7 +305,7 @@ function Subscriptions() {
           planForm.plan_type === "free"
             ? durationToDays(planForm.duration_value, planForm.duration_unit)
             : 0,
-        max_branches: Number(planForm.max_branches),
+        max_branches: maxBranches,
         is_default: planForm.plan_type === "free" ? 1 : 0,
       };
 
@@ -401,18 +407,54 @@ function Subscriptions() {
     }
   };
 
-  const deletePlan = async (id) => {
-    if (!window.confirm("Are you sure you want to deactivate this plan?")) {
-      return;
-    }
+  const deletePlan = (id) => {
+    toast(
+      (t) => (
+        <div className="flex min-w-[300px] flex-col gap-3">
+          <div>
+            <p className="font-semibold text-slate-900">Deactivate Plan?</p>
 
-    try {
-      await api.delete(`/subscriptions/plans/${id}`);
-      toast.success("Plan deactivated successfully");
-      fetchData();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to deactivate plan");
-    }
+            <p className="mt-1 text-sm text-slate-600">
+              Are you sure you want to deactivate this plan?
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t.id)}
+              className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                toast.dismiss(t.id);
+
+                try {
+                  await api.delete(`/subscriptions/plans/${id}`);
+                  toast.success("Plan deactivated successfully");
+                  fetchData();
+                } catch (error) {
+                  toast.error(
+                    error.response?.data?.message ||
+                      "Failed to deactivate plan",
+                  );
+                }
+              }}
+              className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white"
+            >
+              Deactivate
+            </button>
+          </div>
+        </div>
+      ),
+      {
+        duration: Infinity,
+      },
+    );
   };
 
   const paidPayments = payments.filter(
@@ -425,12 +467,18 @@ function Subscriptions() {
   );
 
   const activeSubscriptions = subscriptions.filter(
-    (item) => item.status === "active",
+    (item) => Number(item.is_current) === 1,
   ).length;
 
-  const freeSubscriptions = subscriptions.filter(isFreeSubscription).length;
+  const freeSubscriptions = subscriptions.filter(
+    (item) => Number(item.is_current) === 1 && isFreeSubscription(item),
+  ).length;
 
-  const safeCompanies = Array.isArray(companies) ? companies : [];
+  const safeCompanies = Array.isArray(companies)
+    ? companies.filter(
+        (company) => String(company.status).toLowerCase() === "active",
+      )
+    : [];
 
   const visiblePlans = plans.filter((plan) => {
     if (planStatusFilter === "all") return true;
@@ -446,37 +494,28 @@ function Subscriptions() {
   ).length;
 
   return (
-    <div className="w-full min-w-0 space-y-6 overflow-x-hidden text-slate-900 dark:text-slate-100">
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="w-full min-w-0 space-y-5 overflow-x-hidden text-slate-900 dark:text-slate-100">
+      <div className="px-1">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
+            <div className="mb-2 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
               <Crown size={17} />
-              SaaS Subscription & Billing
+              Workspace / Subscriptions
             </div>
 
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
               Subscription Management
             </h1>
 
-            <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Create plans, assign subscriptions, manage renewals and branch
               license limits.
             </p>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setShowPlanModal(true)}
-            className="flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-blue-700 focus:outline-none focus:ring-0 active:ring-0"
-          >
-            <Plus size={17} />
-            Create Plan
-          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={<Building2 size={20} />}
           title="Total Subscriptions"
@@ -520,7 +559,7 @@ function Subscriptions() {
           subtitle="Select company, plan and auto-renewal preference."
         />
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px_auto]">
           <Field label="Company">
             <CustomSelect
               value={subscriptionForm.company_id}
@@ -553,17 +592,15 @@ function Subscriptions() {
               searchable
               placeholder="Select Plan"
               options={plans
-                .filter((plan) => (plan.status || "active") !== "inactive")
+                .filter(
+                  (plan) =>
+                    (plan.status || "active") !== "inactive" &&
+                    !isFreePlan(plan),
+                )
                 .map((plan) => ({
                   value: plan.id,
                   label: plan.plan_name,
-                  subLabel: `${
-                    isFreePlan(plan)
-                      ? "Free"
-                      : `₹${Number(plan.price || 0).toFixed(2)}`
-                  } / ${formatPlanDuration(plan)} / ${
-                    plan.max_branches || 1
-                  } Branch(es)`,
+                  subLabel: `₹${Number(plan.price || 0).toFixed(2)} / ${formatPlanDuration(plan)} / ${plan.max_branches ?? 0} Branch(es)`,
                 }))}
             />
           </Field>
@@ -580,21 +617,24 @@ function Subscriptions() {
               ]}
             />
           </Field>
-        </div>
 
-        <button className="mt-5 flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-slate-800 focus:outline-none focus:ring-0 active:ring-0 dark:hover:bg-slate-700">
-          <CheckCircle2 size={16} />
-          Assign Subscription
-        </button>
+          <button
+            type="submit"
+            className="flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700"
+          >
+            <CheckCircle2 size={16} />
+            Assign Subscription
+          </button>
+        </div>
       </form>
 
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
               Available Plans
             </h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               All SaaS plans created by SuperAdmin.
             </p>
           </div>
@@ -635,31 +675,31 @@ function Subscriptions() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {visiblePlans.map((plan) => (
             <div
               key={plan.id}
-              className="h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-4"
+              className="flex h-full min-w-0 flex-col rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm dark:border-slate-800 dark:from-slate-800/40 dark:to-slate-900"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
                       {plan.plan_name}
                     </h3>
                     {isFreePlan(plan) && (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-sm font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
                         Default
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     {isFreePlan(plan) ? "Free Plan" : "Paid Plan"}
                   </p>
                 </div>
 
                 <div
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  className={`rounded-full px-3 py-1 text-sm font-semibold ${
                     (plan.status || "active") === "inactive"
                       ? "bg-rose-50 text-rose-600 dark:bg-rose-950/20 dark:text-rose-300"
                       : "bg-green-100 text-green-700"
@@ -679,24 +719,24 @@ function Subscriptions() {
                 </span>
               </div>
 
-              <div className="mt-4 space-y-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
+              <div className="mt-4 space-y-2 text-sm font-normal text-slate-600 dark:text-slate-300">
                 <p>
                   <CalendarClock size={14} className="mr-2 inline" />
                   Plan Duration: {formatPlanDuration(plan)}
                 </p>
                 <p>
                   <Building2 size={14} className="mr-2 inline" />
-                  Branch Limit: {plan.max_branches || 1}
+                  Branch Limit: {plan.max_branches ?? 0}
                 </p>
               </div>
 
-              <div className="mt-4 border-t border-slate-200 dark:border-slate-800 pt-3">
-                <div className="mt-4 flex gap-2">
+              <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
+                <div className="mb-4 flex gap-2">
                   {(plan.status || "active") !== "inactive" && (
                     <button
                       type="button"
                       onClick={() => openEditPlan(plan)}
-                      className="flex-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950/70"
+                      className="flex-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-sm font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950/70"
                     >
                       Edit
                     </button>
@@ -705,7 +745,7 @@ function Subscriptions() {
                     <button
                       type="button"
                       onClick={() => deletePlan(plan.id)}
-                      className="flex-1 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-100 dark:bg-rose-950/20 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                      className="flex-1 rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-100 dark:bg-rose-950/20 dark:text-rose-300 dark:hover:bg-rose-950/40"
                     >
                       Deactivate
                     </button>
@@ -717,7 +757,7 @@ function Subscriptions() {
                   .map((feature) => (
                     <p
                       key={feature}
-                      className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300"
+                      className="mb-2 flex items-center gap-2 text-sm font-normal text-slate-600 dark:text-slate-300"
                     >
                       <CheckCircle2 size={14} className="text-emerald-600" />
                       {feature.trim()}
@@ -725,7 +765,7 @@ function Subscriptions() {
                   ))}
 
                 {!plan.features && (
-                  <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     No features added.
                   </p>
                 )}
@@ -734,7 +774,7 @@ function Subscriptions() {
           ))}
 
           {visiblePlans.length === 0 && (
-            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               {planStatusFilter === "inactive"
                 ? "No inactive plans found."
                 : "No active plans found."}
@@ -747,10 +787,10 @@ function Subscriptions() {
         <div className="border-b border-slate-200 dark:border-slate-800 p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
                 Company Subscriptions
               </h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Manage assigned plans, renewals and billing actions.
               </p>
             </div>
@@ -769,7 +809,7 @@ function Subscriptions() {
                   setSubscriptionPage(1);
                 }}
                 placeholder="Search company/plan"
-                className="input !pl-10"
+                className="subscription-input !pl-10"
               />
             </div>
           </div>
@@ -817,44 +857,40 @@ function Subscriptions() {
       )}
 
       <style>{`
-        .input {
+        .subscription-input {
           width: 100%;
           border: 1px solid #cbd5e1;
           padding: 10px 12px;
-          border-radius: 10px;
+          border-radius: 12px;
           font-size: 14px;
+          font-weight: 400;
+          color: #334155;
           outline: none;
           background: #ffffff;
         }
 
-        .input::placeholder {
+        .subscription-input::placeholder {
           color: #94a3b8;
         }
 
-        .input:focus {
+        .subscription-input:focus {
           border-color: #2563eb;
           box-shadow: 0 0 0 3px #dbeafe;
         }
 
-        .dark .input {
+        .dark .subscription-input {
           border-color: #334155;
           background: #0f172a;
           color: #e2e8f0;
         }
 
-        .dark .input::placeholder {
+        .dark .subscription-input::placeholder {
           color: #64748b;
         }
 
-        .dark .input:focus {
+        .dark .subscription-input:focus {
           border-color: #3b82f6;
           box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.35);
-        }
-
-        button:focus,
-        button:focus-visible {
-          outline: none;
-          box-shadow: none;
         }
       `}</style>
     </div>
@@ -868,20 +904,20 @@ function CreatePlanModal({
   onSubmit,
   onClose,
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
-      <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
-        <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 p-5">
+  return createPortal(
+    <div className="fixed inset-0 z-[60000] flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm">
+      <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-2xl">
+        <div className="flex items-start justify-between shrink-0 border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start gap-3">
-            <div className="shrink-0 rounded-xl bg-blue-50 dark:bg-blue-950/40 p-3 text-blue-700 dark:text-blue-300">
+            <div className="shrink-0 rounded-xl bg-slate-100 p-3 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               <PackageCheck size={22} />
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
                 {editingPlanId ? "Edit Plan" : "Create New Plan"}
               </h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 Configure plan type, validity and branch allowance.
               </p>
             </div>
@@ -890,6 +926,7 @@ function CreatePlanModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close dialog"
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={20} />
@@ -970,7 +1007,7 @@ function CreatePlanModal({
                       updatePlanField("duration_value", e.target.value)
                     }
                     placeholder="Duration"
-                    className="input"
+                    className="subscription-input"
                   />
 
                   <CustomSelect
@@ -999,11 +1036,13 @@ function CreatePlanModal({
                 label="Max Branches"
                 type="number"
                 name="max_branches"
+                min="0"
+                step="1"
                 value={planForm.max_branches}
                 onChange={(e) =>
                   updatePlanField("max_branches", e.target.value)
                 }
-                placeholder="1"
+                placeholder="0"
               />
             </div>
 
@@ -1044,7 +1083,8 @@ function CreatePlanModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1057,9 +1097,9 @@ function SubscriptionsTable({
   subscriptionSearch,
 }) {
   return (
-    <div className="overflow-x-hidden">
-      <table className="w-full table-fixed text-sm">
-        <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+    <div className="w-full overflow-x-auto">
+      <table className="w-full table-auto text-left text-sm [&_th]:p-4 [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap [&_td]:align-middle">
+        <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           <tr>
             <TableHead title="Company" />
             <TableHead title="Plan" />
@@ -1078,32 +1118,45 @@ function SubscriptionsTable({
                 Number(item.subscription_id) === Number(subscription.id),
             );
 
+            const isCurrent = Number(subscription.is_current) === 1;
+            const isPrevious = !isCurrent && subscription.status === "active";
+            const isFree = isFreeSubscription(subscription);
+
             return (
               <tr
                 key={subscription.id}
-                className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:bg-slate-700 dark:bg-slate-800"
+                className="border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700"
               >
-                <td className="break-words p-4 font-semibold text-slate-900 dark:text-white">
+                <td className="p-4 font-semibold text-slate-900 dark:text-white">
                   {subscription.company_name || "-"}
                 </td>
 
-                <td className="break-words p-4">
+                <td className="whitespace-nowrap p-4">
                   <p className="font-semibold text-slate-800 dark:text-slate-100">
                     {subscription.plan_name || "-"}
                   </p>
-                  <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     {formatPlanDuration(subscription)}
                   </p>
                 </td>
 
                 <td className="p-4 font-semibold text-slate-900 dark:text-white">
-                  {isFreeSubscription(subscription)
+                  {isFree
                     ? "Free"
                     : `₹ ${Number(subscription.price || 0).toFixed(2)}`}
                 </td>
 
                 <td className="p-4">
-                  <StatusBadge status={subscription.status} />
+                  <StatusBadge
+                    status={
+                      isCurrent
+                        ? "current"
+                        : isPrevious
+                          ? "previous"
+                          : subscription.status
+                    }
+                  />
                 </td>
 
                 <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">
@@ -1111,31 +1164,43 @@ function SubscriptionsTable({
                 </td>
 
                 <td className="p-4">
-                  <button
-                    type="button"
-                    onClick={() => toggleAutoRenewal(subscription)}
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
-                      subscription.auto_renewal
-                        ? "bg-green-50 dark:bg-emerald-950/40 text-green-700"
-                        : "bg-rose-50 text-rose-600 dark:bg-rose-950/20 dark:text-rose-300"
-                    }`}
-                  >
-                    {subscription.auto_renewal ? (
-                      <RefreshCcw size={12} />
-                    ) : (
+                  {!isCurrent ? (
+                    <span className="text-sm font-semibold text-slate-400">
+                      Not current
+                    </span>
+                  ) : isFree ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
                       <XCircle size={12} />
-                    )}
-                    {subscription.auto_renewal ? "Enabled" : "Disabled"}
-                  </button>
+                      Disabled
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => toggleAutoRenewal(subscription)}
+                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold ${
+                        subscription.auto_renewal
+                          ? "bg-green-50 text-green-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                          : "bg-rose-50 text-rose-600 dark:bg-rose-950/20 dark:text-rose-300"
+                      }`}
+                    >
+                      {subscription.auto_renewal ? (
+                        <RefreshCcw size={12} />
+                      ) : (
+                        <XCircle size={12} />
+                      )}
+
+                      {subscription.auto_renewal ? "Enabled" : "Disabled"}
+                    </button>
+                  )}
                 </td>
 
                 <td className="p-4">
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-nowrap items-center gap-2">
                     {!invoice && subscription.status === "pending_payment" && (
                       <button
                         type="button"
                         onClick={() => generateInvoice(subscription.id)}
-                        className="rounded-lg bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950/70"
+                        className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
                       >
                         Generate Invoice
                       </button>
@@ -1145,14 +1210,17 @@ function SubscriptionsTable({
                       <button
                         type="button"
                         onClick={() => downloadInvoice(invoice)}
-                        className="rounded-lg bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950/70"
+                        title="Download invoice"
+                        aria-label="Download invoice"
+                        className="inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
                       >
-                        Download Invoice
+                        <Download size={16} className="shrink-0" />
+                        Invoice
                       </button>
                     )}
 
                     {!invoice && subscription.status !== "pending_payment" && (
-                      <span className="text-xs font-semibold text-slate-400">
+                      <span className="text-sm font-semibold text-slate-400">
                         -
                       </span>
                     )}
@@ -1192,6 +1260,7 @@ function CustomSelect({
   const [dropdownStyle, setDropdownStyle] = useState({});
 
   const buttonRef = useRef(null);
+  const searchInputRef = useRef(null);
   const dropdownRef = useRef(null);
 
   const selected = options.find(
@@ -1218,11 +1287,17 @@ function CustomSelect({
 
     setDropdownStyle({
       position: "fixed",
-      left: rect.left,
+      left: Math.max(
+        12,
+        Math.min(
+          rect.left,
+          window.innerWidth - Math.min(rect.width, window.innerWidth - 24) - 12,
+        ),
+      ),
       top: shouldOpenUp ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
-      width: rect.width,
+      width: Math.min(rect.width, window.innerWidth - 24),
       maxHeight: dropdownHeight,
-      zIndex: 9999,
+      zIndex: 70000,
     });
   };
 
@@ -1230,6 +1305,7 @@ function CustomSelect({
     if (!open) return;
 
     updateDropdownPosition();
+    searchInputRef.current?.focus({ preventScroll: true });
 
     const handleClickOutside = (e) => {
       if (
@@ -1265,8 +1341,9 @@ function CustomSelect({
       <button
         ref={buttonRef}
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-left text-sm font-semibold text-slate-700 dark:text-slate-200 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-left text-sm font-normal text-slate-700 dark:text-slate-200 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
       >
         <span className="min-w-0 truncate">
           {selected?.label || placeholder}
@@ -1280,76 +1357,78 @@ function CustomSelect({
         />
       </button>
 
-      {open && (
-        <div
-          ref={dropdownRef}
-          style={dropdownStyle}
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
-        >
-          {searchable && (
-            <div className="border-b border-slate-100 p-2 dark:border-slate-800">
-              <div className="relative">
-                <Search
-                  size={15}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
-                />
+      {open &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={dropdownStyle}
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            {searchable && (
+              <div className="border-b border-slate-100 p-2 dark:border-slate-800">
+                <div className="relative">
+                  <Search
+                    size={15}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+                  />
 
-                <input
-                  type="text"
-                  value={selectSearch}
-                  onChange={(e) => setSelectSearch(e.target.value)}
-                  placeholder="Search..."
-                  autoFocus
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="max-h-56 overflow-y-auto p-2">
-            {filteredOptions.map((option) => {
-              const active = String(option.value) === String(value);
-
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => handleSelect(option.value)}
-                  className={`w-full rounded-xl px-3 py-2 text-left transition ${
-                    active
-                      ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"
-                      : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:bg-slate-700 dark:bg-slate-800"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">
-                        {option.label}
-                      </p>
-
-                      {option.subLabel && (
-                        <p className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
-                          {option.subLabel}
-                        </p>
-                      )}
-                    </div>
-
-                    {active && (
-                      <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-
-            {filteredOptions.length === 0 && (
-              <div className="px-3 py-5 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">
-                No option found
+                  <input
+                    type="text"
+                    value={selectSearch}
+                    onChange={(e) => setSelectSearch(e.target.value)}
+                    placeholder="Search..."
+                    ref={searchInputRef}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-normal text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:border-blue-500 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
+                  />
+                </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
+
+            <div className="max-h-56 overflow-y-auto p-2">
+              {filteredOptions.map((option) => {
+                const active = String(option.value) === String(value);
+
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleSelect(option.value)}
+                    className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                      active
+                        ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"
+                        : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:bg-slate-700 dark:bg-slate-800"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-normal">
+                          {option.label}
+                        </p>
+
+                        {option.subLabel && (
+                          <p className="truncate text-sm text-slate-500 dark:text-slate-400">
+                            {option.subLabel}
+                          </p>
+                        )}
+                      </div>
+
+                      {active && (
+                        <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+
+              {filteredOptions.length === 0 && (
+                <div className="px-3 py-5 text-center text-sm text-slate-500 dark:text-slate-400">
+                  No option found
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
@@ -1357,7 +1436,7 @@ function CustomSelect({
 function Pagination({ page, totalPages, totalRecords, setPage }) {
   return (
     <div className="flex flex-col gap-3 border-t border-slate-200 dark:border-slate-800 p-4 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+      <p className="text-sm text-slate-500 dark:text-slate-400">
         Total Records: {totalRecords}
       </p>
 
@@ -1400,17 +1479,29 @@ function SubscriptionStatsModal({
     const keyword = search.trim().toLowerCase();
 
     const rows = subscriptions.filter((item) => {
-      if (type === "active") return item.status === "active";
-      if (type === "free") return isFreeSubscription(item);
+      const isCurrent = Number(item.is_current) === 1;
+
+      if (type === "active") {
+        return isCurrent;
+      }
+
+      if (type === "free") {
+        return isCurrent && isFreeSubscription(item);
+      }
+
       return true;
     });
 
-    if (!keyword) return rows;
+    if (!keyword) {
+      return rows;
+    }
 
     return rows.filter((item) =>
       `${item.company_name || ""} ${item.company_email || ""} ${
         item.plan_name || ""
-      } ${item.status || ""} ${formatPlanDuration(item)}`
+      } ${item.status || ""} ${item.display_status || ""} ${formatPlanDuration(
+        item,
+      )}`
         .toLowerCase()
         .includes(keyword),
     );
@@ -1420,20 +1511,27 @@ function SubscriptionStatsModal({
     .filter((item) => item.payment_status === "paid")
     .filter((item) => {
       const keyword = search.trim().toLowerCase();
-      if (!keyword) return true;
 
-      return `${item.company_name || ""} ${item.plan_name || ""} ${
-        item.payment_status || ""
-      }`
+      if (!keyword) {
+        return true;
+      }
+
+      return `${item.company_name || ""} ${
+        item.plan_name || ""
+      } ${item.payment_status || ""}`
         .toLowerCase()
         .includes(keyword);
     });
 
   const totalSubscriptions = subscriptions.length;
+
   const activeSubscriptions = subscriptions.filter(
-    (item) => item.status === "active",
+    (item) => Number(item.is_current) === 1,
   ).length;
-  const freeSubscriptions = subscriptions.filter(isFreeSubscription).length;
+
+  const freeSubscriptions = subscriptions.filter(
+    (item) => Number(item.is_current) === 1 && isFreeSubscription(item),
+  ).length;
 
   const inactiveSubscriptions = subscriptions.filter(
     (item) =>
@@ -1482,9 +1580,9 @@ function SubscriptionStatsModal({
 
   const config = configMap[type];
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
-      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+  return createPortal(
+    <div className="fixed inset-0 z-[60000] flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm">
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-2xl">
         <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
           <div className="flex items-start gap-3">
             <div
@@ -1494,10 +1592,10 @@ function SubscriptionStatsModal({
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
                 {config.title}
               </h2>
-              <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 {config.subtitle}
               </p>
             </div>
@@ -1506,6 +1604,7 @@ function SubscriptionStatsModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close dialog"
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
             <X size={20} />
@@ -1585,7 +1684,8 @@ function SubscriptionStatsModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1600,7 +1700,7 @@ function SearchBox({ value, setValue }) {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="Search details..."
-        className="input !pl-10"
+        className="subscription-input !pl-10"
       />
     </div>
   );
@@ -1608,7 +1708,7 @@ function SearchBox({ value, setValue }) {
 
 function ModalStatsGrid({ children }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {children}
     </div>
   );
@@ -1617,12 +1717,12 @@ function ModalStatsGrid({ children }) {
 function ModalStatCard({ title, value, icon, className }) {
   return (
     <div
-      className={`h-[96px] rounded-2xl border border-slate-200 dark:border-slate-800 p-4 ${className}`}
+      className={`min-h-[84px] rounded-xl border border-slate-200 dark:border-slate-800 p-4 ${className}`}
     >
       <div className="flex h-full items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{title}</p>
-          <h3 className="mt-2 truncate text-lg font-bold">{value}</h3>
+          <h3 className="mt-1 break-words text-xl font-semibold">{value}</h3>
         </div>
         <div className="shrink-0 rounded-xl bg-white dark:bg-slate-900/70 p-2.5">
           {icon}
@@ -1635,9 +1735,9 @@ function ModalStatCard({ title, value, icon, className }) {
 function RevenueModalTable({ filteredPayments }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[850px] text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+      <div className="w-full min-w-0">
+        <table className="w-full table-fixed text-left text-sm [&_td]:align-middle [&_td]:[overflow-wrap:anywhere]">
+          <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
             <tr>
               <TableHead title="Company" />
               <TableHead title="Plan" />
@@ -1653,19 +1753,19 @@ function RevenueModalTable({ filteredPayments }) {
                 key={payment.id}
                 className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:bg-slate-700 dark:bg-slate-800"
               >
-                <td className="p-4 font-semibold text-slate-900 dark:text-white">
+                <td className="px-3 py-3 font-semibold text-slate-900 dark:text-white">
                   {payment.company_name || "-"}
                 </td>
-                <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">
+                <td className="px-3 py-3 font-semibold text-slate-600 dark:text-slate-300">
                   {payment.plan_name || "-"}
                 </td>
-                <td className="p-4 font-semibold text-slate-900 dark:text-white">
+                <td className="px-3 py-3 font-semibold text-slate-900 dark:text-white">
                   ₹ {Number(payment.amount || 0).toFixed(2)}
                 </td>
-                <td className="p-4">
+                <td className="px-3 py-3">
                   <StatusBadge status={payment.payment_status} />
                 </td>
-                <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">
+                <td className="px-3 py-3 font-semibold text-slate-600 dark:text-slate-300">
                   {formatDate(payment.payment_date)}
                 </td>
               </tr>
@@ -1691,14 +1791,14 @@ function RevenueModalTable({ filteredPayments }) {
 function SubscriptionModalTable({ subscriptions }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[950px] text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+      <div className="w-full min-w-0">
+        <table className="w-full table-fixed text-left text-sm [&_td]:align-middle [&_td]:[overflow-wrap:anywhere]">
+          <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
             <tr>
               <TableHead title="Company" />
               <TableHead title="Plan" />
               <TableHead title="Amount" />
-              <TableHead title="Branch Limit" />
+              <TableHead title="Plan Branches" />
               <TableHead title="Status" />
               <TableHead title="Valid Till" />
               <TableHead title="Auto Renewal" />
@@ -1706,60 +1806,102 @@ function SubscriptionModalTable({ subscriptions }) {
           </thead>
 
           <tbody>
-            {subscriptions.map((subscription) => (
-              <tr
-                key={subscription.id}
-                className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:bg-slate-700 dark:bg-slate-800"
-              >
-                <td className="p-4 font-semibold text-slate-900 dark:text-white">
-                  {subscription.company_name || "-"}
-                  {subscription.company_email && (
-                    <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      {subscription.company_email}
+            {subscriptions.map((subscription) => {
+              const isCurrent = Number(subscription.is_current) === 1;
+
+              const isPrevious = !isCurrent && subscription.status === "active";
+
+              const isFree = isFreeSubscription(subscription);
+
+              return (
+                <tr
+                  key={subscription.id}
+                  className="border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700"
+                >
+                  <td className="px-3 py-3 font-semibold text-slate-900 dark:text-white">
+                    {subscription.company_name || "-"}
+
+                    {subscription.company_email && (
+                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        {subscription.company_email}
+                      </p>
+                    )}
+                  </td>
+
+                  <td className="px-3 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-slate-800 dark:text-slate-100">
+                        {subscription.plan_name || "-"}
+                      </p>
+
+                      {isCurrent && (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-sm font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                          Current
+                        </span>
+                      )}
+
+                      {isPrevious && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-sm font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                          Previous
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      {formatPlanDuration(subscription)}
                     </p>
-                  )}
-                </td>
+                  </td>
 
-                <td className="p-4">
-                  <p className="font-semibold text-slate-800 dark:text-slate-100">
-                    {subscription.plan_name || "-"}
-                  </p>
-                  <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    {formatPlanDuration(subscription)}
-                  </p>
-                </td>
+                  <td className="px-3 py-3 font-semibold text-slate-900 dark:text-white">
+                    {isFree
+                      ? "Free"
+                      : `₹ ${Number(subscription.price || 0).toFixed(2)}`}
+                  </td>
 
-                <td className="p-4 font-semibold text-slate-900 dark:text-white">
-                  {isFreeSubscription(subscription)
-                    ? "Free"
-                    : `₹ ${Number(subscription.price || 0).toFixed(2)}`}
-                </td>
+                  <td className="px-3 py-3 font-semibold text-slate-700 dark:text-slate-200">
+                    {subscription.max_branches ?? 0}
+                  </td>
 
-                <td className="p-4 font-semibold text-slate-700 dark:text-slate-200">
-                  {subscription.max_branches || 1}
-                </td>
+                  <td className="px-3 py-3">
+                    <StatusBadge
+                      status={
+                        isCurrent
+                          ? "current"
+                          : isPrevious
+                            ? "previous"
+                            : subscription.status
+                      }
+                    />
+                  </td>
 
-                <td className="p-4">
-                  <StatusBadge status={subscription.status} />
-                </td>
+                  <td className="px-3 py-3 font-semibold text-slate-600 dark:text-slate-300">
+                    {getValidTillDate(subscription)}
+                  </td>
 
-                <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">
-                  {getValidTillDate(subscription)}
-                </td>
-
-                <td className="p-4">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                      subscription.auto_renewal
-                        ? "bg-green-50 dark:bg-emerald-950/40 text-green-700"
-                        : "bg-red-50 dark:bg-red-950/40 text-red-700"
-                    }`}
-                  >
-                    {subscription.auto_renewal ? "Enabled" : "Disabled"}
-                  </span>
-                </td>
-              </tr>
-            ))}
+                  <td className="px-3 py-3">
+                    {!isCurrent ? (
+                      <span className="text-sm font-semibold text-slate-400">
+                        Not current
+                      </span>
+                    ) : isFree ? (
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                        Disabled
+                      </span>
+                    ) : (
+                      <span
+                        className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                          subscription.auto_renewal
+                            ? "bg-green-50 text-green-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                            : "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                        }`}
+                      >
+                        {subscription.auto_renewal ? "Enabled" : "Disabled"}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
 
             {subscriptions.length === 0 && (
               <tr>
@@ -1781,11 +1923,11 @@ function SubscriptionModalTable({ subscriptions }) {
 function FormHeader({ icon, title, subtitle }) {
   return (
     <div className="mb-5">
-      <h2 className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
+      <h2 className="flex items-center gap-2 text-xl font-semibold text-slate-900 dark:text-white">
         {icon}
         {title}
       </h2>
-      <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         {subtitle}
       </p>
     </div>
@@ -1811,6 +1953,8 @@ function Input({
   type = "text",
   placeholder,
   disabled = false,
+  min,
+  step,
 }) {
   return (
     <Field label={label}>
@@ -1821,12 +1965,15 @@ function Input({
         onChange={onChange}
         placeholder={placeholder}
         disabled={disabled}
-        className="input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800"
+        min={min}
+        step={step}
+        className="subscription-input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800"
       />
     </Field>
   );
 }
 
+// Compact clickable summaries, with the same layout as other modules.
 function StatCard({
   icon,
   title,
@@ -1836,46 +1983,49 @@ function StatCard({
   badge = 0,
   badgeLabel,
 }) {
+  const tones = {
+    "Total Subscriptions":
+      "border-blue-200 from-blue-50 dark:border-blue-900/50 dark:from-blue-950/30",
+    "Active Plans":
+      "border-emerald-200 from-emerald-50 dark:border-emerald-900/50 dark:from-emerald-950/30",
+    "Default Free Plans":
+      "border-amber-200 from-amber-50 dark:border-amber-900/50 dark:from-amber-950/30",
+    "Paid Revenue":
+      "border-purple-200 from-purple-50 dark:border-purple-900/50 dark:from-purple-950/30",
+  };
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group min-h-[96px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+      title={
+        Number(badge) > 0 && badgeLabel ? badgeLabel : "Click to view details"
+      }
+      className={`flex min-w-0 items-center gap-3 rounded-2xl border bg-gradient-to-br to-white p-4 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:to-slate-900 ${tones[title] || "border-slate-200 from-slate-50 dark:border-slate-800"}`}
     >
-      <div className="flex h-full items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-500 dark:text-slate-400">
-            {title}
-          </p>
-          <h2 className="mt-1 truncate text-xl font-semibold text-slate-900 dark:text-white">
-            {value}
-          </h2>
-          <p className="mt-2 text-xs font-semibold text-blue-600 opacity-0 transition group-hover:opacity-100">
-            {Number(badge) > 0 && badgeLabel
-              ? badgeLabel
-              : "Click to view details"}
-          </p>
-        </div>
-
-        <div className="relative shrink-0">
-          <div className={`rounded-xl p-3 ${color}`}>{icon}</div>
-
-          {Number(badge) > 0 && (
-            <span className="absolute -right-2 -top-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold text-white">
-              {badge > 99 ? "99+" : badge}
-            </span>
-          )}
-        </div>
-      </div>
+      <span className="relative shrink-0">
+        <span className={`flex rounded-xl p-3 ${color}`}>{icon}</span>
+        {Number(badge) > 0 && (
+          <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-sm text-white">
+            {badge > 99 ? "99+" : badge}
+          </span>
+        )}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm text-slate-500 dark:text-slate-400">
+          {title}
+        </span>
+        <span className="mt-1 block break-words text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">
+          {value}
+        </span>
+      </span>
     </button>
   );
 }
 
 function TableHead({ title }) {
   return (
-    <th className="p-4 text-left text-xs font-semibold uppercase tracking-wide">
-      {title}
-    </th>
+    <th className="px-3 py-3 text-left text-sm font-semibold ">{title}</th>
   );
 }
 
@@ -1883,37 +2033,53 @@ function StatusBadge({ status }) {
   const value = String(status || "-").toLowerCase();
 
   const styles = {
+    current:
+      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+
+    previous:
+      "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
+
     active:
       "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+
     trial:
       "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300",
+
     expired:
       "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300",
+
     cancelled:
       "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
+
     inactive:
       "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
+
     paid: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+
     pending:
       "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300",
+
     pending_payment:
       "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300",
+
     generated:
       "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300",
+
     approved:
       "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+
     rejected:
       "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300",
   };
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold capitalize shadow-sm ${
+      className={`inline-flex max-w-full items-center justify-center rounded-full border px-2.5 py-1 text-center text-sm font-semibold capitalize shadow-sm ${
         styles[value] ||
         "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
       }`}
     >
-      {value.replace("_", " ")}
+      {value.replaceAll("_", " ")}
     </span>
   );
 }

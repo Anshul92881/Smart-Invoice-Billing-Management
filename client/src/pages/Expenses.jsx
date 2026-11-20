@@ -864,16 +864,16 @@ function Expenses() {
   };
 
   return (
-    <div className="w-full min-w-0 space-y-5 overflow-x-hidden">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="w-full min-w-0 space-y-6 text-sm text-slate-700 dark:text-slate-200">
+      <div className="px-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-300">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
               <Wallet size={17} />
-              Expense Management
+              Workspace / Expenses
             </div>
 
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
               Expenses
             </h1>
 
@@ -898,7 +898,7 @@ function Expenses() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           title="Total Expenses"
           value={`₹ ${stats.totalExpense.toFixed(2)}`}
@@ -927,17 +927,18 @@ function Expenses() {
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-200 p-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-col gap-4">
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Expense History
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                All Expenses
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Search, filter and manage branch-wise expenses.
+                Current expense records. Search, filter and manage branch-wise
+                expenses.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,2fr)_minmax(180px,1fr)_minmax(180px,1fr)]">
               <div className="relative">
                 <Search
                   size={16}
@@ -1035,7 +1036,7 @@ function Expenses() {
               type="button"
               disabled={currentPage === 1}
               onClick={() => setCurrentPage((prev) => prev - 1)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               Prev
             </button>
@@ -1048,7 +1049,7 @@ function Expenses() {
               type="button"
               disabled={currentPage === totalPages || totalPages === 0}
               onClick={() => setCurrentPage((prev) => prev + 1)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               Next
             </button>
@@ -1090,6 +1091,7 @@ function Expenses() {
       {showBranchModal && (
         <FormModal
           title="Add New Branch"
+          nested
           description="Create branch without leaving expense page."
           icon={<GitBranch size={21} />}
           onClose={() => setShowBranchModal(false)}
@@ -1107,6 +1109,7 @@ function Expenses() {
       {showVendorModal && (
         <FormModal
           title="Add New Vendor"
+          nested
           description="Create vendor without leaving expense page."
           icon={<Truck size={21} />}
           onClose={() => setShowVendorModal(false)}
@@ -1124,6 +1127,7 @@ function Expenses() {
       {showCategoryModal && (
         <FormModal
           title="Add New Category"
+          nested
           description="Create a custom expense category for this expense."
           icon={<Tag size={21} />}
           onClose={() => setShowCategoryModal(false)}
@@ -1189,8 +1193,8 @@ function ExpenseTable({
 }) {
   return (
     <div className="w-full overflow-x-auto">
-      <table className="w-full min-w-[1000px] text-sm">
-        <thead className="bg-slate-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+      <table className="w-full min-w-[1000px] text-left text-sm">
+        <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           <tr>
             {[
               "Branch",
@@ -1203,7 +1207,7 @@ function ExpenseTable({
             ].map((head) => (
               <th
                 key={head}
-                className="p-4 text-left text-xs font-bold uppercase tracking-wide"
+                className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap"
               >
                 {head}
               </th>
@@ -1217,28 +1221,28 @@ function ExpenseTable({
               key={expense.id}
               className="border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
             >
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td className="whitespace-nowrap px-4 py-3.5 text-slate-600 dark:text-slate-300">
                 {expense.branch_code
                   ? `${expense.branch_name} (${expense.branch_code})`
                   : expense.branch_name || "-"}
               </td>
 
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td className="whitespace-nowrap px-4 py-3.5 text-slate-600 dark:text-slate-300">
                 <p className="font-semibold text-slate-900 dark:text-white">
                   {expense.vendor_name || "Direct Company Expense"}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   {expense.vendor_company_name || ""}
                 </p>
               </td>
 
-              <td className="p-4 font-semibold text-slate-900 dark:text-white">
+              <td className="whitespace-nowrap px-4 py-3.5 font-semibold text-slate-900 dark:text-white">
                 {expense.category || "-"}
               </td>
-              <td className="p-4 font-bold text-red-600 dark:text-red-400">
+              <td className="whitespace-nowrap px-4 py-3.5 font-semibold text-red-600 dark:text-red-400">
                 ₹ {Number(expense.amount || 0).toFixed(2)}
               </td>
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td className="whitespace-nowrap px-4 py-3.5 text-slate-600 dark:text-slate-300">
                 {formatDate(expense.expense_date)}
               </td>
 
@@ -1247,7 +1251,7 @@ function ExpenseTable({
               </td>
 
               <td className="p-4">
-                <div className="flex items-center gap-2">
+                <div className="inline-flex flex-nowrap items-center gap-2">
                   <IconButton
                     icon={<Eye size={16} />}
                     className="bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 hover:bg-blue-100"
@@ -1464,7 +1468,7 @@ function ExpenseForm({
         <button
           type="button"
           onClick={onCancel}
-          className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
+          className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
         >
           <X size={16} />
           Cancel
@@ -1492,7 +1496,7 @@ function BranchForm({
 }) {
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input
           icon={<Building2 size={16} />}
           label="Branch Name"
@@ -1579,7 +1583,7 @@ function BranchForm({
         </Field>
 
         <div className="md:col-span-2 xl:col-span-3">
-          <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
             <MapPin size={16} />
             Address
           </label>
@@ -1613,7 +1617,7 @@ function VendorForm({
 }) {
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input
           icon={<Truck size={16} />}
           label="Vendor Name"
@@ -1701,7 +1705,7 @@ function VendorForm({
         />
 
         <div className="md:col-span-2 xl:col-span-3">
-          <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
             <MapPin size={16} />
             Address
           </label>
@@ -1715,7 +1719,7 @@ function VendorForm({
         </div>
 
         <div className="md:col-span-2 xl:col-span-3">
-          <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
             <StickyNote size={16} />
             Notes
           </label>
@@ -1769,8 +1773,8 @@ function CategoryForm({
 
 function ExpenseViewModal({ expense, formatDate, onClose }) {
   return createPortal(
-    <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
-      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
+    <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-5">
+      <div className="flex max-h-[90dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
         <div className="flex shrink-0 items-start justify-between border-b border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300">
@@ -1778,7 +1782,7 @@ function ExpenseViewModal({ expense, formatDate, onClose }) {
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
                 {expense.category || "Expense Details"}
               </h2>
 
@@ -1839,10 +1843,24 @@ function ExpenseViewModal({ expense, formatDate, onClose }) {
   );
 }
 
-function FormModal({ title, description, icon, onClose, children }) {
+function FormModal({
+  title,
+  description,
+  icon,
+  onClose,
+  children,
+  nested = false,
+}) {
   return createPortal(
-    <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
+    <div
+      className={`fixed inset-0 isolate flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-5 ${nested ? "z-[60000]" : "z-[50000]"}`}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+      >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300">
@@ -1850,7 +1868,10 @@ function FormModal({ title, description, icon, onClose, children }) {
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              <p className="mb-1 text-sm text-slate-500 dark:text-slate-400">
+                Expense Workspace
+              </p>
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
                 {title}
               </h2>
 
@@ -1864,6 +1885,7 @@ function FormModal({ title, description, icon, onClose, children }) {
 
           <button
             type="button"
+            aria-label={`Close ${title}`}
             onClick={onClose}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
           >
@@ -1871,7 +1893,7 @@ function FormModal({ title, description, icon, onClose, children }) {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-white p-5 dark:bg-slate-900">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white p-4 sm:p-6 dark:bg-slate-900">
           {children}
         </div>
       </div>
@@ -1886,7 +1908,7 @@ function ModalActions({ onSave, onCancel, saveText, loading = false }) {
       <button
         type="button"
         onClick={onCancel}
-        className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
+        className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
       >
         <X size={16} />
         Cancel
@@ -1906,20 +1928,29 @@ function ModalActions({ onSave, onCancel, saveText, loading = false }) {
 }
 
 function SummaryCard({ title, value, icon, color }) {
+  const tone = color.includes("red")
+    ? "border-red-200 bg-gradient-to-br from-red-50 to-white dark:border-red-900 dark:from-red-950/40 dark:to-slate-900"
+    : color.includes("orange")
+      ? "border-orange-200 bg-gradient-to-br from-orange-50 to-white dark:border-orange-900 dark:from-orange-950/40 dark:to-slate-900"
+      : color.includes("purple")
+        ? "border-purple-200 bg-gradient-to-br from-purple-50 to-white dark:border-purple-900 dark:from-purple-950/40 dark:to-slate-900"
+        : "border-blue-200 bg-gradient-to-br from-blue-50 to-white dark:border-blue-900 dark:from-blue-950/40 dark:to-slate-900";
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-slate-500 dark:text-slate-400">
-            {title}
-          </p>
-          <h2 className="mt-1 truncate text-2xl font-bold text-slate-900 dark:text-white">
-            {value}
-          </h2>
-        </div>
-
-        <div className={`shrink-0 rounded-xl p-3 ${color}`}>{icon}</div>
-      </div>
+    <div
+      className={`flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3 text-left shadow-sm ${tone}`}
+    >
+      <span className={`shrink-0 rounded-lg p-2.5 ${color}`}>{icon}</span>
+      <span className="min-w-0">
+        <span className="block text-sm text-slate-500 dark:text-slate-400">
+          {title}
+        </span>
+        <span className="mt-1 block break-words text-2xl font-semibold leading-tight text-slate-900 dark:text-white">
+          {value}
+        </span>
+        <span className="mt-0.5 block text-sm text-slate-500 dark:text-slate-400">
+          Current expense records
+        </span>
+      </span>
     </div>
   );
 }
@@ -1931,6 +1962,7 @@ function SearchableDropdown({
   placeholder = "Select",
   searchPlaceholder = "Search...",
   emptyText = "No option found",
+  icon = null,
 }) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
@@ -1938,6 +1970,7 @@ function SearchableDropdown({
 
   const buttonRef = useRef(null);
   const dropdownRef = useRef(null);
+  const searchRef = useRef(null);
 
   const selected = options.find(
     (option) => String(option.value) === String(value),
@@ -1964,7 +1997,7 @@ function SearchableDropdown({
       width: rect.width,
       top: shouldOpenUp ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
       maxHeight: dropdownHeight,
-      zIndex: 9999,
+      zIndex: 70000,
     });
   };
 
@@ -1972,6 +2005,7 @@ function SearchableDropdown({
     if (!open) return;
 
     updateDropdownPosition();
+    searchRef.current?.focus({ preventScroll: true });
 
     const handleClickOutside = (event) => {
       if (
@@ -2010,8 +2044,9 @@ function SearchableDropdown({
         onClick={() => setOpen((prev) => !prev)}
         className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-red-500 dark:focus:ring-red-950/50"
       >
-        <span className="min-w-0 truncate">
-          {selected?.label || placeholder}
+        <span className="flex min-w-0 items-center gap-2">
+          {icon && <span className="shrink-0 text-slate-400">{icon}</span>}
+          <span className="truncate">{selected?.label || placeholder}</span>
         </span>
 
         <ChevronDown
@@ -2022,150 +2057,94 @@ function SearchableDropdown({
         />
       </button>
 
-      {open && (
-        <div
-          ref={dropdownRef}
-          style={dropdownStyle}
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div className="border-b border-slate-100 p-2 dark:border-slate-800">
-            <div className="relative">
-              <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
+      {open &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={dropdownStyle}
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <div className="border-b border-slate-100 p-2 dark:border-slate-800">
+              <div className="relative">
+                <Search
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
 
-              <input
-                type="text"
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                placeholder={searchPlaceholder}
-                autoFocus
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-red-500 focus:bg-white focus:ring-4 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-red-950/50"
-              />
+                <input
+                  type="text"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  ref={searchRef}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-red-500 focus:bg-white focus:ring-4 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-red-950/50"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="max-h-56 overflow-y-auto p-2">
-            {filteredOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => handleSelect(option.value)}
-                className={`w-full rounded-xl px-3 py-2 text-left transition ${
-                  option.isAdd
-                    ? "bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-950"
-                    : `hover:bg-slate-50 dark:hover:bg-slate-800 ${
-                        String(value || "") === String(option.value)
-                          ? "bg-red-50 dark:bg-red-950/40"
-                          : ""
-                      }`
-                }`}
-              >
-                <p
-                  className={`truncate text-sm font-medium ${
+            <div className="max-h-56 overflow-y-auto p-2">
+              {filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleSelect(option.value)}
+                  className={`w-full rounded-xl px-3 py-2 text-left transition ${
                     option.isAdd
-                      ? "text-red-700 dark:text-red-300"
-                      : "text-slate-800 dark:text-slate-100"
+                      ? "bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700"
+                      : `hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                          String(value || "") === String(option.value)
+                            ? "bg-red-50 dark:bg-red-950/40"
+                            : ""
+                        }`
                   }`}
                 >
-                  {option.isAdd ? `+ ${option.label}` : option.label}
-                </p>
-
-                {option.description && (
-                  <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
-                    {option.description}
+                  <p
+                    className={`truncate text-sm font-medium ${
+                      option.isAdd
+                        ? "text-slate-900 dark:text-slate-100"
+                        : "text-slate-800 dark:text-slate-100"
+                    }`}
+                  >
+                    {option.isAdd ? `+ ${option.label}` : option.label}
                   </p>
-                )}
-              </button>
-            ))}
 
-            {filteredOptions.length === 0 && (
-              <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
-                {emptyText}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+                  {option.description && (
+                    <p className="truncate text-sm font-medium text-slate-500 dark:text-slate-400">
+                      {option.description}
+                    </p>
+                  )}
+                </button>
+              ))}
+
+              {filteredOptions.length === 0 && (
+                <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
+                  {emptyText}
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
 
 function CustomDropdown({ value, onChange, options, icon }) {
-  const [open, setOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  const selected = options.find(
-    (option) => String(option.value) === String(value),
-  );
-
-  useEffect(() => {
-    const closeDropdown = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", closeDropdown);
-    return () => document.removeEventListener("mousedown", closeDropdown);
-  }, []);
-
   return (
-    <div ref={dropdownRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-red-500 dark:focus:ring-red-950/50"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {icon && (
-            <span className="text-slate-400 dark:text-slate-500">{icon}</span>
-          )}
-          <span className="truncate">{selected?.label || "Select"}</span>
-        </span>
-
-        <ChevronDown
-          size={18}
-          className={`shrink-0 text-slate-500 dark:text-slate-400 transition ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-red-50 hover:text-red-700 dark:hover:bg-slate-800 dark:hover:text-red-300 ${
-                String(value) === String(option.value)
-                  ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
-                  : "text-slate-700 dark:text-slate-200"
-              }`}
-            >
-              <span className="truncate">{option.label}</span>
-
-              {String(value) === String(option.value) && (
-                <CheckCircle size={16} className="shrink-0" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <SearchableDropdown
+      value={value}
+      onChange={onChange}
+      options={options}
+      icon={icon}
+      searchPlaceholder="Search options..."
+    />
   );
 }
 
 function InputWrapper({ label, icon, children }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         {icon}
         {label}
       </label>
@@ -2185,7 +2164,7 @@ function Input({
 }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         {icon}
         {label}
         {required && <span className="text-red-500">*</span>}
@@ -2205,7 +2184,7 @@ function Input({
 function Field({ icon, label, children }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         {icon}
         {label}
       </label>
@@ -2217,7 +2196,7 @@ function Field({ icon, label, children }) {
 function ViewField({ label, value, full }) {
   return (
     <div className={full ? "md:col-span-2" : ""}>
-      <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
         {label}
       </p>
       <div className="min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">

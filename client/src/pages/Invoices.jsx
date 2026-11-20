@@ -1288,16 +1288,16 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
   };
 
   return (
-    <div className="w-full max-w-full min-w-0 space-y-5 overflow-hidden">
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="w-full min-w-0 space-y-6 text-sm text-slate-700 dark:text-slate-200">
+      <div className="px-1">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
               <FileText size={17} />
-              Invoice Management
+              Workspace / Invoices
             </div>
 
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
               Invoices
             </h1>
 
@@ -1307,9 +1307,6 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              {sortedInvoices.length} Invoices
-            </div>
 
             {canCreate && (
               <button
@@ -1327,8 +1324,8 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
 
       {showInvoiceModal &&
         createPortal(
-          <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
-            <div className="flex max-h-[94vh] w-full max-w-[95vw] flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-50 shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-950">
+          <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-5">
+            <div className="flex max-h-[94dvh] w-full max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl dark:border-slate-700 dark:bg-slate-950">
               <CreateInvoice
                 modalMode
                 onClose={() => setShowInvoiceModal(false)}
@@ -1344,17 +1341,18 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
 
       <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-200 p-4 dark:border-slate-800">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-col gap-4">
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Invoice List
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                All Invoices
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                View, filter, print and cancel invoices.
+                Current invoice records. View, filter, print and cancel
+                invoices.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,2fr)_repeat(4,minmax(130px,1fr))]">
               <input
                 type="text"
                 placeholder="Search invoice/customer/branch/status"
@@ -1408,8 +1406,8 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
         </div>
 
         <div className="w-full max-w-full overflow-x-auto">
-          <table className="w-full min-w-[1040px] text-sm">
-            <thead className="bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          <table className="w-full min-w-[1040px] text-left text-sm">
+            <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
               <tr>
                 {[
                   "Invoice No",
@@ -1424,7 +1422,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
                 ].map((head) => (
                   <th
                     key={head}
-                    className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide"
+                    className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap"
                   >
                     {head}
                   </th>
@@ -1452,7 +1450,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
                     </p>
 
                     {invoice.company_name && invoice.customer_name && (
-                      <p className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+                      <p className="whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
                         {invoice.company_name}
                       </p>
                     )}
@@ -1462,7 +1460,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
                     {formatDate(invoice.invoice_date)}
                   </td>
 
-                  <td className="whitespace-nowrap px-4 py-3 font-bold text-slate-900 dark:text-white">
+                  <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-900 dark:text-white">
                     ₹ {Number(invoice.total_amount || 0).toFixed(2)}
                   </td>
 
@@ -1479,7 +1477,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
                   </td>
 
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+                    <div className="inline-flex flex-nowrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() =>
@@ -1564,12 +1562,12 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
               type="button"
               disabled={currentPage === 1}
               onClick={() => setCurrentPage((prev) => prev - 1)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               Prev
             </button>
 
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
               {currentPage} / {totalPages || 1}
             </span>
 
@@ -1577,7 +1575,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
               type="button"
               disabled={currentPage === totalPages || totalPages === 0}
               onClick={() => setCurrentPage((prev) => prev + 1)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               Next
             </button>
@@ -1778,7 +1776,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
           </Section>
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4">
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Notes
             </label>
             <textarea
@@ -1808,7 +1806,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
             setShowProductModal(false);
           }}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               icon={<Package size={16} />}
               label="Product Name"
@@ -1928,7 +1926,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
             </Field>
 
             <div className="md:col-span-2 xl:col-span-3">
-              <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <Image size={16} />
                 Product Image
               </label>
@@ -1956,7 +1954,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
                     }
                     className="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800"
                   />
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                     Upload PNG, JPG or WebP image.
                   </p>
                 </div>
@@ -1964,7 +1962,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
             </div>
 
             <div className="md:col-span-2 xl:col-span-3">
-              <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <FileText size={16} />
                 Description
               </label>
@@ -2091,7 +2089,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
             </Field>
 
             <div className="md:col-span-2 xl:col-span-3">
-              <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <MapPin size={16} />
                 Address
               </label>
@@ -2165,8 +2163,8 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
 
 function Modal({ title, description, icon, onClose, children }) {
   return createPortal(
-    <div className="fixed inset-0 z-[60000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
+    <div className="fixed inset-0 z-[60000] isolate flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-5">
+      <div className="flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
@@ -2174,7 +2172,7 @@ function Modal({ title, description, icon, onClose, children }) {
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                 {title}
               </h2>
 
@@ -2195,7 +2193,7 @@ function Modal({ title, description, icon, onClose, children }) {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/60 p-5 dark:bg-slate-950/40">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white p-5 sm:p-6 dark:bg-slate-900">
           {children}
         </div>
       </div>
@@ -2210,7 +2208,7 @@ function ModalActions({ onSave, onCancel, saveText }) {
       <button
         type="button"
         onClick={onCancel}
-        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
+        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
       >
         <X size={16} />
         Cancel
@@ -2230,8 +2228,8 @@ function ModalActions({ onSave, onCancel, saveText }) {
 
 function Section({ title, icon, children }) {
   return (
-    <div className="mb-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4">
-      <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-slate-900 dark:text-white">
+    <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900">
+      <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-white">
         {icon}
         {title}
       </h3>
@@ -2256,7 +2254,7 @@ function Input({
 }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         {icon}
         {label}
         {required && <span className="text-red-500">*</span>}
@@ -2273,7 +2271,7 @@ function Input({
       />
 
       {helper && (
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {helper}
         </p>
       )}
@@ -2284,7 +2282,7 @@ function Input({
 function Field({ icon, label, children }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         {icon}
         {label}
       </label>
@@ -2296,7 +2294,7 @@ function Field({ icon, label, children }) {
 function AmountBox({ title, value }) {
   return (
     <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
-      <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+      <p className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
         {title === "Taxable" ? (
           <IndianRupee size={13} />
         ) : (
@@ -2304,7 +2302,7 @@ function AmountBox({ title, value }) {
         )}
         {title}
       </p>
-      <p className="mt-1 break-words font-bold text-slate-900 dark:text-white">
+      <p className="mt-1 break-words font-semibold text-slate-900 dark:text-white">
         ₹ {Number(value || 0).toFixed(2)}
       </p>
     </div>
@@ -2425,6 +2423,7 @@ function SearchableDropdown({
   searchPlaceholder = "Search...",
   emptyText = "No option found",
   addAction = null,
+  icon = null,
 }) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
@@ -2458,7 +2457,7 @@ function SearchableDropdown({
       width: rect.width,
       top: shouldOpenUp ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
       maxHeight: dropdownHeight,
-      zIndex: 30000,
+      zIndex: 70000,
     });
   };
 
@@ -2480,12 +2479,14 @@ function SearchableDropdown({
     };
 
     const handleScroll = (event) => {
-      if (dropdownRef.current?.contains(event.target)) {
+      if (
+        event.target instanceof window.Node &&
+        dropdownRef.current?.contains(event.target)
+      ) {
         return;
       }
 
-      setOpen(false);
-      setKeyword("");
+      updateDropdownPosition();
     };
 
     window.addEventListener("scroll", handleScroll, true);
@@ -2513,8 +2514,9 @@ function SearchableDropdown({
         onClick={() => setOpen((prev) => !prev)}
         className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
       >
-        <span className="min-w-0 truncate">
-          {selected?.title || placeholder}
+        <span className="flex min-w-0 items-center gap-2">
+          {icon && <span className="shrink-0 text-slate-400">{icon}</span>}
+          <span className="truncate">{selected?.title || placeholder}</span>
         </span>
 
         <ChevronDown
@@ -2525,141 +2527,93 @@ function SearchableDropdown({
         />
       </button>
 
-      {open && (
-        <div
-          ref={dropdownRef}
-          style={dropdownStyle}
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div className="border-b border-slate-100 p-2 dark:border-slate-800">
-            <div className="relative">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-              <input
-                type="text"
-                placeholder={searchPlaceholder}
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                className="input !pl-10"
-              />
+      {open &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={dropdownStyle}
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <div className="border-b border-slate-100 p-2 dark:border-slate-800">
+              <div className="relative">
+                <Search
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  type="text"
+                  placeholder={searchPlaceholder}
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  className="input !pl-10"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="max-h-56 overflow-y-auto p-2">
-            {filteredOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => handleSelect(option.value)}
-                className={`w-full rounded-xl px-3 py-2 text-left transition hover:bg-blue-50 dark:hover:bg-slate-800 ${
-                  String(value || "") === String(option.value)
-                    ? "bg-blue-50 dark:bg-blue-950/40"
-                    : ""
-                }`}
-              >
-                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  {option.title}
-                </p>
-
-                {option.subtitle && (
-                  <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
-                    {option.subtitle}
+            <div className="max-h-56 overflow-y-auto p-2">
+              {filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleSelect(option.value)}
+                  className={`w-full rounded-xl px-3 py-2 text-left transition hover:bg-blue-50 dark:hover:bg-slate-800 ${
+                    String(value || "") === String(option.value)
+                      ? "bg-blue-50 dark:bg-blue-950/40"
+                      : ""
+                  }`}
+                >
+                  <p className="truncate text-sm font-normal text-slate-800 dark:text-slate-100">
+                    {option.title}
                   </p>
-                )}
-              </button>
-            ))}
 
-            {filteredOptions.length === 0 && (
-              <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
-                {emptyText}
+                  {option.subtitle && (
+                    <p className="truncate text-sm font-medium text-slate-500 dark:text-slate-400">
+                      {option.subtitle}
+                    </p>
+                  )}
+                </button>
+              ))}
+
+              {filteredOptions.length === 0 && (
+                <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
+                  {emptyText}
+                </div>
+              )}
+            </div>
+
+            {addAction && (
+              <div className="border-t border-slate-100 p-2 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleSelect(addAction.value)}
+                  className="flex w-full items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-normal text-slate-900 transition hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                >
+                  <Plus size={16} />
+                  {addAction.label}
+                </button>
               </div>
             )}
-          </div>
-
-          {addAction && (
-            <div className="border-t border-slate-100 p-2 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => handleSelect(addAction.value)}
-                className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
-              >
-                <Plus size={16} />
-                {addAction.label}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
 
 function CustomDropdown({ value, onChange, options, icon }) {
-  const [open, setOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  const selected = options.find(
-    (option) => String(option.value) === String(value),
-  );
-
-  useEffect(() => {
-    const closeDropdown = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", closeDropdown);
-    return () => document.removeEventListener("mousedown", closeDropdown);
-  }, []);
-
   return (
-    <div ref={dropdownRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-left text-sm font-semibold text-slate-700 dark:text-slate-200 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:focus:ring-blue-950/50"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {icon && <span className="text-slate-400">{icon}</span>}
-          <span className="truncate">{selected?.label || "Select"}</span>
-        </span>
-
-        <ChevronDown
-          size={18}
-          className={`shrink-0 text-slate-500 dark:text-slate-400 transition ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 ${
-                String(value) === String(option.value)
-                  ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-                  : "text-slate-700 dark:text-slate-200"
-              }`}
-            >
-              <span className="truncate">{option.label}</span>
-
-              {String(value) === String(option.value) && (
-                <CheckCircle2 size={16} className="shrink-0" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="relative min-w-0">
+      <SearchableDropdown
+        value={value}
+        onChange={onChange}
+        options={options.map((option) => ({
+          value: option.value,
+          title: option.label,
+        }))}
+        placeholder="Select"
+        icon={icon}
+        searchPlaceholder="Search options..."
+      />
     </div>
   );
 }
@@ -2691,7 +2645,7 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold capitalize ${
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-sm font-medium capitalize ${
         badgeStyles[status] ||
         "bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
       }`}

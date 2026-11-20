@@ -69,16 +69,55 @@ export const getReports = async (req, res) => {
 
     const [invoiceRows] = await db.query(
       `
-      SELECT
-        COUNT(*) AS total_invoices,
-        COALESCE(SUM(total_amount), 0) AS total_sales,
-        COALESCE(SUM(total_tax), 0) AS total_tax,
-        SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paid_invoices,
-        SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) AS partial_invoices,
-        SUM(CASE WHEN status NOT IN ('paid', 'cancelled') THEN 1 ELSE 0 END) AS pending_invoices
-      FROM tbl_invoices
-      ${invoiceWhere}
-      `,
+  SELECT
+    COUNT(*) AS total_invoices,
+
+    COALESCE(SUM(total_amount), 0) AS total_sales,
+
+    COALESCE(SUM(total_tax), 0) AS total_tax,
+
+    SUM(
+      CASE
+        WHEN status = 'paid' THEN 1
+        ELSE 0
+      END
+    ) AS paid_invoices,
+
+    SUM(
+      CASE
+        WHEN status = 'partial' THEN 1
+        ELSE 0
+      END
+    ) AS partial_invoices,
+
+    SUM(
+      CASE
+        WHEN status NOT IN ('paid', 'cancelled') THEN 1
+        ELSE 0
+      END
+    ) AS pending_invoices,
+
+    SUM(
+      CASE
+        WHEN status = 'cancelled' THEN 1
+        ELSE 0
+      END
+    ) AS cancelled_invoices,
+
+    COALESCE(
+      SUM(
+        CASE
+          WHEN status NOT IN ('paid', 'cancelled')
+          THEN balance_due
+          ELSE 0
+        END
+      ),
+      0
+    ) AS pending_amount
+
+  FROM tbl_invoices
+  ${invoiceWhere}
+  `,
       baseParams,
     );
 
@@ -105,20 +144,21 @@ export const getReports = async (req, res) => {
     const totalSales = Number(invoiceRows[0].total_sales || 0);
     const totalReceived = Number(paymentRows[0].total_received || 0);
     const totalExpense = Number(expenseRows[0].total_expense || 0);
-    const pendingAmount = Math.max(totalSales - totalReceived, 0);
+    const pendingAmount = Number(invoiceRows[0].pending_amount || 0);
     const netProfit = totalReceived - totalExpense;
 
     const [monthlySales] = await db.query(
       `
-      SELECT
-        DATE_FORMAT(invoice_date, '%b') AS month,
-        MONTH(invoice_date) AS month_number,
-        COALESCE(SUM(total_amount), 0) AS sales
-      FROM tbl_invoices
-      ${invoiceWhere}
-      GROUP BY MONTH(invoice_date), DATE_FORMAT(invoice_date, '%b')
-      ORDER BY month_number
-      `,
+  SELECT
+    DATE_FORMAT(invoice_date, '%b') AS month,
+    MONTH(invoice_date) AS month_number,
+    COALESCE(SUM(total_amount), 0) AS sales
+  FROM tbl_invoices
+  ${invoiceWhere}
+  AND status != 'cancelled'
+  GROUP BY MONTH(invoice_date), DATE_FORMAT(invoice_date, '%b')
+  ORDER BY month_number
+  `,
       baseParams,
     );
 
@@ -137,22 +177,40 @@ export const getReports = async (req, res) => {
     );
 
     const [topCustomers] = await db.query(
-      `
-      SELECT
-        c.customer_name,
-        b.branch_name,
-        COALESCE(SUM(i.total_amount), 0) AS total_sales
-      FROM tbl_invoices i
-      LEFT JOIN tbl_customers c ON i.customer_id = c.id
-      LEFT JOIN tbl_company_branches b ON i.branch_id = b.id
-      WHERE i.company_id = ?
-      ${hasBranch ? "AND i.branch_id = ?" : ""}
-      GROUP BY i.customer_id, c.customer_name, b.branch_name
-      ORDER BY total_sales DESC
-      LIMIT 5
-      `,
-      baseParams,
-    );
+  `
+  SELECT
+    i.customer_id,
+    c.customer_name,
+
+    CASE
+      WHEN COUNT(DISTINCT i.branch_id) > 1
+      THEN 'Multiple Branches'
+      ELSE MAX(b.branch_name)
+    END AS branch_name,
+
+    COALESCE(SUM(i.total_amount), 0) AS total_sales
+
+  FROM tbl_invoices i
+
+  LEFT JOIN tbl_customers c
+    ON i.customer_id = c.id
+
+  LEFT JOIN tbl_company_branches b
+    ON i.branch_id = b.id
+
+  WHERE i.company_id = ?
+    ${hasBranch ? "AND i.branch_id = ?" : ""}
+    AND i.status != 'cancelled'
+
+  GROUP BY
+    i.customer_id,
+    c.customer_name
+
+  ORDER BY total_sales DESC
+  LIMIT 5
+  `,
+  baseParams,
+);
 
     const [recentInvoices] = await db.query(
       `
@@ -296,6 +354,7 @@ export const getReports = async (req, res) => {
         paid_invoices: Number(invoiceRows[0].paid_invoices || 0),
         partial_invoices: Number(invoiceRows[0].partial_invoices || 0),
         pending_invoices: Number(invoiceRows[0].pending_invoices || 0),
+        cancelled_invoices: Number(invoiceRows[0].cancelled_invoices || 0),
         total_sales: totalSales,
         total_received: totalReceived,
         pending_amount: pendingAmount,

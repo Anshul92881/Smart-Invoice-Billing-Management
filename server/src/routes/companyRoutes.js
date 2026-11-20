@@ -24,7 +24,6 @@ import {
   getEmailSettings,
   updateEmailSettings,
   sendTestEmail,
-  updateCompanyBranchLimit,
 } from "../controllers/companyController.js";
 
 const router = express.Router();
@@ -152,10 +151,5 @@ router.get(
 router.put("/:id", authorizeRoles("superadmin"), updateCompany);
 router.delete("/:id", authorizeRoles("superadmin"), deleteCompany);
 
-router.patch(
-  "/:id/branch-limit",
-  authorizeRoles("superadmin"),
-  updateCompanyBranchLimit,
-);
 
 export default router;

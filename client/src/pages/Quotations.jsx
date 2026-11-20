@@ -31,24 +31,19 @@ const ALLOWED_QUOTATION_STATUS = [
 function Quotations() {
   const [quotations, setQuotations] = useState([]);
   const [branches, setBranches] = useState([]);
-
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-
   const user = JSON.parse(localStorage.getItem("user"));
-
   const canCreateQuotation =
     user?.role === "company_admin" ||
     user?.role === "sales_user" ||
     Boolean(user?.permissions?.quotations);
-
   const canManageQuotation = canCreateQuotation;
 
   const fetchQuotations = async () => {
@@ -72,13 +67,10 @@ function Quotations() {
       const quotationList = Array.isArray(quotationRes.data)
         ? quotationRes.data
         : quotationRes.data?.quotations || [];
-
       const branchList = Array.isArray(branchRes.data)
         ? branchRes.data
         : branchRes.data?.branches || [];
-
       setQuotations(quotationList);
-
       setBranches(
         branchList.filter(
           (branch) => branch.status === "active" || branch.status === 1,
@@ -90,18 +82,14 @@ function Quotations() {
       );
     }
   };
-
   useEffect(() => {
     fetchQuotations();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
   const filteredQuotations = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-
     return quotations.filter((quotation) => {
       const quotationDate = getDateOnly(quotation.quotation_date);
-
       const matchesSearch =
         !keyword ||
         quotation.quotation_number?.toLowerCase().includes(keyword) ||
@@ -111,17 +99,13 @@ function Quotations() {
         quotation.branch_name?.toLowerCase().includes(keyword) ||
         quotation.branch_code?.toLowerCase().includes(keyword) ||
         quotation.status?.toLowerCase().includes(keyword);
-
       const matchesStatus =
         statusFilter === "all" || quotation.status === statusFilter;
-
       const matchesBranch =
         branchFilter === "all" ||
         String(quotation.branch_id || "") === String(branchFilter);
-
       const matchesFromDate = !fromDate || quotationDate >= fromDate;
       const matchesToDate = !toDate || quotationDate <= toDate;
-
       return (
         matchesSearch &&
         matchesStatus &&
@@ -131,7 +115,6 @@ function Quotations() {
       );
     });
   }, [quotations, search, statusFilter, branchFilter, fromDate, toDate]);
-
   useEffect(() => {
     setCurrentPage(1);
   }, [search, statusFilter, branchFilter, fromDate, toDate]);
@@ -154,7 +137,6 @@ function Quotations() {
           <p className="text-sm font-semibold text-slate-900 dark:text-white">
             {message}
           </p>
-
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -163,7 +145,6 @@ function Quotations() {
             >
               No
             </button>
-
             <button
               type="button"
               onClick={() => {
@@ -186,17 +167,14 @@ function Quotations() {
       toast.error("Quotation permission required");
       return;
     }
-
     if (quotation.status === "converted") {
       toast.error("Converted quotation cannot be cancelled");
       return;
     }
-
     if (quotation.status === "cancelled") {
       toast.error("Quotation already cancelled");
       return;
     }
-
     confirmToast("Cancel this quotation?", async () => {
       try {
         await api.patch(`/quotations/${quotation.id}/cancel`);
@@ -209,64 +187,50 @@ function Quotations() {
       }
     });
   };
-
   return (
-    <div className="w-full max-w-full min-w-0 space-y-5 overflow-x-hidden">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3">
-            <div>
-              <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
-                <ReceiptText size={16} />
-                Quotation Management
-              </div>
-
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                Quotations
-              </h1>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Create, manage, print and convert quotations.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              {sortedQuotations.length} Quotations
-            </div>
-
-            {canCreateQuotation && (
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-              >
-                <Plus size={16} />
-                Create Quotation
-              </button>
-            )}
-          </div>
+    <div className="quotation-workspace w-full min-w-0 space-y-5 text-[15px] text-slate-700 dark:text-slate-200">
+      <header className="flex flex-col justify-between gap-4 py-1 sm:flex-row sm:items-center">
+        <div>
+          <p className="mb-2 text-sm text-slate-500 dark:text-slate-400">
+            Sales / Quotations
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            Quotations
+          </h1>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            Create, manage, print and convert quotations.
+          </p>
         </div>
-      </div>
+        {canCreateQuotation && (
+          <button
+            type="button"
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+          >
+            <Plus size={17} /> Create Quotation
+          </button>
+        )}
+      </header>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 p-4 dark:border-slate-800">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-t-2xl border-b border-slate-100 p-4 dark:border-slate-800">
+          <div className="space-y-4">
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Quotation List
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+                All Quotations
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 View, filter, print and cancel quotations.
               </p>
             </div>
-
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
-              <div className="relative">
+            <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[minmax(180px,1.5fr)_repeat(4,minmax(0,1fr))]">
+              <label className="relative block pt-6">
+                <span className="absolute left-0 top-0 text-sm text-slate-500">
+                  Search
+                </span>
                 <Search
                   size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  className="absolute bottom-3 left-3 text-slate-400"
                 />
                 <input
                   type="text"
@@ -275,9 +239,9 @@ function Quotations() {
                   onChange={(e) => setSearch(e.target.value)}
                   className="input !pl-10"
                 />
-              </div>
-
+              </label>
               <CustomDropdown
+                label="Status"
                 value={statusFilter}
                 onChange={setStatusFilter}
                 icon={<Filter size={16} />}
@@ -289,8 +253,8 @@ function Quotations() {
                   })),
                 ]}
               />
-
               <CustomDropdown
+                label="Branch"
                 value={branchFilter}
                 onChange={setBranchFilter}
                 icon={<Building2 size={16} />}
@@ -304,36 +268,37 @@ function Quotations() {
                   })),
                 ]}
               />
-
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="input"
-              />
-
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="input"
-              />
+              <label className="block min-w-0 text-sm text-slate-500">
+                From date
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="input mt-1.5"
+                />
+              </label>
+              <label className="block min-w-0 text-sm text-slate-500">
+                To date
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="input mt-1.5"
+                />
+              </label>
             </div>
           </div>
         </div>
-
         <QuotationTable
           quotations={paginatedQuotations}
           canManageQuotation={canManageQuotation}
           onCancel={handleCancel}
         />
-
-        <div className="flex flex-col gap-3 border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:flex-row md:items-center md:justify-between">
+        <div className="rounded-b-2xl flex flex-col gap-3 border-t border-slate-100 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-500 dark:text-slate-400">
               Rows per page
             </span>
-
             <select
               value={itemsPerPage}
               onChange={(e) => {
@@ -348,7 +313,6 @@ function Quotations() {
               <option value={100}>100</option>
             </select>
           </div>
-
           <div className="text-sm text-slate-500 dark:text-slate-400">
             Showing{" "}
             {sortedQuotations.length === 0
@@ -359,7 +323,6 @@ function Quotations() {
             {" of "}
             {sortedQuotations.length}
           </div>
-
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -369,11 +332,9 @@ function Quotations() {
             >
               Prev
             </button>
-
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               {currentPage} / {totalPages || 1}
             </span>
-
             <button
               type="button"
               disabled={currentPage === totalPages || totalPages === 0}
@@ -385,26 +346,29 @@ function Quotations() {
           </div>
         </div>
       </div>
-
-     {showCreateModal &&
-  createPortal(
-    <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
-      <div className="h-[92vh] w-[96vw] max-w-[1600px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.5)] dark:border-slate-700 dark:bg-slate-950">
-        <CreateQuotation
-          modalMode
-          onClose={() => setShowCreateModal(false)}
-          onCreated={() => {
-            setShowCreateModal(false);
-            fetchQuotations();
-          }}
-        />
-      </div>
-    </div>,
-    document.body,
-  )}
-
+      {showCreateModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[50000] flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-5">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Create Quotation"
+              className="h-[92dvh] w-full max-w-[1600px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.5)] dark:border-slate-700 dark:bg-slate-950"
+            >
+              <CreateQuotation
+                modalMode
+                onClose={() => setShowCreateModal(false)}
+                onCreated={() => {
+                  setShowCreateModal(false);
+                  fetchQuotations();
+                }}
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
       <style>{`
-        .input {
+        .quotation-workspace .input {
           width: 100%;
           border: 1px solid #cbd5e1;
           padding: 10px 12px;
@@ -414,37 +378,30 @@ function Quotations() {
           background: #ffffff;
           color: #334155;
         }
-
-        .input::placeholder {
+        .quotation-workspace .input::placeholder {
           color: #94a3b8;
         }
-
-        .input:focus {
+        .quotation-workspace .input:focus {
           border-color: #2563eb;
           box-shadow: 0 0 0 3px #dbeafe;
         }
-
-        .input:disabled {
+        .quotation-workspace .input:disabled {
           background: #f8fafc;
           cursor: not-allowed;
         }
-
-        .dark .input {
+        .dark .quotation-workspace .input {
           border-color: #334155;
           background: #0f172a;
           color: #e2e8f0;
         }
-
-        .dark .input::placeholder {
+        .dark .quotation-workspace .input::placeholder {
           color: #64748b;
         }
-
-        .dark .input:focus {
+        .dark .quotation-workspace .input:focus {
           border-color: #3b82f6;
           box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.35);
         }
-
-        .dark .input:disabled {
+        .dark .quotation-workspace .input:disabled {
           background: #020617;
         }
       `}</style>
@@ -455,8 +412,8 @@ function Quotations() {
 function QuotationTable({ quotations, canManageQuotation, onCancel }) {
   return (
     <div className="w-full max-w-full overflow-x-auto">
-      <table className="w-full min-w-[1040px] text-sm">
-        <thead className="bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+      <table className="w-full min-w-[900px] text-left text-sm">
+        <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           <tr>
             {[
               "Quotation No",
@@ -470,68 +427,63 @@ function QuotationTable({ quotations, canManageQuotation, onCancel }) {
             ].map((head) => (
               <th
                 key={head}
-                className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide"
+                scope="col"
+                className="px-3 py-3 text-left text-sm font-medium"
               >
                 {head}
               </th>
             ))}
           </tr>
         </thead>
-
         <tbody className="bg-white dark:bg-slate-900">
           {quotations.map((q) => (
             <tr
               key={q.id}
-              className="border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
+              className="border-t border-slate-100 transition hover:bg-blue-50/30 dark:border-slate-800 dark:hover:bg-slate-800/40"
             >
-              <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-900 dark:text-white">
+              <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900 dark:text-white">
                 {q.quotation_number || "-"}
               </td>
-
-              <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">
+              <td className="whitespace-nowrap px-3 py-3 text-slate-600 dark:text-slate-300">
                 {q.branch_code
                   ? `${q.branch_name || "-"} (${q.branch_code})`
                   : q.branch_name || "-"}
               </td>
 
-              <td className="min-w-[130px] w-[160px] px-4 py-3 text-slate-600 dark:text-slate-300">
-                <p className="whitespace-nowrap font-semibold text-slate-800 dark:text-slate-100">
+              {/* Customer */}
+              <td className="whitespace-nowrap px-3 py-3">
+                <p className="font-semibold text-slate-800 dark:text-slate-100">
                   {q.customer_name || q.company_name || "-"}
                 </p>
 
                 {q.company_name && q.customer_name && (
-                  <p className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     {q.company_name}
                   </p>
                 )}
               </td>
-
-              <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">
+              <td className="whitespace-nowrap px-3 py-3 text-slate-600 dark:text-slate-300">
                 {formatDate(q.quotation_date)}
               </td>
-
-              <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">
+              <td className="whitespace-nowrap px-3 py-3 text-slate-600 dark:text-slate-300">
                 {formatDate(q.expiry_date)}
               </td>
-
-              <td className="whitespace-nowrap px-4 py-3 font-bold text-slate-900 dark:text-white">
+              <td className="whitespace-nowrap px-3 py-3 font-semibold tabular-nums text-slate-900 dark:text-white">
                 ₹ {Number(q.total_amount || 0).toFixed(2)}
               </td>
-
-              <td className="whitespace-nowrap px-4 py-3">
+              <td className="whitespace-nowrap px-3 py-3">
                 <StatusBadge status={q.status} />
               </td>
-
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
+              <td className="px-3 py-3">
+                <div className="inline-flex flex-nowrap items-center gap-1.5">
                   <Link
                     to={`/dashboard/quotations/${q.id}`}
                     className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
+                    aria-label="View / Print Quotation"
                     title="View / Print Quotation"
                   >
                     <Eye size={16} />
                   </Link>
-
                   {canManageQuotation &&
                     q.status !== "cancelled" &&
                     q.status !== "converted" && (
@@ -539,6 +491,7 @@ function QuotationTable({ quotations, canManageQuotation, onCancel }) {
                         type="button"
                         onClick={() => onCancel(q)}
                         className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-50 text-red-700 transition hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950"
+                        aria-label="Cancel Quotation"
                         title="Cancel Quotation"
                       >
                         <Ban size={16} />
@@ -548,7 +501,6 @@ function QuotationTable({ quotations, canManageQuotation, onCancel }) {
               </td>
             </tr>
           ))}
-
           {quotations.length === 0 && (
             <tr>
               <td colSpan="8" className="p-10 text-center">
@@ -570,31 +522,30 @@ function QuotationTable({ quotations, canManageQuotation, onCancel }) {
   );
 }
 
-function CustomDropdown({ value, onChange, options, icon }) {
+function CustomDropdown({ value, onChange, options, icon, label }) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
-
   const selected = options.find(
     (option) => String(option.value) === String(value),
   );
-
   useEffect(() => {
     const closeDropdown = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setOpen(false);
       }
     };
-
     document.addEventListener("mousedown", closeDropdown);
     return () => document.removeEventListener("mousedown", closeDropdown);
   }, []);
-
   return (
     <div ref={dropdownRef} className="relative min-w-0">
+      <p className="mb-1.5 text-sm text-slate-500">{label}</p>
       <button
         type="button"
+        aria-label={label}
+        aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-normal text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
       >
         <span className="flex min-w-0 items-center gap-2">
           {icon && (
@@ -602,7 +553,6 @@ function CustomDropdown({ value, onChange, options, icon }) {
           )}
           <span className="truncate">{selected?.label || "Select"}</span>
         </span>
-
         <ChevronDown
           size={18}
           className={`shrink-0 text-slate-500 transition dark:text-slate-400 ${
@@ -610,7 +560,6 @@ function CustomDropdown({ value, onChange, options, icon }) {
           }`}
         />
       </button>
-
       {open && (
         <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
           {options.map((option) => (
@@ -621,14 +570,13 @@ function CustomDropdown({ value, onChange, options, icon }) {
                 onChange(option.value);
                 setOpen(false);
               }}
-              className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 ${
+              className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-normal transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 ${
                 String(value) === String(option.value)
                   ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
                   : "text-slate-700 dark:text-slate-200"
               }`}
             >
               <span className="truncate">{option.label}</span>
-
               {String(value) === String(option.value) && (
                 <CheckCircle2 size={16} className="shrink-0" />
               )}
@@ -654,7 +602,6 @@ function StatusBadge({ status }) {
     cancelled:
       "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   };
-
   return (
     <span
       className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${
@@ -669,10 +616,8 @@ function StatusBadge({ status }) {
 
 function formatDate(date) {
   if (!date) return "-";
-
   const parsedDate = new Date(date);
   if (Number.isNaN(parsedDate.getTime())) return "-";
-
   return parsedDate.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -682,10 +627,8 @@ function formatDate(date) {
 
 function getDateOnly(date) {
   if (!date) return "";
-
   const parsedDate = new Date(date);
   if (Number.isNaN(parsedDate.getTime())) return "";
-
   return parsedDate.toISOString().slice(0, 10);
 }
 

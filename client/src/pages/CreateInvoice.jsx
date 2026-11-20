@@ -2171,21 +2171,21 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
 
   const content = (
     <div
-      className={`w-full max-w-full min-w-0 space-y-5 ${
+      className={`w-full max-w-full min-w-0 space-y-5 text-sm text-slate-700 dark:text-slate-200 ${
         modalMode
-          ? "max-h-[92vh] overflow-y-auto bg-slate-100 p-4 dark:bg-slate-950"
+          ? "max-h-[92dvh] overflow-y-auto overscroll-contain bg-slate-50 p-4 sm:p-6 dark:bg-slate-950"
           : ""
       }`}
     >
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="px-1 py-1">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
               <FileText size={17} />
-              Invoice Management
+              Workspace / Invoices
             </div>
 
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
               Create Invoice
             </h1>
 
@@ -2199,7 +2199,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
             type="button"
             onClick={handleClose}
             disabled={saving}
-            className="flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             title={modalMode ? "Close" : "Cancel"}
           >
             <X size={16} />
@@ -2210,7 +2210,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="mb-4">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
               Branch, Customer & Dates
             </h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -2218,7 +2218,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Field icon={<Building2 size={16} />} label="Branch">
               <BranchSelect
                 branches={activeBranches}
@@ -2290,7 +2290,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                 Items
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -2324,7 +2324,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                   className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950"
                 >
                   <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
                       Item #{index + 1}
                     </h3>
 
@@ -2422,12 +2422,12 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                     />
                   </div>
                   {item.product_id && variantData?.state === "loading" && (
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-sm text-slate-500">
                       Loading product variants...
                     </p>
                   )}
                   {item.product_id && variantData?.state === "error" && (
-                    <p className="mt-1 text-xs text-red-600">
+                    <p className="mt-1 text-sm text-red-600">
                       Variant lookup failed — select another product, then
                       select this product again to retry.
                     </p>
@@ -2449,7 +2449,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:col-span-2">
             <div className="mb-4">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                 Notes
               </h2>
             </div>
@@ -2467,7 +2467,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
               Invoice Summary
             </h2>
 
@@ -2480,10 +2480,10 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
 
               <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
                 <div className="flex items-center justify-between">
-                  <span className="text-base font-bold text-slate-900 dark:text-white">
+                  <span className="text-base font-semibold text-slate-900 dark:text-white">
                     Grand Total
                   </span>
-                  <span className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                  <span className="text-lg font-semibold text-blue-700 dark:text-blue-300">
                     ₹ {Number(totals.total || 0).toFixed(2)}
                   </span>
                 </div>
@@ -2700,7 +2700,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
           </Section>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
               Notes
             </label>
             <textarea
@@ -2723,7 +2723,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
       {showProductModal && (
         <Modal
           title="Add Product"
-          description="Fill product details, image, GST mapping and stock information."
+          description="Fill product details, GST mapping and stock information."
           icon={<Package size={22} />}
           onClose={closeProductModal}
         >
@@ -2791,20 +2791,20 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
               {!hsnSelected && productForm.product_name.trim().length >= 3 && (
                 <div className="mt-1.5">
                   {hsnLoading && (
-                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                    <p className="text-sm text-blue-600 dark:text-blue-400">
                       Finding matching HSN/SAC codes...
                     </p>
                   )}
 
                   {hsnError && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                    <p className="text-sm text-amber-600 dark:text-amber-400">
                       {hsnError}
                     </p>
                   )}
 
                   {hsnSuggestions.length > 0 && (
                     <div className="relative z-30 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                      <p className="sticky top-0 border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      <p className="sticky top-0 border-b border-slate-100 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                         Suggested HSN/SAC — select correct classification
                       </p>
 
@@ -2820,7 +2820,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                             type="button"
                             disabled={!validCode}
                             onClick={() => selectProductHsn(item)}
-                            className="flex w-full items-start gap-2 border-b border-slate-100 px-3 py-2 text-left text-xs hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
+                            className="flex w-full items-start gap-2 border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
                           >
                             <span className="shrink-0 font-semibold text-blue-700 dark:text-blue-300">
                               {item.type} {item.code}
@@ -2845,7 +2845,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                     !hsnLoading &&
                     !hsnError &&
                     hsnSuggestions.length === 0 && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
                         No HSN matches. Search HSN/SAC manually below.
                       </p>
                     )}
@@ -2923,11 +2923,11 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
           {variantMode && (
             <div className="mt-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                   Product Variants
                 </h3>
 
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   Add attributes such as Size or Color and generate
                   combinations.
                 </p>
@@ -3041,7 +3041,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                           }
                           className="border-b border-slate-200 dark:border-slate-700"
                         >
-                          <td className="p-2 text-xs text-slate-700 dark:text-slate-200">
+                          <td className="p-2 text-sm text-slate-700 dark:text-slate-200">
                             {Object.entries(variant.attributes)
                               .map(([key, value]) => `${key}: ${value}`)
                               .join(" / ")}
@@ -3144,7 +3144,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                                   ),
                                 )
                               }
-                              className="text-lg font-bold text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
+                              className="text-lg font-semibold text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
                             >
                               ×
                             </button>
@@ -3299,51 +3299,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
           </div>
 
           <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-            <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              <Image size={16} />
-              Product Image
-            </label>
-
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-                {productImageFile ? (
-                  <img
-                    src={URL.createObjectURL(productImageFile)}
-                    alt="Product preview"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <Image size={26} className="text-slate-400" />
-                )}
-              </div>
-
-              <div className="flex-1">
-                <input
-                  ref={productImageInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp"
-                  onChange={(event) => {
-                    setProductImageFile(event.target.files?.[0] || null);
-                    clearProductError("image");
-                  }}
-                  className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800 dark:text-slate-300"
-                />
-
-                {productErrors.image ? (
-                  <p className="mt-2 text-xs font-semibold text-red-600 dark:text-red-400">
-                    {productErrors.image}
-                  </p>
-                ) : (
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Upload PNG, JPG or WebP image. Max size 2MB.
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-            <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
               <FileText size={16} />
               Description
             </label>
@@ -3359,7 +3315,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
             />
 
             {productErrors.description && (
-              <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+              <p className="mt-1 text-sm font-semibold text-red-600 dark:text-red-400">
                 {productErrors.description}
               </p>
             )}
@@ -3377,6 +3333,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
       {showTaxModal && (
         <Modal
           title="Add New Tax Rule"
+          topMost
           description="Create GST / Tax rule without leaving product form."
           icon={<BadgePercent size={22} />}
           onClose={() => {
@@ -3384,7 +3341,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
             resetTaxForm();
           }}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               icon={<BadgePercent size={16} />}
               label="Tax Name"
@@ -3463,7 +3420,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
               />
             </Field>
 
-            <label className="mt-7 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label className="mt-7 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
               <input
                 type="checkbox"
                 name="reverse_charge"
@@ -3475,7 +3432,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
             </label>
 
             <div className="md:col-span-2 xl:col-span-3">
-              <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <FileText size={16} />
                 Description
               </label>
@@ -3491,7 +3448,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
               />
 
               {taxErrors.description && (
-                <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                <p className="mt-1 text-sm font-semibold text-red-600 dark:text-red-400">
                   {taxErrors.description}
                 </p>
               )}
@@ -3513,11 +3470,12 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
       {showBranchModal && (
         <Modal
           title="Add New Branch"
+          topMost
           description="Add branch details without leaving invoice page."
           icon={<GitBranch size={21} />}
           onClose={() => setShowBranchModal(false)}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               icon={<Building2 size={16} />}
               label="Branch Name"
@@ -3613,7 +3571,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
             </Field>
 
             <div className="md:col-span-2 xl:col-span-3">
-              <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <MapPin size={16} />
                 Address
               </label>
@@ -3800,7 +3758,7 @@ function ProductHsnSacPicker({
 
   return (
     <div className="relative z-20 min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         <Hash size={16} />
         HSN / SAC Code
       </label>
@@ -3829,7 +3787,7 @@ function ProductHsnSacPicker({
       />
 
       {error && (
-        <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+        <p className="mt-1 text-sm font-semibold text-red-600 dark:text-red-400">
           {error}
         </p>
       )}
@@ -3838,19 +3796,19 @@ function ProductHsnSacPicker({
         (manuallySearching || busy || issue || visibleItems.length > 0) && (
           <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-[100] max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
             {busy && (
-              <p className="p-3 text-xs text-blue-600 dark:text-blue-400">
+              <p className="p-3 text-sm text-blue-600 dark:text-blue-400">
                 Searching HSN/SAC...
               </p>
             )}
 
             {issue && (
-              <p className="p-3 text-xs text-amber-600 dark:text-amber-400">
+              <p className="p-3 text-sm text-amber-600 dark:text-amber-400">
                 {issue}
               </p>
             )}
 
             {!busy && !issue && visibleItems.length === 0 && (
-              <p className="p-3 text-xs text-slate-500 dark:text-slate-400">
+              <p className="p-3 text-sm text-slate-500 dark:text-slate-400">
                 No matches found. Try another code or description.
               </p>
             )}
@@ -3864,7 +3822,7 @@ function ProductHsnSacPicker({
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => handleSelect(item)}
-                  className="flex w-full items-start gap-2 border-b border-slate-100 px-3 py-2 text-left text-xs hover:bg-blue-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="flex w-full items-start gap-2 border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-blue-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   <span className="shrink-0 font-semibold text-blue-700 dark:text-blue-300">
                     {item.type} {item.code}
@@ -3885,21 +3843,36 @@ function ProductHsnSacPicker({
   );
 }
 
-function Modal({ title, description, icon, onClose, children }) {
+function Modal({
+  title,
+  description,
+  icon,
+  onClose,
+  children,
+  topMost = false,
+}) {
   return createPortal(
-    <div className="fixed inset-0 z-[60000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+    <div
+      className={`fixed inset-0 isolate flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-6 ${topMost ? "z-[65000]" : "z-[60000]"}`}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 ${topMost ? "max-w-3xl" : "max-w-5xl"}`}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-6 dark:border-slate-800">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
               {icon || <FileText size={21} />}
             </div>
-
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+            <div className="min-w-0">
+              <p className="mb-1 text-sm text-slate-500 dark:text-slate-400">
+                Invoice Workspace
+              </p>
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
                 {title}
               </h2>
-
               {description && (
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   {description}
@@ -3907,36 +3880,41 @@ function Modal({ title, description, icon, onClose, children }) {
               )}
             </div>
           </div>
-
           <button
             type="button"
+            aria-label={`Close ${title}`}
             onClick={onClose}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             <X size={18} />
           </button>
         </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/60 p-5 dark:bg-slate-950/40">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {children}
         </div>
-      </div>
+      </section>
     </div>,
     document.body,
   );
 }
 
+// Match the Customer and Product forms with a clear section label on the left.
 function Section({ title, icon, children }) {
   return (
-    <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-      <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-slate-900 dark:text-white">
-        {icon}
-        {title}
-      </h3>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <section className="mb-6 grid grid-cols-1 gap-5 border-b border-slate-100 pb-6 md:grid-cols-[175px_minmax(0,1fr)] dark:border-slate-800">
+      <div>
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+          {icon}
+          {title}
+        </h3>
+        <p className="mt-2 text-sm leading-5 text-slate-500 dark:text-slate-400">
+          Enter the applicable details below.
+        </p>
+      </div>
+      <div className="grid min-w-0 grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
         {children}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -3957,7 +3935,7 @@ function Input({
 }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         {icon}
         {label}
         {required && <span className="text-red-500">*</span>}
@@ -3980,11 +3958,11 @@ function Input({
       />
 
       {error ? (
-        <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+        <p className="mt-1 text-sm font-semibold text-red-600 dark:text-red-400">
           {error}
         </p>
       ) : helper ? (
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {helper}
         </p>
       ) : null}
@@ -3995,7 +3973,7 @@ function Input({
 function Field({ icon, label, children, error }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         {icon}
         {label}
       </label>
@@ -4003,7 +3981,7 @@ function Field({ icon, label, children, error }) {
       {children}
 
       {error && (
-        <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+        <p className="mt-1 text-sm font-semibold text-red-600 dark:text-red-400">
           {error}
         </p>
       )}
@@ -4018,7 +3996,7 @@ function ModalActions({ onSave, onCancel, saveText, disabled = false }) {
         type="button"
         onClick={onCancel}
         disabled={disabled}
-        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
       >
         <X size={16} />
         Cancel
@@ -4040,7 +4018,7 @@ function ModalActions({ onSave, onCancel, saveText, disabled = false }) {
 function AmountBox({ title, value }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-      <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+      <p className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
         {title === "Taxable" ? (
           <IndianRupee size={13} />
         ) : (
@@ -4048,7 +4026,7 @@ function AmountBox({ title, value }) {
         )}
         {title}
       </p>
-      <p className="mt-1 break-words font-bold text-slate-900 dark:text-white">
+      <p className="mt-1 break-words font-semibold text-slate-900 dark:text-white">
         ₹ {Number(value || 0).toFixed(2)}
       </p>
     </div>
@@ -4214,6 +4192,7 @@ function SearchableDropdown({
   addAction = null,
   variantDetails = false,
   wrapSubtitle = false,
+  icon = null,
 }) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
@@ -4221,6 +4200,7 @@ function SearchableDropdown({
 
   const buttonRef = useRef(null);
   const dropdownRef = useRef(null);
+  const searchRef = useRef(null);
 
   const selected = options.find(
     (option) => String(option.value) === String(value),
@@ -4241,12 +4221,14 @@ function SearchableDropdown({
     const shouldOpenUp =
       spaceBelow < dropdownHeight && rect.top > dropdownHeight;
 
-    const width = variantDetails
-      ? Math.min(300, window.innerWidth - 24)
-      : rect.width;
-    const left = variantDetails
-      ? Math.max(12, Math.min(rect.left, window.innerWidth - width - 12))
-      : rect.left;
+    const width = Math.min(
+      variantDetails ? 300 : rect.width,
+      window.innerWidth - 24,
+    );
+    const left = Math.max(
+      12,
+      Math.min(rect.left, window.innerWidth - width - 12),
+    );
 
     setDropdownStyle({
       position: "fixed",
@@ -4254,7 +4236,7 @@ function SearchableDropdown({
       width,
       top: shouldOpenUp ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
       maxHeight: dropdownHeight,
-      zIndex: 30000,
+      zIndex: 70000,
     });
   };
 
@@ -4262,6 +4244,7 @@ function SearchableDropdown({
     if (!open) return;
 
     updateDropdownPosition();
+    searchRef.current?.focus({ preventScroll: true });
 
     const handleClickOutside = (event) => {
       if (
@@ -4276,12 +4259,14 @@ function SearchableDropdown({
     };
 
     const handleScroll = (event) => {
-      if (dropdownRef.current?.contains(event.target)) {
+      if (
+        event.target instanceof window.Node &&
+        dropdownRef.current?.contains(event.target)
+      ) {
         return;
       }
 
-      setOpen(false);
-      setKeyword("");
+      updateDropdownPosition();
     };
 
     window.addEventListener("scroll", handleScroll, true);
@@ -4309,8 +4294,9 @@ function SearchableDropdown({
         onClick={() => setOpen((prev) => !prev)}
         className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
       >
-        <span className="min-w-0 truncate">
-          {selected?.title || placeholder}
+        <span className="flex min-w-0 items-center gap-2">
+          {icon && <span className="shrink-0 text-slate-400">{icon}</span>}
+          <span className="truncate">{selected?.title || placeholder}</span>
         </span>
 
         <ChevronDown
@@ -4321,180 +4307,105 @@ function SearchableDropdown({
         />
       </button>
 
-      {open && (
-        <div
-          ref={dropdownRef}
-          style={dropdownStyle}
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div className="border-b border-slate-100 p-2 dark:border-slate-800">
-            <div className="relative">
-              <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
+      {open &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={dropdownStyle}
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <div className="border-b border-slate-100 p-2 dark:border-slate-800">
+              <div className="relative">
+                <Search
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
 
-              <input
-                type="text"
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                placeholder={searchPlaceholder}
-                autoFocus
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
-              />
+                <input
+                  type="text"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  ref={searchRef}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-blue-950/50"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="max-h-56 overflow-y-auto p-2">
-            {filteredOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => handleSelect(option.value)}
-                className={`w-full rounded-xl px-3 py-2 text-left transition hover:bg-blue-50 dark:hover:bg-slate-800 ${
-                  String(value || "") === String(option.value)
-                    ? "bg-blue-50 dark:bg-blue-950/40"
-                    : ""
-                }`}
-              >
-                <p
-                  className={`${variantDetails ? "whitespace-normal break-words" : "truncate"} text-sm font-semibold text-slate-800 dark:text-slate-100`}
+            <div className="max-h-56 overflow-y-auto p-2">
+              {filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleSelect(option.value)}
+                  className={`w-full rounded-xl px-3 py-2 text-left transition hover:bg-blue-50 dark:hover:bg-slate-800 ${
+                    String(value || "") === String(option.value)
+                      ? "bg-blue-50 dark:bg-blue-950/40"
+                      : ""
+                  }`}
                 >
-                  {option.title}
-                </p>
-
-                {option.subtitle && (
                   <p
-                    className={`${variantDetails || wrapSubtitle ? "whitespace-normal break-words" : "truncate"} text-xs font-medium text-slate-500 dark:text-slate-400`}
+                    className={`${variantDetails ? "whitespace-normal break-words" : "truncate"} text-sm font-normal text-slate-800 dark:text-slate-100`}
                   >
-                    {option.subtitle}
+                    {option.title}
                   </p>
-                )}
-              </button>
-            ))}
 
-            {filteredOptions.length === 0 && (
-              <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
-                {emptyText}
+                  {option.subtitle && (
+                    <p
+                      className={`${variantDetails || wrapSubtitle ? "whitespace-normal break-words" : "truncate"} text-sm font-medium text-slate-500 dark:text-slate-400`}
+                    >
+                      {option.subtitle}
+                    </p>
+                  )}
+                </button>
+              ))}
+
+              {filteredOptions.length === 0 && (
+                <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
+                  {emptyText}
+                </div>
+              )}
+            </div>
+
+            {addAction && (
+              <div className="border-t border-slate-100 p-2 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleSelect(addAction.value)}
+                  className="flex w-full items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-normal text-slate-900 transition hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                >
+                  <Plus size={16} />
+                  {addAction.label}
+                </button>
               </div>
             )}
-          </div>
-
-          {addAction && (
-            <div className="border-t border-slate-100 p-2 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => handleSelect(addAction.value)}
-                className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
-              >
-                <Plus size={16} />
-                {addAction.label}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
 
 function CustomDropdown({ value, onChange, options, icon }) {
-  const [open, setOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
   const addTaxOption = options.find((option) => option.value === "__add_tax__");
-
-  const regularOptions = options.filter(
-    (option) => option.value !== "__add_tax__",
-  );
-
-  const selected = regularOptions.find(
-    (option) => String(option.value) === String(value),
-  );
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleSelect = (nextValue) => {
-    onChange(nextValue);
-    setOpen(false);
-  };
-
   return (
-    <div ref={dropdownRef} className="relative min-w-0">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {icon && (
-            <span className="shrink-0 text-slate-400 dark:text-slate-500">
-              {icon}
-            </span>
-          )}
-
-          <span className="truncate">{selected?.label || "Select"}</span>
-        </span>
-
-        <ChevronDown
-          size={18}
-          className={`shrink-0 text-slate-500 transition dark:text-slate-400 ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          <div className="max-h-60 overflow-y-auto">
-            {regularOptions.map((option) => {
-              const active = String(value) === String(option.value);
-
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => handleSelect(option.value)}
-                  className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 ${
-                    active
-                      ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-                      : "text-slate-700 dark:text-slate-200"
-                  }`}
-                >
-                  <span className="truncate">{option.label}</span>
-
-                  {active && <CheckCircle2 size={16} className="shrink-0" />}
-                </button>
-              );
-            })}
-          </div>
-
-          {addTaxOption && (
-            <div className="border-t border-slate-100 p-2 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => handleSelect(addTaxOption.value)}
-                className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
-              >
-                <Plus size={16} />
-
-                {addTaxOption.label.replace(/^\+\s*/, "")}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    <SearchableDropdown
+      value={value}
+      onChange={onChange}
+      icon={icon}
+      options={options
+        .filter((option) => option.value !== "__add_tax__")
+        .map((option) => ({ value: option.value, title: option.label }))}
+      searchPlaceholder="Search options..."
+      addAction={
+        addTaxOption
+          ? {
+              value: addTaxOption.value,
+              label: addTaxOption.label.replace(/^\+\s*/, ""),
+            }
+          : null
+      }
+    />
   );
 }
 

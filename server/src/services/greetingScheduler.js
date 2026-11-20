@@ -8,6 +8,8 @@ import greetingEmailTemplate from "../utils/greetingEmailTemplate.js";
 
 let schedulerRunning = false;
 
+const RECIPIENT_BATCH_SIZE = 10;
+
 const getIndiaDateTime = () => {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
@@ -264,6 +266,84 @@ const getBannerAttachment = (bannerPath) => {
   };
 };
 
+const sendGreetingToRecipient = async ({
+  greeting,
+  recipient,
+  senderDetails,
+  bannerAttachment,
+}) => {
+  try {
+    const placeholderDetails = {
+      recipientName: recipient.name,
+      senderName: senderDetails.senderName,
+      occasionName: greeting.occasion_name,
+    };
+
+    const personalizedSubject = replacePlaceholders(
+      greeting.email_subject,
+      placeholderDetails,
+    );
+
+    const personalizedMessage = replacePlaceholders(
+      greeting.email_message,
+      placeholderDetails,
+    );
+
+    const html = greetingEmailTemplate({
+      recipientName: recipient.name,
+      occasionName: greeting.occasion_name,
+      message: personalizedMessage,
+      senderName: senderDetails.senderName,
+      hasBanner: Boolean(bannerAttachment),
+    });
+
+    await senderDetails.mailTransporter.sendMail({
+      from: {
+        name: senderDetails.senderName,
+        address: senderDetails.fromAddress,
+      },
+
+      to: recipient.email,
+
+      subject: personalizedSubject,
+
+      text: [
+        `Hello ${recipient.name},`,
+        "",
+        personalizedMessage,
+        "",
+        "Best wishes,",
+        senderDetails.senderName,
+      ].join("\n"),
+
+      html,
+
+      ...(senderDetails.replyTo
+        ? {
+            replyTo: senderDetails.replyTo,
+          }
+        : {}),
+
+      ...(bannerAttachment
+        ? {
+            attachments: [bannerAttachment],
+          }
+        : {}),
+    });
+
+    return {
+      email: recipient.email,
+    };
+  } catch (error) {
+    console.error(
+      `Greeting ${greeting.id} email failed for ${recipient.email}:`,
+      error.message,
+    );
+
+    throw new Error(error.message || "Greeting email sending failed");
+  }
+};
+
 const updateFailedGreeting = async (greeting, errorMessage) => {
   if (greeting.repeat_type === "yearly") {
     const nextSendAt = getNextYearlyDate(greeting.send_at);
@@ -303,6 +383,8 @@ const processGreeting = async (greeting) => {
     UPDATE tbl_greetings
     SET
       status = 'processing',
+      sent_count = 0,
+      failed_count = 0,
       last_error = NULL
     WHERE id = ?
       AND status = 'scheduled'
@@ -310,6 +392,7 @@ const processGreeting = async (greeting) => {
     [greeting.id],
   );
 
+  // Another scheduler may have already claimed this greeting.
   if (claimResult.affectedRows === 0) {
     return;
   }
@@ -326,6 +409,7 @@ const processGreeting = async (greeting) => {
       return;
     }
 
+    // One transporter is created and reused for the complete greeting.
     const senderDetails = await getSenderDetails(greeting);
 
     const bannerAttachment = getBannerAttachment(greeting.banner_path);
@@ -334,76 +418,50 @@ const processGreeting = async (greeting) => {
     let failedCount = 0;
     let lastError = null;
 
-    for (const recipient of recipients) {
-      try {
-        const placeholderDetails = {
-          recipientName: recipient.name,
-          senderName: senderDetails.senderName,
-          occasionName: greeting.occasion_name,
-        };
+    for (
+      let startIndex = 0;
+      startIndex < recipients.length;
+      startIndex += RECIPIENT_BATCH_SIZE
+    ) {
+      const currentBatch = recipients.slice(
+        startIndex,
+        startIndex + RECIPIENT_BATCH_SIZE,
+      );
 
-        const personalizedSubject = replacePlaceholders(
-          greeting.email_subject,
-          placeholderDetails,
-        );
+      // All recipients in the current batch are processed together.
+      const batchResults = await Promise.allSettled(
+        currentBatch.map((recipient) =>
+          sendGreetingToRecipient({
+            greeting,
+            recipient,
+            senderDetails,
+            bannerAttachment,
+          }),
+        ),
+      );
 
-        const personalizedMessage = replacePlaceholders(
-          greeting.email_message,
-          placeholderDetails,
-        );
-
-        const html = greetingEmailTemplate({
-          recipientName: recipient.name,
-          occasionName: greeting.occasion_name,
-          message: personalizedMessage,
-          senderName: senderDetails.senderName,
-          hasBanner: Boolean(bannerAttachment),
-        });
-
-        await senderDetails.mailTransporter.sendMail({
-          from: {
-            name: senderDetails.senderName,
-            address: senderDetails.fromAddress,
-          },
-
-          to: recipient.email,
-
-          subject: personalizedSubject,
-
-          text: [
-            `Hello ${recipient.name},`,
-            "",
-            personalizedMessage,
-            "",
-            `Best wishes,`,
-            senderDetails.senderName,
-          ].join("\n"),
-
-          html,
-
-          ...(senderDetails.replyTo
-            ? {
-                replyTo: senderDetails.replyTo,
-              }
-            : {}),
-
-          ...(bannerAttachment
-            ? {
-                attachments: [bannerAttachment],
-              }
-            : {}),
-        });
-
-        sentCount += 1;
-      } catch (error) {
-        failedCount += 1;
-        lastError = error.message;
-
-        console.error(
-          `Greeting ${greeting.id} email failed for ${recipient.email}:`,
-          error.message,
-        );
+      for (const result of batchResults) {
+        if (result.status === "fulfilled") {
+          sentCount += 1;
+        } else {
+          failedCount += 1;
+          lastError = result.reason?.message || "Greeting email sending failed";
+        }
       }
+
+      // Save progress after every batch.
+      await db.query(
+        `
+        UPDATE tbl_greetings
+        SET
+          sent_count = ?,
+          failed_count = ?,
+          last_error = ?
+        WHERE id = ?
+          AND status = 'processing'
+        `,
+        [sentCount, failedCount, lastError, greeting.id],
+      );
     }
 
     const sentAt = getIndiaDateTime();
@@ -451,9 +509,12 @@ const processGreeting = async (greeting) => {
       [finalStatus, sentCount, failedCount, lastError, sentAt, greeting.id],
     );
   } catch (error) {
-    console.error(`Greeting ${greeting.id} processing error:`, error);
+    console.error(`Greeting ${greeting.id} processing error:`, error.message);
 
-    await updateFailedGreeting(greeting, error.message);
+    await updateFailedGreeting(
+      greeting,
+      error.message || "Greeting processing failed",
+    );
   }
 };
 
@@ -535,7 +596,5 @@ export const startGreetingScheduler = () => {
     console.error("Initial greeting scheduler error:", error);
   });
 
-  console.log(
-    "Greeting scheduler started",
-  );
+  console.log("Greeting scheduler started");
 };

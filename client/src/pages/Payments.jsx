@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import toast from "react-hot-toast";
-import CreateInvoice from "./Invoices";
+import CreateInvoice from "./CreateInvoice";
 import { createPortal } from "react-dom";
-
 import {
   Receipt,
   IndianRupee,
@@ -21,7 +20,6 @@ import {
   Filter,
   ChevronDown,
 } from "lucide-react";
-
 const PAYMENT_METHOD_OPTIONS = [
   { value: "cash", label: "Cash" },
   { value: "upi", label: "UPI" },
@@ -31,57 +29,45 @@ const PAYMENT_METHOD_OPTIONS = [
   { value: "wallet", label: "Wallet" },
   { value: "other", label: "Other" },
 ];
-
 const ALLOWED_PAYMENT_METHODS = PAYMENT_METHOD_OPTIONS.map(
   (option) => option.value,
 );
-
 const cleanString = (value) =>
   String(value || "")
     .replace(/<[^>]*>?/gm, "")
     .trim();
-
 const toNumber = (value, fallback = 0) => {
   if (value === "" || value === null || value === undefined) return fallback;
   const number = Number(value);
   return Number.isFinite(number) ? number : NaN;
 };
-
 const getList = (data, key) => {
   if (Array.isArray(data)) return data;
   return data?.[key] || [];
 };
-
 const isValidDate = (value) => {
   if (!value) return false;
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value));
 };
-
 function Payments() {
   const user = JSON.parse(localStorage.getItem("user"));
-
   const [rolePermissions, setRolePermissions] = useState({});
-
   useEffect(() => {
     const fetchRolePermissions = async () => {
       try {
         if (user?.role === "company_admin") return;
-
         const res = await api.get("/companies/role-permissions");
         setRolePermissions(res.data?.permissions || {});
       } catch {
         setRolePermissions({});
       }
     };
-
     fetchRolePermissions();
   }, []);
-
   const canRecord =
     user?.role === "company_admin" ||
     user?.role === "accountant" ||
     Boolean(rolePermissions?.[user?.role]?.payments);
-
   const initialForm = {
     invoice_id: "",
     amount: "",
@@ -89,29 +75,23 @@ function Payments() {
     payment_date: new Date().toISOString().split("T")[0],
     notes: "",
   };
-
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
   const [formData, setFormData] = useState(initialForm);
-
   const [search, setSearch] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
-
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
-
   const fetchData = async () => {
     try {
       const [invoiceRes, paymentRes] = await Promise.all([
         api.get("/invoices"),
         api.get("/payments"),
       ]);
-
       setInvoices(getList(invoiceRes.data, "invoices"));
       setPayments(getList(paymentRes.data, "payments"));
     } catch (error) {
@@ -120,14 +100,11 @@ function Payments() {
       setPayments([]);
     }
   };
-
   useEffect(() => {
     fetchData();
   }, []);
-
   const branches = useMemo(() => {
     const branchMap = new Map();
-
     [
       ...(Array.isArray(invoices) ? invoices : []),
       ...(Array.isArray(payments) ? payments : []),
@@ -140,29 +117,23 @@ function Payments() {
         });
       }
     });
-
     return Array.from(branchMap.values());
   }, [invoices, payments]);
-
   const getInvoicePaidAmount = (invoiceId) => {
     return (Array.isArray(payments) ? payments : [])
       .filter((payment) => Number(payment.invoice_id) === Number(invoiceId))
       .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   };
-
   const selectedInvoice = (Array.isArray(invoices) ? invoices : []).find(
     (invoice) => Number(invoice.id) === Number(formData.invoice_id),
   );
-
   const selectedPaidAmount = selectedInvoice
     ? Math.max(
         Number(selectedInvoice.paid_amount || 0),
         getInvoicePaidAmount(selectedInvoice.id),
       )
     : 0;
-
   const selectedTotalAmount = Number(selectedInvoice?.total_amount || 0);
-
   const selectedRemainingAmount = selectedInvoice
     ? Math.max(
         Number(
@@ -173,20 +144,17 @@ function Payments() {
         0,
       )
     : 0;
-
   const pendingInvoices = (Array.isArray(invoices) ? invoices : []).filter(
     (invoice) =>
       invoice.status !== "paid" &&
       invoice.status !== "cancelled" &&
       Number(invoice.balance_due ?? invoice.total_amount ?? 0) > 0,
   );
-
   const totalCollected = (Array.isArray(payments) ? payments : [])
     .filter((payment) =>
       branchFilter ? Number(payment.branch_id) === Number(branchFilter) : true,
     )
     .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-
   const partialInvoices = (Array.isArray(invoices) ? invoices : []).filter(
     (invoice) =>
       invoice.status === "partial" &&
@@ -194,15 +162,12 @@ function Payments() {
         ? Number(invoice.branch_id) === Number(branchFilter)
         : true),
   ).length;
-
   const filteredPendingInvoices = pendingInvoices.filter((invoice) =>
     branchFilter ? Number(invoice.branch_id) === Number(branchFilter) : true,
   );
-
   const filteredPayments = useMemo(() => {
     return (Array.isArray(payments) ? payments : []).filter((payment) => {
       const keyword = search.toLowerCase().trim();
-
       const matchesSearch =
         !keyword ||
         payment.invoice_number?.toLowerCase().includes(keyword) ||
@@ -210,38 +175,28 @@ function Payments() {
         payment.payment_method?.toLowerCase().includes(keyword) ||
         payment.branch_name?.toLowerCase().includes(keyword) ||
         payment.branch_code?.toLowerCase().includes(keyword);
-
       const matchesMethod = methodFilter
         ? payment.payment_method === methodFilter
         : true;
-
       const matchesBranch = branchFilter
         ? Number(payment.branch_id) === Number(branchFilter)
         : true;
-
       return matchesSearch && matchesMethod && matchesBranch;
     });
   }, [payments, search, methodFilter, branchFilter]);
-
   useEffect(() => {
     setCurrentPage(1);
   }, [search, methodFilter, branchFilter]);
-
   const sortedPayments = useMemo(() => {
     return [...filteredPayments].sort((a, b) => Number(b.id) - Number(a.id));
   }, [filteredPayments]);
-
   const totalPages = Math.ceil(sortedPayments.length / itemsPerPage);
-
   const paginatedPayments = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
-
     return sortedPayments.slice(start, start + itemsPerPage);
   }, [sortedPayments, currentPage, itemsPerPage]);
-
   const handleChange = (e) => {
     const { name, value } = e.target;
-
     if (name === "invoice_id") {
       const invoice = (Array.isArray(invoices) ? invoices : []).find(
         (inv) => Number(inv.id) === Number(value),
@@ -257,97 +212,77 @@ function Payments() {
             0,
           )
         : "";
-
       setFormData((prev) => ({
         ...prev,
         invoice_id: value,
         amount: remaining,
       }));
-
       return;
     }
-
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
   };
-
   const resetForm = () => {
     setFormData(initialForm);
   };
-
   const openPaymentModal = () => {
     resetForm();
     setShowPaymentModal(true);
   };
-
   const closePaymentModal = () => {
     resetForm();
     setShowPaymentModal(false);
   };
-
   const handleInvoiceCreated = async () => {
     setShowCreateInvoiceModal(false);
     await fetchData();
   };
-
   const validatePaymentForm = () => {
     if (!canRecord) {
       toast.error("Payment permission required");
       return false;
     }
-
     if (!formData.invoice_id) {
       toast.error("Please select invoice");
       return false;
     }
-
     if (!selectedInvoice) {
       toast.error("Selected invoice is not available");
       return false;
     }
-
     if (selectedInvoice.status === "cancelled") {
       toast.error("Payment cannot be recorded for cancelled invoice");
       return false;
     }
-
     if (selectedInvoice.status === "paid" || selectedRemainingAmount <= 0) {
       toast.error("Invoice is already fully paid");
       return false;
     }
-
     const paymentAmount = toNumber(formData.amount, NaN);
-
     if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
       toast.error("Please enter valid payment amount");
       return false;
     }
-
     if (paymentAmount > selectedRemainingAmount) {
       toast.error("Payment amount cannot be greater than remaining amount");
       return false;
     }
-
     if (!ALLOWED_PAYMENT_METHODS.includes(formData.payment_method)) {
       toast.error("Please select valid payment method");
       return false;
     }
-
     if (!isValidDate(formData.payment_date)) {
       toast.error("Please select valid payment date");
       return false;
     }
-
     if (cleanString(formData.notes).length > 500) {
       toast.error("Notes must be less than 500 characters");
       return false;
     }
-
     return true;
   };
-
   const buildPaymentPayload = () => ({
     invoice_id: formData.invoice_id,
     amount: Number(formData.amount || 0),
@@ -355,16 +290,12 @@ function Payments() {
     payment_date: formData.payment_date,
     notes: cleanString(formData.notes),
   });
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!validatePaymentForm()) return;
-
     try {
       setLoading(true);
       await api.post("/payments", buildPaymentPayload());
-
       toast.success("Payment recorded successfully");
       closePaymentModal();
       fetchData();
@@ -374,53 +305,40 @@ function Payments() {
       setLoading(false);
     }
   };
-
   const formatPaymentMethod = (method) => {
     const matchedMethod = PAYMENT_METHOD_OPTIONS.find(
       (option) => option.value === method,
     );
-
     return matchedMethod?.label || method || "-";
   };
-
   const formatDate = (date) => {
     if (!date) return "-";
-
     const parsedDate = new Date(date);
     if (Number.isNaN(parsedDate.getTime())) return "-";
-
     return parsedDate.toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
   };
-
   return (
-    <div className="w-full max-w-full min-w-0 space-y-5 overflow-hidden">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="w-full max-w-full min-w-0 space-y-6 text-sm text-slate-700 dark:text-slate-200">
+      <div className="px-1">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
               <Receipt size={17} />
-              Payment Management
+              Workspace / Payments
             </div>
-
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
               Payments
             </h1>
-
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Record branch-wise payments, track partial payments and manage
               customer payment history.
             </p>
           </div>
-
           <div className="flex flex-wrap items-center gap-2">
-            <div className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              {sortedPayments.length} Payments
-            </div>
-
             {canRecord && (
               <button
                 type="button"
@@ -434,7 +352,6 @@ function Payments() {
           </div>
         </div>
       </div>
-
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <SummaryCard
           title="Total Collected"
@@ -442,14 +359,12 @@ function Payments() {
           icon={<IndianRupee size={20} />}
           color="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
         />
-
         <SummaryCard
           title="Pending Invoices"
           value={filteredPendingInvoices.length}
           icon={<AlertCircle size={20} />}
           color="bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300"
         />
-
         <SummaryCard
           title="Partial Payments"
           value={partialInvoices}
@@ -457,26 +372,24 @@ function Payments() {
           color="bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
         />
       </div>
-
       <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-200 p-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-col gap-4">
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Payment History
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                All Payments
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Branch-wise customer invoice payment records.
+                Current payment records. Track branch-wise customer invoice
+                payments.
               </p>
             </div>
-
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,2fr)_minmax(180px,1fr)_minmax(180px,1fr)]">
               <div className="relative">
                 <Search
                   size={17}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                 />
-
                 <input
                   type="text"
                   placeholder="Search payments"
@@ -485,7 +398,6 @@ function Payments() {
                   className="input !pl-10"
                 />
               </div>
-
               <CustomDropdown
                 value={branchFilter}
                 onChange={setBranchFilter}
@@ -500,7 +412,6 @@ function Payments() {
                   })),
                 ]}
               />
-
               <CustomDropdown
                 value={methodFilter}
                 onChange={setMethodFilter}
@@ -513,19 +424,16 @@ function Payments() {
             </div>
           </div>
         </div>
-
         <PaymentTable
           payments={paginatedPayments}
           formatDate={formatDate}
           formatPaymentMethod={formatPaymentMethod}
         />
-
         <div className="flex flex-col gap-3 border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-500 dark:text-slate-400">
               Rows per page
             </span>
-
             <select
               value={itemsPerPage}
               onChange={(e) => {
@@ -540,7 +448,6 @@ function Payments() {
               <option value={100}>100</option>
             </select>
           </div>
-
           <div className="text-sm text-slate-500 dark:text-slate-400">
             Showing{" "}
             {sortedPayments.length === 0
@@ -551,33 +458,29 @@ function Payments() {
             {" of "}
             {sortedPayments.length}
           </div>
-
           <div className="flex items-center gap-2">
             <button
               type="button"
               disabled={currentPage === 1}
               onClick={() => setCurrentPage((prev) => prev - 1)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               Prev
             </button>
-
             <span className="text-sm font-semibold">
               {currentPage} / {totalPages || 1}
             </span>
-
             <button
               type="button"
               disabled={currentPage === totalPages || totalPages === 0}
               onClick={() => setCurrentPage((prev) => prev + 1)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               Next
             </button>
           </div>
         </div>
       </div>
-
       {showPaymentModal && (
         <PaymentModal
           formData={formData}
@@ -594,33 +497,19 @@ function Payments() {
           onCreateInvoice={() => setShowCreateInvoiceModal(true)}
         />
       )}
-
-      {showCreateInvoiceModal && (
-        <div className="fixed inset-0 z-[30000] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[96vh] w-full max-w-7xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-            <div className="sticky top-0 z-[10000] flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3 dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Create Invoice
-              </h2>
-
-              <button
-                type="button"
-                onClick={() => setShowCreateInvoiceModal(false)}
-                className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
-              >
-                <X size={16} />
-              </button>
+      {showCreateInvoiceModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[55000] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+            <div className="max-h-[94dvh] w-full max-w-7xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+              <CreateInvoice
+                modalMode
+                onClose={() => setShowCreateInvoiceModal(false)}
+                onCreated={handleInvoiceCreated}
+              />
             </div>
-
-            <CreateInvoice
-              modalMode
-              onClose={() => setShowCreateInvoiceModal(false)}
-              onCreated={handleInvoiceCreated}
-            />
-          </div>
-        </div>
-      )}
-
+          </div>,
+          document.body,
+        )}
       <style>{`
         .input {
           width: 100%;
@@ -633,26 +522,21 @@ function Payments() {
           color: #334155;
           transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
         }
-
         .input::placeholder {
           color: #94a3b8;
         }
-
         .input:focus {
           border-color: #059669;
           box-shadow: 0 0 0 3px #d1fae5;
         }
-
         .dark .input {
           border-color: #334155;
           background: #0f172a;
           color: #e2e8f0;
         }
-
         .dark .input::placeholder {
           color: #64748b;
         }
-
         .dark .input:focus {
           border-color: #10b981;
           box-shadow: 0 0 0 3px rgba(6, 78, 59, 0.35);
@@ -661,7 +545,6 @@ function Payments() {
     </div>
   );
 }
-
 function PaymentModal({
   formData,
   pendingInvoices,
@@ -677,24 +560,26 @@ function PaymentModal({
   onCreateInvoice,
 }) {
   return createPortal(
-    <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-50 shadow-[0_30px_100px_rgba(0,0,0,0.45)] dark:border-slate-700 dark:bg-slate-950">
+    <div className="fixed inset-0 z-[50000] isolate flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-5">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Record Payment"
+        className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+      >
         <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900">
           <div>
             <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
               <Receipt size={17} />
               Payment Entry
             </div>
-
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
               Record Payment
             </h2>
-
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Select invoice and record received amount.
             </p>
           </div>
-
           <button
             type="button"
             onClick={onClose}
@@ -703,20 +588,18 @@ function PaymentModal({
             <X size={18} />
           </button>
         </div>
-
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="mb-4">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
                   Payment Details
                 </h3>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   Select pending invoice and enter payment information.
                 </p>
               </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <InputWrapper label="Invoice" icon={<FileText size={16} />}>
                   <InvoiceSelect
                     invoices={pendingInvoices}
@@ -726,7 +609,6 @@ function PaymentModal({
                         onCreateInvoice();
                         return;
                       }
-
                       handleChange({
                         target: {
                           name: "invoice_id",
@@ -736,7 +618,6 @@ function PaymentModal({
                     }}
                   />
                 </InputWrapper>
-
                 <InputWrapper label="Amount" icon={<IndianRupee size={16} />}>
                   <input
                     type="number"
@@ -749,7 +630,6 @@ function PaymentModal({
                     className="input"
                   />
                 </InputWrapper>
-
                 <InputWrapper
                   label="Payment Method"
                   icon={<CreditCard size={16} />}
@@ -768,7 +648,6 @@ function PaymentModal({
                     options={[...PAYMENT_METHOD_OPTIONS]}
                   />
                 </InputWrapper>
-
                 <InputWrapper
                   label="Payment Date"
                   icon={<CalendarDays size={16} />}
@@ -781,12 +660,10 @@ function PaymentModal({
                     className="input"
                   />
                 </InputWrapper>
-
-                <div className="min-w-0 md:col-span-2">
-                  <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <div className="min-w-0 sm:col-span-2">
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
                     Notes
                   </label>
-
                   <input
                     type="text"
                     name="notes"
@@ -799,39 +676,34 @@ function PaymentModal({
                 </div>
               </div>
             </div>
-
             {selectedInvoice && (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <AmountBox
                   title="Invoice Total"
                   value={selectedTotalAmount}
                   className="bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
                 />
-
                 <AmountBox
                   title="Already Paid"
                   value={selectedPaidAmount}
                   className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
                 />
-
                 <AmountBox
                   title="Remaining"
                   value={selectedRemainingAmount}
                   className="bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
                 />
-
                 <div className="rounded-xl border border-slate-200 bg-slate-100 p-4 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
                   <p className="flex items-center gap-2 text-sm">
                     <Building2 size={15} />
                     Branch
                   </p>
-                  <h3 className="mt-1 text-medium font-medium">
+                  <h3 className="mt-1 text-sm font-medium">
                     {selectedInvoice.branch_name || "Main Company"}
                   </h3>
                 </div>
               </div>
             )}
-
             <div className="sticky bottom-0 z-10 flex flex-col gap-3 border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -839,28 +711,25 @@ function PaymentModal({
                     ? `Remaining: ₹ ${selectedRemainingAmount.toFixed(2)}`
                     : "Select invoice to see balance"}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Payment amount cannot be greater than remaining balance.
                 </p>
               </div>
-
               <div className="flex flex-col gap-2 sm:flex-row">
                 <button
                   type="button"
                   onClick={onReset}
-                  className="rounded-xl border border-slate-200 bg-slate-100 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
+                  className="rounded-xl border border-slate-200 bg-slate-100 px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
                 >
                   Reset
                 </button>
-
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-xl border border-slate-200 bg-slate-100 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
+                  className="rounded-xl border border-slate-200 bg-slate-100 px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
                 >
                   Cancel
                 </button>
-
                 <button
                   type="submit"
                   disabled={loading}
@@ -878,12 +747,11 @@ function PaymentModal({
     document.body,
   );
 }
-
 function PaymentTable({ payments, formatDate, formatPaymentMethod }) {
   return (
     <div className="w-full max-w-full overflow-x-auto">
-      <table className="w-full min-w-[900px] text-sm">
-        <thead className="bg-slate-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+      <table className="w-full min-w-[900px] text-left text-sm">
+        <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           <tr>
             {[
               "Invoice",
@@ -896,53 +764,45 @@ function PaymentTable({ payments, formatDate, formatPaymentMethod }) {
             ].map((head) => (
               <th
                 key={head}
-                className="p-4 text-left text-xs font-bold uppercase tracking-wide"
+                className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap"
               >
                 {head}
               </th>
             ))}
           </tr>
         </thead>
-
         <tbody>
           {payments.map((payment) => (
             <tr
               key={payment.id}
               className="border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
             >
-              <td className="p-4 font-semibold text-slate-900 dark:text-white">
+              <td className="whitespace-nowrap px-4 py-3.5 font-semibold text-slate-900 dark:text-white">
                 {payment.invoice_number || "-"}
               </td>
-
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td className="whitespace-nowrap px-4 py-3.5 text-slate-600 dark:text-slate-300">
                 {payment.branch_name || "Main Company"}
               </td>
-
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td className="whitespace-nowrap px-4 py-3.5 text-slate-600 dark:text-slate-300">
                 {payment.customer_name || "-"}
               </td>
-
-              <td className="p-4 font-bold text-emerald-600">
+              <td className="whitespace-nowrap px-4 py-3.5 font-semibold text-emerald-600">
                 ₹ {Number(payment.amount || 0).toFixed(2)}
               </td>
-
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td className="whitespace-nowrap px-4 py-3.5 text-slate-600 dark:text-slate-300">
                 <span className="inline-flex items-center gap-2">
                   <Wallet size={15} />
                   {formatPaymentMethod(payment.payment_method)}
                 </span>
               </td>
-
-              <td className="p-4 text-slate-600 dark:text-slate-300">
+              <td className="whitespace-nowrap px-4 py-3.5 text-slate-600 dark:text-slate-300">
                 {formatDate(payment.payment_date)}
               </td>
-
               <td className="p-4">
                 <StatusBadge status={payment.invoice_status} />
               </td>
             </tr>
           ))}
-
           {payments.length === 0 && (
             <tr>
               <td colSpan="7" className="p-10 text-center">
@@ -963,26 +823,31 @@ function PaymentTable({ payments, formatDate, formatPaymentMethod }) {
     </div>
   );
 }
-
 function SummaryCard({ title, value, icon, color }) {
+  const tone = color.includes("emerald")
+    ? "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900 dark:from-emerald-950/40 dark:to-slate-900"
+    : color.includes("orange")
+      ? "border-orange-200 bg-gradient-to-br from-orange-50 to-white dark:border-orange-900 dark:from-orange-950/40 dark:to-slate-900"
+      : "border-blue-200 bg-gradient-to-br from-blue-50 to-white dark:border-blue-900 dark:from-blue-950/40 dark:to-slate-900";
   return (
-    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-slate-500 dark:text-slate-400">
-            {title}
-          </p>
-          <h2 className="mt-1 truncate text-2xl font-bold text-slate-900 dark:text-white">
-            {value}
-          </h2>
-        </div>
-
-        <div className={`shrink-0 rounded-xl p-3 ${color}`}>{icon}</div>
-      </div>
+    <div
+      className={`flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3 text-left shadow-sm ${tone}`}
+    >
+      <span className={`shrink-0 rounded-lg p-2.5 ${color}`}>{icon}</span>
+      <span className="min-w-0">
+        <span className="block text-sm text-slate-500 dark:text-slate-400">
+          {title}
+        </span>
+        <span className="mt-1 block break-words text-2xl font-semibold leading-tight text-slate-900 dark:text-white">
+          {value}
+        </span>
+        <span className="mt-0.5 block text-sm text-slate-500 dark:text-slate-400">
+          Current payment records
+        </span>
+      </span>
     </div>
   );
 }
-
 function InvoiceSelect({ invoices, value, onChange }) {
   const invoiceOptions = invoices.map((invoice) => ({
     value: String(invoice.id),
@@ -991,7 +856,6 @@ function InvoiceSelect({ invoices, value, onChange }) {
       invoice.branch_name || "Main Company"
     } • ₹ ${Number(invoice.balance_due || invoice.total_amount || 0).toFixed(2)}`,
   }));
-
   return (
     <SearchableDropdown
       value={value}
@@ -1008,7 +872,6 @@ function InvoiceSelect({ invoices, value, onChange }) {
     />
   );
 }
-
 function SearchableDropdown({
   value,
   onChange,
@@ -1018,24 +881,22 @@ function SearchableDropdown({
   emptyText = "No option found",
   addAction = null,
   accent = "emerald",
+  icon = null,
 }) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [dropdownStyle, setDropdownStyle] = useState({});
-
   const buttonRef = useRef(null);
   const dropdownRef = useRef(null);
-
+  const searchRef = useRef(null);
   const selected = options.find(
     (option) => String(option.value) === String(value),
   );
-
   const filteredOptions = options.filter((option) =>
     `${option.title || ""} ${option.subtitle || ""}`
       .toLowerCase()
       .includes(keyword.trim().toLowerCase()),
   );
-
   const accentClasses =
     accent === "emerald"
       ? {
@@ -1044,7 +905,7 @@ function SearchableDropdown({
           hoverRow: "hover:bg-emerald-50 dark:hover:bg-slate-800",
           activeRow: "bg-emerald-50 dark:bg-emerald-950/40",
           addButton:
-            "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950",
+            "bg-slate-50 text-slate-900 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700",
         }
       : {
           hoverBorder:
@@ -1052,33 +913,28 @@ function SearchableDropdown({
           hoverRow: "hover:bg-blue-50 dark:hover:bg-slate-800",
           activeRow: "bg-blue-50 dark:bg-blue-950/40",
           addButton:
-            "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950",
+            "bg-slate-50 text-slate-900 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700",
         };
-
   const updateDropdownPosition = () => {
     if (!buttonRef.current) return;
-
     const rect = buttonRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const dropdownHeight = 330;
     const shouldOpenUp =
       spaceBelow < dropdownHeight && rect.top > dropdownHeight;
-
     setDropdownStyle({
       position: "fixed",
       left: rect.left,
       width: rect.width,
       top: shouldOpenUp ? rect.top - dropdownHeight - 8 : rect.bottom + 8,
       maxHeight: dropdownHeight,
-      zIndex: 30000,
+      zIndex: 70000,
     });
   };
-
   useEffect(() => {
     if (!open) return;
-
     updateDropdownPosition();
-
+    searchRef.current?.focus({ preventScroll: true });
     const handleClickOutside = (event) => {
       if (
         buttonRef.current?.contains(event.target) ||
@@ -1086,28 +942,23 @@ function SearchableDropdown({
       ) {
         return;
       }
-
       setOpen(false);
       setKeyword("");
     };
-
     window.addEventListener("scroll", updateDropdownPosition, true);
     window.addEventListener("resize", updateDropdownPosition);
     document.addEventListener("mousedown", handleClickOutside);
-
     return () => {
       window.removeEventListener("scroll", updateDropdownPosition, true);
       window.removeEventListener("resize", updateDropdownPosition);
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [open]);
-
   const handleSelect = (nextValue) => {
     onChange(nextValue);
     setOpen(false);
     setKeyword("");
   };
-
   return (
     <>
       <button
@@ -1116,10 +967,10 @@ function SearchableDropdown({
         onClick={() => setOpen((prev) => !prev)}
         className={`flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-700 shadow-sm outline-none transition focus:ring-4 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 ${accentClasses.hoverBorder}`}
       >
-        <span className="min-w-0 truncate">
-          {selected?.title || placeholder}
+        <span className="flex min-w-0 items-center gap-2">
+          {icon && <span className="shrink-0 text-slate-400">{icon}</span>}
+          <span className="truncate">{selected?.title || placeholder}</span>
         </span>
-
         <ChevronDown
           size={17}
           className={`shrink-0 text-slate-400 transition ${
@@ -1127,186 +978,103 @@ function SearchableDropdown({
           }`}
         />
       </button>
-
-      {open && (
-        <div
-          ref={dropdownRef}
-          style={dropdownStyle}
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div className="border-b border-slate-100 p-2 dark:border-slate-800">
-            <div className="relative">
-              <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-
-              <input
-                type="text"
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                placeholder={searchPlaceholder}
-                autoFocus
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-emerald-950/50"
-              />
-            </div>
-          </div>
-
-          <div className="max-h-56 overflow-y-auto p-2">
-            {filteredOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => handleSelect(option.value)}
-                className={`w-full rounded-xl px-3 py-2 text-left transition ${
-                  accentClasses.hoverRow
-                } ${
-                  String(value || "") === String(option.value)
-                    ? accentClasses.activeRow
-                    : ""
-                }`}
-              >
-                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  {option.title}
-                </p>
-
-                {option.subtitle && (
-                  <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
-                    {option.subtitle}
-                  </p>
-                )}
-              </button>
-            ))}
-
-            {filteredOptions.length === 0 && (
-              <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
-                {emptyText}
+      {open &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={dropdownStyle}
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <div className="border-b border-slate-100 p-2 dark:border-slate-800">
+              <div className="relative">
+                <Search
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  type="text"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  ref={searchRef}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:ring-emerald-950/50"
+                />
               </div>
-            )}
-          </div>
-
-          {addAction && (
-            <div className="border-t border-slate-100 p-2 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => handleSelect(addAction.value)}
-                className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium ${accentClasses.addButton}`}
-              >
-                <Plus size={16} />
-                {addAction.label}
-              </button>
             </div>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-function CustomDropdown({ value, onChange, options, icon }) {
-  const [open, setOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  const addTaxOption = options.find((option) => option.value === "__add_tax__");
-
-  const regularOptions = options.filter(
-    (option) => option.value !== "__add_tax__",
-  );
-
-  const selected = regularOptions.find(
-    (option) => String(option.value) === String(value),
-  );
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleSelect = (nextValue) => {
-    onChange(nextValue);
-    setOpen(false);
-  };
-
-  return (
-    <div ref={dropdownRef} className="relative min-w-0">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-semibold text-slate-700 outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-blue-500 dark:focus:ring-blue-950/50"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {icon && (
-            <span className="shrink-0 text-slate-400 dark:text-slate-500">
-              {icon}
-            </span>
-          )}
-
-          <span className="truncate">{selected?.label || "Select"}</span>
-        </span>
-
-        <ChevronDown
-          size={18}
-          className={`shrink-0 text-slate-500 transition dark:text-slate-400 ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          <div className="max-h-60 overflow-y-auto">
-            {regularOptions.map((option) => {
-              const active = String(value) === String(option.value);
-
-              return (
+            <div className="max-h-56 overflow-y-auto p-2">
+              {filteredOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   onClick={() => handleSelect(option.value)}
-                  className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 ${
-                    active
-                      ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-                      : "text-slate-700 dark:text-slate-200"
+                  className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                    accentClasses.hoverRow
+                  } ${
+                    String(value || "") === String(option.value)
+                      ? accentClasses.activeRow
+                      : ""
                   }`}
                 >
-                  <span className="truncate">{option.label}</span>
-
-                  {active && <CheckCircle2 size={16} className="shrink-0" />}
+                  <p className="truncate text-sm font-normal text-slate-800 dark:text-slate-100">
+                    {option.title}
+                  </p>
+                  {option.subtitle && (
+                    <p className="truncate text-sm font-medium text-slate-500 dark:text-slate-400">
+                      {option.subtitle}
+                    </p>
+                  )}
                 </button>
-              );
-            })}
-          </div>
-
-          {addTaxOption && (
-            <div className="border-t border-slate-100 p-2 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => handleSelect(addTaxOption.value)}
-                className="flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950"
-              >
-                <Plus size={16} />
-
-                {addTaxOption.label.replace(/^\+\s*/, "")}
-              </button>
+              ))}
+              {filteredOptions.length === 0 && (
+                <div className="px-3 py-4 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
+                  {emptyText}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
-    </div>
+            {addAction && (
+              <div className="border-t border-slate-100 p-2 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleSelect(addAction.value)}
+                  className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium ${accentClasses.addButton}`}
+                >
+                  <Plus size={16} />
+                  {addAction.label}
+                </button>
+              </div>
+            )}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
-
+function CustomDropdown({ value, onChange, options, icon }) {
+  const addOption = options.find((option) => option.value === "__add_tax__");
+  return (
+    <SearchableDropdown
+      value={value}
+      onChange={onChange}
+      icon={icon}
+      options={options
+        .filter((option) => option.value !== "__add_tax__")
+        .map((option) => ({ value: option.value, title: option.label }))}
+      searchPlaceholder="Search options..."
+      addAction={
+        addOption
+          ? {
+              value: addOption.value,
+              label: addOption.label.replace(/^\+\s*/, ""),
+            }
+          : null
+      }
+    />
+  );
+}
 function InputWrapper({ label, icon, children }) {
   return (
     <div className="min-w-0">
-      <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
         {icon}
         {label}
       </label>
@@ -1314,20 +1082,18 @@ function InputWrapper({ label, icon, children }) {
     </div>
   );
 }
-
 function AmountBox({ title, value, className }) {
   return (
     <div
       className={`rounded-xl border border-slate-200 p-4 dark:border-slate-800 ${className}`}
     >
       <p className="text-sm">{title}</p>
-      <h3 className="mt-1 text-lg font-bold">
+      <h3 className="mt-1 text-lg font-semibold">
         ₹ {Number(value || 0).toFixed(2)}
       </h3>
     </div>
   );
 }
-
 function StatusBadge({ status }) {
   const styles = {
     draft:
@@ -1343,10 +1109,9 @@ function StatusBadge({ status }) {
     cancelled:
       "bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-700",
   };
-
   return (
     <span
-      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold capitalize ${
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-sm font-medium capitalize ${
         styles[status] || styles.draft
       }`}
     >
@@ -1354,5 +1119,4 @@ function StatusBadge({ status }) {
     </span>
   );
 }
-
 export default Payments;
