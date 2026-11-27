@@ -35,6 +35,18 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const responseData = error.response?.data;
 
+    /* Force logout when the user, company or Company Admin has been deactivated.*/
+    if (responseData?.force_logout === true) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      localStorage.removeItem("kyc_token");
+      localStorage.removeItem("pending_company_id");
+
+      window.location.replace("/");
+
+      return Promise.reject(error);
+    }
+
     if (status === 403 && responseData?.kyc_required === true) {
       window.dispatchEvent(
         new CustomEvent("kycRequired", {

@@ -10,6 +10,9 @@ import {
   getSuperAdminSmtpSettings,
   saveSuperAdminSmtpSettings,
   testSuperAdminSmtpSettings,
+  getDefaultEmailSettings,
+  saveDefaultEmailSettings,
+  testDefaultEmailSettings,
 } from "../controllers/superAdminController.js";
 
 const router = express.Router();
@@ -46,6 +49,30 @@ router.post(
   "/smtp-settings/test",
   authorizeRoles("superadmin"),
   testSuperAdminSmtpSettings,
+);
+
+/*
+|--------------------------------------------------------------------------
+| DEFAULT COMPANY EMAIL SETTINGS
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+  "/default-email-settings",
+  authorizeRoles("superadmin"),
+  getDefaultEmailSettings,
+);
+
+router.put(
+  "/default-email-settings",
+  authorizeRoles("superadmin"),
+  saveDefaultEmailSettings,
+);
+
+router.post(
+  "/default-email-settings/test",
+  authorizeRoles("superadmin"),
+  testDefaultEmailSettings,
 );
 
 /*

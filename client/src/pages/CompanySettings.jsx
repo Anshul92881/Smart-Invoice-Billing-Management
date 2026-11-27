@@ -39,6 +39,10 @@ const INITIAL_FORM = {
 };
 
 const INITIAL_EMAIL_FORM = {
+  email_sender_type: "default",
+  default_email_configured: false,
+  default_from_email: "",
+  default_from_name: "",
   smtp_host: "",
   smtp_port: 465,
   smtp_user: "",
@@ -74,14 +78,26 @@ const normalizeSettings = (data = {}) => ({
 });
 
 const normalizeEmailSettings = (data = {}) => ({
+  email_sender_type: data.email_sender_type === "own" ? "own" : "default",
+
+  default_from_email: String(data.default_from_email || "").trim(),
+  default_from_name: String(data.default_from_name || "").trim(),
+
+  default_email_configured:
+    data.default_email_configured === true ||
+    data.default_email_configured === 1 ||
+    data.default_email_configured === "1",
+
   smtp_host: String(data.smtp_host || "").trim(),
   smtp_port: Number(data.smtp_port || 465),
   smtp_user: String(data.smtp_user || "").trim(),
   smtp_pass: "",
+
   smtp_secure:
     data.smtp_secure === true ||
     data.smtp_secure === 1 ||
     data.smtp_secure === "1",
+
   from_email: String(data.from_email || "").trim(),
   from_name: String(data.from_name || "").trim(),
   reply_to: String(data.reply_to || "").trim(),
@@ -165,10 +181,6 @@ function CompanySettings() {
     }
 
     setFormData((prev) => ({ ...prev, [name]: nextValue }));
-  };
-
-  const updateField = (name, value) => {
-    handleChange({ target: { name, value } });
   };
 
   const handleEmailChange = (e) => {
@@ -278,19 +290,42 @@ function CompanySettings() {
 
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
+
     if (!validateEmailSettings()) return;
 
     try {
       setEmailLoading(true);
-      const payload = {
-        ...normalizeEmailSettings(emailForm),
-        smtp_pass: emailForm.smtp_pass,
-      };
+
+      let payload;
+
+      if (emailForm.email_sender_type === "default") {
+        payload = {
+          email_sender_type: "default",
+        };
+      } else {
+        const normalizedEmail = normalizeEmailSettings(emailForm);
+
+        payload = {
+          email_sender_type: "own",
+
+          smtp_host: normalizedEmail.smtp_host,
+          smtp_port: normalizedEmail.smtp_port,
+          smtp_user: normalizedEmail.smtp_user,
+          smtp_pass: emailForm.smtp_pass,
+          smtp_secure: normalizedEmail.smtp_secure,
+
+          from_email: normalizedEmail.from_email,
+          from_name: normalizedEmail.from_name,
+          reply_to: normalizedEmail.reply_to,
+        };
+      }
 
       const res = await api.put("/companies/email-settings", payload);
 
       toast.success(res.data.message || "Email settings saved successfully");
+
       await fetchSettings();
+
       setEmailEditMode(false);
       setShowPassword(false);
     } catch (error) {
@@ -415,9 +450,7 @@ function CompanySettings() {
             />
           </div>
 
-          <Divider />
-
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <InfoBlock label="Invoice Terms" value={savedData.invoice_terms} />
             <InfoBlock
               label="Payment Instructions"
@@ -609,28 +642,108 @@ function CompanySettings() {
           <SectionHeader
             icon={<Mail size={18} />}
             title="Email Configuration"
-            description="Company-level SMTP settings used for invoice, quotation and payment emails."
+            description="Choose whether emails are sent using the system default email or your own SMTP."
           />
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Info label="SMTP Host" value={savedEmail.smtp_host} />
-            <Info label="SMTP Port" value={savedEmail.smtp_port} />
-            <Info label="SMTP User" value={savedEmail.smtp_user} />
-            <Info
-              label="Secure SSL/TLS"
-              value={savedEmail.smtp_secure ? "Enabled" : "Disabled"}
-            />
-            <Info
-              label="From Email"
-              value={savedEmail.from_email || savedEmail.smtp_user}
-            />
-            <Info label="From Name" value={savedEmail.from_name} />
-            <Info label="Reply To" value={savedEmail.reply_to} />
-            <Info
-              label="SMTP Password"
-              value={savedEmail.smtp_user ? "Saved securely" : "-"}
-            />
+          <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Selected Email Method
+            </p>
+
+            <div className="mt-2 flex items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${
+                  savedEmail.email_sender_type === "own"
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+                    : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                }`}
+              >
+                <CheckCircle2 size={15} />
+
+                {savedEmail.email_sender_type === "own"
+                  ? "Own SMTP"
+                  : "Default Email"}
+              </span>
+            </div>
           </div>
+
+          {savedEmail.email_sender_type === "default" ? (
+            <div
+              className={`rounded-xl border p-4 ${
+                savedEmail.default_email_configured
+                  ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30"
+                  : "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <Mail
+                  size={19}
+                  className={
+                    savedEmail.default_email_configured
+                      ? "mt-0.5 text-emerald-600"
+                      : "mt-0.5 text-amber-600"
+                  }
+                />
+
+                <div>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">
+                    {savedEmail.default_email_configured
+                      ? "Default email is ready"
+                      : "Default email is not configured"}
+                  </p>
+
+                  {savedEmail.default_email_configured && (
+                    <div className="mt-3 space-y-1 rounded-lg border border-emerald-200 bg-white/70 px-3 py-2.5 dark:border-emerald-900 dark:bg-slate-900/40">
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        <span className="font-semibold text-slate-800 dark:text-white">
+                          Sender Email:
+                        </span>{" "}
+                        {savedEmail.default_from_email || "-"}
+                      </p>
+
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        <span className="font-semibold text-slate-800 dark:text-white">
+                          Sender Name:
+                        </span>{" "}
+                        {savedEmail.default_from_name ||
+                          "Smart Invoice & Billing"}
+                      </p>
+                    </div>
+                  )}
+
+                  <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                    {savedEmail.default_email_configured
+                      ? "Invoices, quotations and greetings will be sent using the default email configured by SuperAdmin."
+                      : "Please contact SuperAdmin to configure the default email before using this option."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <Info label="SMTP Host" value={savedEmail.smtp_host} />
+              <Info label="SMTP Port" value={savedEmail.smtp_port} />
+              <Info label="SMTP User" value={savedEmail.smtp_user} />
+
+              <Info
+                label="Secure SSL/TLS"
+                value={savedEmail.smtp_secure ? "Enabled" : "Disabled"}
+              />
+
+              <Info
+                label="From Email"
+                value={savedEmail.from_email || savedEmail.smtp_user}
+              />
+
+              <Info label="From Name" value={savedEmail.from_name} />
+              <Info label="Reply To" value={savedEmail.reply_to} />
+
+              <Info
+                label="SMTP Password"
+                value={savedEmail.smtp_user ? "Saved securely" : "-"}
+              />
+            </div>
+          )}
 
           <Divider />
 
@@ -645,8 +758,13 @@ function CompanySettings() {
             <button
               type="button"
               onClick={handleTestEmail}
-              disabled={testLoading || !savedEmail.smtp_host}
-              className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm outline-none ring-0 transition-all duration-200 hover:bg-emerald-700 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:bg-emerald-400"
+              disabled={
+                testLoading ||
+                (savedEmail.email_sender_type === "default"
+                  ? !savedEmail.default_email_configured
+                  : !savedEmail.smtp_host)
+              }
+              className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm outline-none transition-all duration-200 hover:bg-emerald-700 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:bg-emerald-400"
             >
               <Send size={16} />
               {testLoading ? "Sending..." : "Send Test Email"}
@@ -661,157 +779,263 @@ function CompanySettings() {
           <SectionHeader
             icon={<Mail size={18} />}
             title="Email Configuration"
-            description="Configure company SMTP. These details will be used to send invoices and quotations from this company email."
+            description="Select the email method used for invoices, quotations and greetings."
           />
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Field icon={<Mail size={16} />} label="SMTP Host">
-              <input
-                name="smtp_host"
-                value={emailForm.smtp_host}
-                onChange={handleEmailChange}
-                className="input"
-                placeholder="smtp.gmail.com"
-              />
-            </Field>
-
-            <Field icon={<Mail size={16} />} label="SMTP Port">
-              <input
-                type="number"
-                name="smtp_port"
-                value={emailForm.smtp_port}
-                onChange={handleEmailChange}
-                className="input"
-                placeholder="465"
-              />
-            </Field>
-
-            <Field icon={<Mail size={16} />} label="SMTP User">
-              <input
-                name="smtp_user"
-                value={emailForm.smtp_user}
-                onChange={handleEmailChange}
-                className="input"
-                placeholder="billing@company.com"
-              />
-            </Field>
-
-            <Field icon={<ShieldCheck size={16} />} label="SMTP Password">
-              <div className="relative">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <label
+              className={`rounded-xl border p-4 transition ${
+                !emailForm.default_email_configured
+                  ? "cursor-not-allowed border-slate-200 bg-slate-100 opacity-70 dark:border-slate-700 dark:bg-slate-800"
+                  : emailForm.email_sender_type === "default"
+                    ? "cursor-pointer border-blue-500 bg-blue-50 ring-2 ring-blue-100 dark:border-blue-500 dark:bg-blue-950/30 dark:ring-blue-900"
+                    : "cursor-pointer border-slate-200 bg-white hover:border-blue-300 dark:border-slate-700 dark:bg-slate-900"
+              }`}
+            >
+              <div className="flex items-start gap-3">
                 <input
-                  type={showPassword ? "text" : "password"}
-                  name="smtp_pass"
-                  value={emailForm.smtp_pass}
+                  type="radio"
+                  name="email_sender_type"
+                  value="default"
+                  checked={emailForm.email_sender_type === "default"}
                   onChange={handleEmailChange}
-                  className="input pr-10"
-                  placeholder={
-                    savedEmail.smtp_user
-                      ? "Leave blank to keep existing"
-                      : "SMTP app password"
-                  }
+                  disabled={!emailForm.default_email_configured}
+                  className="mt-1 h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
 
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 outline-none transition hover:text-slate-800 focus:outline-none focus:ring-0 dark:text-slate-400 dark:hover:text-white"
-                >
-                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                </button>
+                <div>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">
+                    Default Email
+                  </p>
+
+                  <p className="mt-1 text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
+                    Use the email configured by SuperAdmin. 
+                  </p>
+
+                  {!emailForm.default_email_configured && (
+                    <p className="mt-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                      Default email is not configured by SuperAdmin.
+                    </p>
+                  )}
+                </div>
               </div>
-            </Field>
+            </label>
 
-            <Field icon={<Mail size={16} />} label="From Email">
-              <input
-                name="from_email"
-                value={emailForm.from_email}
-                onChange={handleEmailChange}
-                className="input"
-                placeholder="billing@company.com"
-              />
-            </Field>
-
-            <Field icon={<Building2 size={16} />} label="From Name">
-              <input
-                name="from_name"
-                value={emailForm.from_name}
-                onChange={handleEmailChange}
-                className="input"
-                placeholder="Company Name"
-              />
-            </Field>
-
-            <Field icon={<Mail size={16} />} label="Reply To">
-              <input
-                name="reply_to"
-                value={emailForm.reply_to}
-                onChange={handleEmailChange}
-                className="input"
-                placeholder="support@company.com"
-              />
-            </Field>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-              <label className="flex cursor-pointer items-start gap-3">
+            <label
+              className={`cursor-pointer rounded-xl border p-4 transition ${
+                emailForm.email_sender_type === "own"
+                  ? "border-blue-500 bg-blue-50 ring-2 ring-blue-100 dark:border-blue-500 dark:bg-blue-950/30 dark:ring-blue-900"
+                  : "border-slate-200 bg-white hover:border-blue-300 dark:border-slate-700 dark:bg-slate-900"
+              }`}
+            >
+              <div className="flex items-start gap-3">
                 <input
-                  type="checkbox"
-                  name="smtp_secure"
-                  checked={emailForm.smtp_secure}
+                  type="radio"
+                  name="email_sender_type"
+                  value="own"
+                  checked={emailForm.email_sender_type === "own"}
                   onChange={handleEmailChange}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-900"
+                  className="mt-1 h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
 
-                <span>
-                  <span className="block text-sm font-bold text-slate-900 dark:text-white">
-                    Secure SSL/TLS
-                  </span>
-                  <span className="mt-1 block text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
-                    Enable for port 465. Disable usually for port 587.
-                  </span>
-                </span>
-              </label>
-            </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">
+                    Own Email
+                  </p>
+
+                  <p className="mt-1 text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
+                    Send emails using your company SMTP account and sender
+                    details.
+                  </p>
+                </div>
+              </div>
+            </label>
           </div>
 
           <Divider />
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-            <p className="text-sm font-bold text-slate-900 dark:text-white">
-              Common SMTP examples
-            </p>
-            <div className="mt-3 grid grid-cols-1 gap-3 text-sm font-medium text-slate-600 dark:text-slate-300 md:grid-cols-3">
-              <div>
-                <p className="font-bold text-slate-800 dark:text-slate-100">
-                  Gmail
-                </p>
-                <p>Host: smtp.gmail.com</p>
-                <p>Port: 465</p>
-                <p>Secure: true</p>
-              </div>
-              <div>
-                <p className="font-bold text-slate-800 dark:text-slate-100">
-                  Zoho India
-                </p>
-                <p>Host: smtp.zoho.in</p>
-                <p>Port: 465</p>
-                <p>Secure: true</p>
-              </div>
-              <div>
-                <p className="font-bold text-slate-800 dark:text-slate-100">
-                  Outlook
-                </p>
-                <p>Host: smtp.office365.com</p>
-                <p>Port: 587</p>
-                <p>Secure: false</p>
+          {emailForm.email_sender_type === "default" ? (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="mt-0.5 text-blue-600" size={19} />
+
+                <div>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">
+                    Default Email Selected
+                  </p>
+
+                  <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                    Invoices, quotations and greetings will use the SuperAdmin
+                    default email. Your existing own SMTP details will remain
+                    saved and will not be deleted.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <Field icon={<Mail size={16} />} label="SMTP Host">
+                  <input
+                    name="smtp_host"
+                    value={emailForm.smtp_host}
+                    onChange={handleEmailChange}
+                    className="input"
+                    placeholder="smtp.gmail.com"
+                  />
+                </Field>
+
+                <Field icon={<Mail size={16} />} label="SMTP Port">
+                  <input
+                    type="number"
+                    name="smtp_port"
+                    value={emailForm.smtp_port}
+                    onChange={handleEmailChange}
+                    className="input"
+                    placeholder="465"
+                  />
+                </Field>
+
+                <Field icon={<Mail size={16} />} label="SMTP User">
+                  <input
+                    name="smtp_user"
+                    value={emailForm.smtp_user}
+                    onChange={handleEmailChange}
+                    className="input"
+                    placeholder="billing@company.com"
+                  />
+                </Field>
+
+                <Field icon={<ShieldCheck size={16} />} label="SMTP Password">
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      name="smtp_pass"
+                      value={emailForm.smtp_pass}
+                      onChange={handleEmailChange}
+                      className="input pr-10"
+                      placeholder={
+                        savedEmail.smtp_user
+                          ? "Leave blank to keep existing"
+                          : "SMTP app password"
+                      }
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 outline-none transition hover:text-slate-800 focus:outline-none focus:ring-0 dark:text-slate-400 dark:hover:text-white"
+                    >
+                      {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
+                  </div>
+                </Field>
+
+                <Field icon={<Mail size={16} />} label="From Email">
+                  <input
+                    name="from_email"
+                    value={emailForm.from_email}
+                    onChange={handleEmailChange}
+                    className="input"
+                    placeholder="billing@company.com"
+                  />
+                </Field>
+
+                <Field icon={<Building2 size={16} />} label="From Name">
+                  <input
+                    name="from_name"
+                    value={emailForm.from_name}
+                    onChange={handleEmailChange}
+                    className="input"
+                    placeholder="Company Name"
+                  />
+                </Field>
+
+                <Field icon={<Mail size={16} />} label="Reply To">
+                  <input
+                    name="reply_to"
+                    value={emailForm.reply_to}
+                    onChange={handleEmailChange}
+                    className="input"
+                    placeholder="support@company.com"
+                  />
+                </Field>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      name="smtp_secure"
+                      checked={emailForm.smtp_secure}
+                      onChange={handleEmailChange}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-900"
+                    />
+
+                    <span>
+                      <span className="block text-sm font-bold text-slate-900 dark:text-white">
+                        Secure SSL/TLS
+                      </span>
+
+                      <span className="mt-1 block text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
+                        Enable for port 465. Disable usually for port 587.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <Divider />
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-sm font-bold text-slate-900 dark:text-white">
+                  Common SMTP examples
+                </p>
+
+                <div className="mt-3 grid grid-cols-1 gap-3 text-sm font-medium text-slate-600 dark:text-slate-300 md:grid-cols-3">
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-slate-100">
+                      Gmail
+                    </p>
+                    <p>Host: smtp.gmail.com</p>
+                    <p>Port: 465</p>
+                    <p>Secure: true</p>
+                  </div>
+
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-slate-100">
+                      Zoho India
+                    </p>
+                    <p>Host: smtp.zoho.in</p>
+                    <p>Port: 465</p>
+                    <p>Secure: true</p>
+                  </div>
+
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-slate-100">
+                      Outlook
+                    </p>
+                    <p>Host: smtp.office365.com</p>
+                    <p>Port: 587</p>
+                    <p>Secure: false</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
 
           <FormActions
             loading={emailLoading}
             hasChanges={hasEmailChanges}
             onCancel={handleEmailCancel}
-            saveText={emailLoading ? "Verifying..." : "Save & Verify SMTP"}
+            saveText={
+              emailLoading
+                ? emailForm.email_sender_type === "default"
+                  ? "Saving..."
+                  : "Verifying..."
+                : emailForm.email_sender_type === "default"
+                  ? "Save Email Method"
+                  : "Save & Verify SMTP"
+            }
           />
         </form>
       )}

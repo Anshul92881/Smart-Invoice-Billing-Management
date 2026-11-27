@@ -399,18 +399,26 @@ const validateCalculatedItem = (item, index) => {
 const buildCalculatedItems = async (connection, items, companyId) => {
   let subtotal = 0;
   let taxAmount = 0;
+
   const calculatedItems = [];
+
+  // Same product or variant can exist in multiple rows.
+  const requestedProductStock = new Map();
+  const requestedVariantStock = new Map();
 
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
+    const row = index + 1;
 
     const quantity = toNumber(item.quantity, NaN);
     const price = toNumber(item.price ?? item.rate, NaN);
     let taxRate = toNumber(item.tax_rate, 0);
 
     let itemName = normalizeText(item.item_name || item.product_name);
+
     let description = normalizeNullable(item.description);
     let hsnSacCode = normalizeUpper(item.hsn_sac_code) || null;
+
     const productId = item.product_id ? Number(item.product_id) : null;
 
     const variantId =
@@ -425,14 +433,20 @@ const buildCalculatedItems = async (connection, items, companyId) => {
       (!Number.isSafeInteger(variantId) || variantId <= 0 || !productId)
     ) {
       return {
-        error: `Invalid variant at row ${index + 1}`,
+        error: `Invalid variant at row ${row}`,
       };
     }
 
     if (productId) {
       if (!isPositiveInteger(productId)) {
         return {
-          error: `Valid product is required at row ${index + 1}`,
+          error: `Valid product is required at row ${row}`,
+        };
+      }
+
+      if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+        return {
+          error: `Product quantity must be a positive whole number at row ${row}`,
         };
       }
 
@@ -443,11 +457,13 @@ const buildCalculatedItems = async (connection, items, companyId) => {
           product_name,
           description,
           tax_rate,
-          hsn_sac_code
+          hsn_sac_code,
+          quantity,
+          status
         FROM tbl_products
         WHERE id = ?
-        AND company_id = ?
-        AND status = 'active'
+          AND company_id = ?
+          AND status = 'active'
         LIMIT 1
         `,
         [productId, companyId],
@@ -455,50 +471,89 @@ const buildCalculatedItems = async (connection, items, companyId) => {
 
       if (productRows.length === 0) {
         return {
-          error: `Product must be active and belong to the same company at row ${
-            index + 1
-          }`,
+          error:
+            `Product must be active and belong to the same ` +
+            `company at row ${row}`,
         };
       }
 
       const product = productRows[0];
 
-      // Quotation create/edit par stock deduct nahi hoga.
-      // Sirf selected variant ki validity check hogi.
       const [productVariantRows] = await connection.query(
         `
-  SELECT id, status
-  FROM tbl_product_variants
-  WHERE company_id = ?
-    AND product_id = ?
-  `,
+          SELECT
+            id,
+            product_id,
+            sku,
+            quantity,
+            status
+          FROM tbl_product_variants
+          WHERE company_id = ?
+            AND product_id = ?
+          `,
         [companyId, productId],
       );
 
       if (productVariantRows.length > 0) {
-        const selected = productVariantRows.find(
-          (variant) => Number(variant.id) === variantId,
+        const selectedVariant = productVariantRows.find(
+          (variant) => Number(variant.id) === Number(variantId),
         );
 
-        if (!selected || selected.status !== "active") {
+        if (!selectedVariant || selectedVariant.status !== "active") {
           return {
-            error: `Select an active variant at row ${index + 1}`,
+            error: `Select an active variant at row ${row}`,
           };
         }
 
-        if (!Number.isSafeInteger(quantity)) {
+        const previousRequestedQuantity =
+          requestedVariantStock.get(Number(selectedVariant.id)) || 0;
+
+        const totalRequestedQuantity = previousRequestedQuantity + quantity;
+
+        const availableStock = Number(selectedVariant.quantity || 0);
+
+        if (totalRequestedQuantity > availableStock) {
           return {
-            error: `Variant quantity must be a whole number at row ${index + 1}`,
+            error:
+              `${
+                selectedVariant.sku || product.product_name
+              } stock is not enough. ` + `Available stock: ${availableStock}`,
           };
         }
-      } else if (variantId !== null) {
-        return {
-          error: `Variant does not belong to product at row ${index + 1}`,
-        };
+
+        requestedVariantStock.set(
+          Number(selectedVariant.id),
+          totalRequestedQuantity,
+        );
+      } else {
+        if (variantId !== null) {
+          return {
+            error: `Variant does not belong to product at row ${row}`,
+          };
+        }
+
+        const previousRequestedQuantity =
+          requestedProductStock.get(productId) || 0;
+
+        const totalRequestedQuantity = previousRequestedQuantity + quantity;
+
+        const availableStock = Number(product.quantity || 0);
+
+        if (totalRequestedQuantity > availableStock) {
+          return {
+            error:
+              `${product.product_name} stock is not enough. ` +
+              `Available stock: ${availableStock}`,
+          };
+        }
+
+        requestedProductStock.set(productId, totalRequestedQuantity);
       }
 
       itemName = itemName || product.product_name;
+
       description = description || product.description || null;
+
       hsnSacCode = hsnSacCode || product.hsn_sac_code || null;
 
       taxRate =
@@ -527,11 +582,14 @@ const buildCalculatedItems = async (connection, items, companyId) => {
     const itemError = validateCalculatedItem(calculatedItem, index);
 
     if (itemError) {
-      return { error: itemError };
+      return {
+        error: itemError,
+      };
     }
 
     subtotal += baseAmount;
     taxAmount += itemTaxAmount;
+
     calculatedItems.push(calculatedItem);
   }
 

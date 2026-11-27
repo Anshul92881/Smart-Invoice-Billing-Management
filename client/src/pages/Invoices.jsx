@@ -8,7 +8,6 @@ import { createPortal } from "react-dom";
 import {
   FileText,
   Plus,
-  Trash2,
   Mail,
   Ban,
   IndianRupee,
@@ -28,13 +27,10 @@ import {
   Landmark,
   Wallet,
   CreditCard,
-  CalendarDays,
-  StickyNote,
   CheckCircle2,
   Package,
   Barcode,
   Boxes,
-  Image,
   ChevronDown,
   Search,
   Filter,
@@ -119,8 +115,6 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
   const [showProductModal, setShowProductModal] = useState(false);
   const [branchOpenSource, setBranchOpenSource] = useState("invoice");
   const [productItemIndex, setProductItemIndex] = useState(null);
-  const [productImageFile, setProductImageFile] = useState(null);
-  const productImageInputRef = useRef(null);
   const navigate = useNavigate();
 
   const initialBranchForm = {
@@ -436,52 +430,6 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
     setCustomerForm({
       ...initialCustomerForm,
       branch_id: formData.branch_id || "",
-    });
-  };
-
-  const resetProductForm = () => {
-    setProductForm({
-      ...initialProductForm,
-      branch_id: formData.branch_id || "",
-    });
-    setProductImageFile(null);
-    setProductItemIndex(null);
-
-    if (productImageInputRef.current) {
-      productImageInputRef.current.value = "";
-    }
-  };
-
-  const validateProductImage = () => {
-    if (!productImageFile) return true;
-
-    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-
-    if (!allowedTypes.includes(productImageFile.type)) {
-      toast.error("Only JPG, PNG or WEBP product images are allowed");
-      return false;
-    }
-
-    if (productImageFile.size > 2 * 1024 * 1024) {
-      toast.error("Product image size must be less than 2MB");
-      return false;
-    }
-
-    return true;
-  };
-
-  const uploadProductImage = async (productId) => {
-    if (!productImageFile || !productId) return;
-
-    if (!validateProductImage()) return;
-
-    const data = new FormData();
-    data.append("image", productImageFile);
-
-    await api.post(`/products/${productId}/image`, data, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
     });
   };
 
@@ -861,7 +809,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
       return false;
     }
 
-    return validateProductImage();
+    return true;
   };
 
   const handleCreateProduct = async () => {
@@ -892,8 +840,6 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
       const res = await api.post("/products", payload);
       const createdProductId =
         res.data?.product_id || res.data?.id || res.data?.product?.id;
-
-      await uploadProductImage(createdProductId);
 
       const productRes = await api.get("/products");
       const updatedProducts = getList(productRes.data, "products");
@@ -1410,7 +1356,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
             <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
               <tr>
                 {[
-                  "Invoice No",
+                  "Invoice No.",
                   "Branch",
                   "Customer",
                   "Date",
@@ -1422,7 +1368,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
                 ].map((head) => (
                   <th
                     key={head}
-                    className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap"
+                    className="px-4 py-3 text-left text-sm font-semibold whitespace-nowrap"
                   >
                     {head}
                   </th>
@@ -1799,7 +1745,7 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
       {showProductModal && (
         <Modal
           title="Add New Product"
-          description="Add product with image without leaving invoice page."
+          description="Add product without leaving invoice page."
           icon={<Package size={21} />}
           onClose={() => {
             resetProductForm();
@@ -1924,42 +1870,6 @@ function Invoices({ modalMode = false, onClose, onCreated }) {
                 ]}
               />
             </Field>
-
-            <div className="md:col-span-2 xl:col-span-3">
-              <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                <Image size={16} />
-                Product Image
-              </label>
-
-              <div className="flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4 sm:flex-row sm:items-center">
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                  {productImageFile ? (
-                    <img
-                      src={URL.createObjectURL(productImageFile)}
-                      alt="Preview"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <Image size={26} className="text-slate-400" />
-                  )}
-                </div>
-
-                <div className="flex-1">
-                  <input
-                    ref={productImageInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/webp"
-                    onChange={(e) =>
-                      setProductImageFile(e.target.files?.[0] || null)
-                    }
-                    className="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800"
-                  />
-                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                    Upload PNG, JPG or WebP image.
-                  </p>
-                </div>
-              </div>
-            </div>
 
             <div className="md:col-span-2 xl:col-span-3">
               <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">

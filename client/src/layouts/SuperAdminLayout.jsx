@@ -280,7 +280,6 @@ function SuperAdminLayout() {
         aria-label="SuperAdmin navigation"
         className="sidebar-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4"
       >
-
         {MENU_ITEMS.map((item) => {
           const isActive =
             location.pathname === item.path ||
@@ -336,8 +335,11 @@ function SuperAdminLayout() {
               </button>
               <div className="min-w-0">
                 <h2 className="truncate text-base font-semibold leading-tight tracking-tight text-slate-900 sm:text-lg dark:text-white">
-                  Welcome back<span role="img" aria-label="hello">👋</span>  {user?.name || "SuperAdmin"}
-                  
+                  Welcome back
+                  <span role="img" aria-label="hello">
+                    👋
+                  </span>{" "}
+                  {user?.name || "SuperAdmin"}
                 </h2>
                 <p className="mt-1 hidden truncate text-sm font-medium leading-5 text-slate-500 dark:text-slate-400 sm:block">
                   Manage companies, admins, subscriptions, audit logs and
@@ -357,11 +359,12 @@ function SuperAdminLayout() {
                   }}
                   aria-label="Open notifications"
                   aria-expanded={notificationOpen}
-                  className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+                  className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
                 >
                   <Bell size={19} />
+
                   {unreadCount > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-red-600 px-1 text-xs dark:border-slate-900 font-semibold text-white">
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-red-600 px-1 text-xs font-semibold text-white dark:border-slate-900">
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
                   )}

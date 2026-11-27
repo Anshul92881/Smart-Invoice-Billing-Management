@@ -29,15 +29,22 @@ function isFreePlan(plan) {
       Number(plan.price) === 0)
   );
 }
+
 function getPlanDuration(plan) {
   const durationValue = Number(plan?.duration_value);
   const durationUnit = String(plan?.duration_unit || "").toLowerCase();
-  if (durationValue > 0 && ["day", "month", "year"].includes(durationUnit)) {
+
+  if (
+    Number.isInteger(durationValue) &&
+    durationValue >= 0 &&
+    ["day", "month", "year"].includes(durationUnit)
+  ) {
     return {
       value: durationValue,
       unit: durationUnit,
     };
   }
+
   const legacyCycles = {
     monthly: { value: 1, unit: "month" },
     quarterly: { value: 3, unit: "month" },
@@ -48,27 +55,71 @@ function getPlanDuration(plan) {
     "6_months": { value: 6, unit: "month" },
     "1_year": { value: 1, unit: "year" },
   };
+
   const customDuration = String(plan?.billing_cycle || "").match(
     /^(\d+)_(day|month|year)s?$/,
   );
+
   if (customDuration) {
     return {
       value: Number(customDuration[1]),
       unit: customDuration[2],
     };
   }
+
   if (legacyCycles[plan?.billing_cycle]) {
     return legacyCycles[plan.billing_cycle];
   }
+
   return {
-    value: 1,
+    value: 0,
     unit: "month",
   };
 }
-const formatPlanDuration = (plan) => {
+
+function getPlanCategory(plan) {
+  if (plan?.plan_category) {
+    return plan.plan_category;
+  }
+
+  if (plan?.subscription_kind) {
+    return plan.subscription_kind;
+  }
+
+  const durationValue = Number(plan?.duration_value || 0);
+  const maxBranches = Number(plan?.max_branches || 0);
+
+  if (durationValue === 0 && maxBranches > 0) {
+    return "branch_addon";
+  }
+
+  if (durationValue > 0 && maxBranches === 0) {
+    return "duration_only";
+  }
+
+  if (durationValue > 0 && maxBranches > 0) {
+    return "complete";
+  }
+
+  return "invalid";
+}
+
+function formatPlanDuration(plan) {
   const { value, unit } = getPlanDuration(plan);
-  return `${value} ${unit}${value > 1 ? "s" : ""}`;
-};
+
+  if (value === 0) {
+    return "No duration extension";
+  }
+
+  return `${value} ${unit}${value === 1 ? "" : "s"}`;
+}
+
+function hasRunningSubscription(subscription) {
+  const status = String(subscription?.status || "").toLowerCase();
+
+  return status === "active" || status === "trial";
+}
+
 function getSubscriptionUiStatus(subscription) {
   if (Number(subscription?.is_current) === 1) {
     return "current";
@@ -289,37 +340,66 @@ function BillingSubscription() {
       },
     });
   };
+
   const handleBuyPlan = (plan) => {
     if (isFreePlan(plan)) {
       toast.error("Free plan is assigned automatically after KYC approval");
       return;
     }
+
+    const planCategory = getPlanCategory(plan);
     const planBranches = Number(plan.max_branches ?? 0);
     const planDuration = formatPlanDuration(plan);
-    const branchMessage =
-      planBranches === 0
-        ? "No additional branches will be added."
-        : `${planBranches} additional ${
-            planBranches === 1 ? "branch" : "branches"
-          } will be added.`;
+
+    let purchaseMessage = "";
+
+    if (planCategory === "branch_addon") {
+      purchaseMessage =
+        `${planBranches} additional ${
+          planBranches === 1 ? "branch" : "branches"
+        } will be added. ` +
+        "Your current subscription validity will remain unchanged.";
+    } else if (planCategory === "duration_only") {
+      purchaseMessage =
+        `${planDuration} will be added to your subscription validity. ` +
+        "Your current branch limit will remain unchanged.";
+    } else {
+      purchaseMessage =
+        `${planDuration} will be added to your subscription validity. ` +
+        `${planBranches} additional ${
+          planBranches === 1 ? "branch" : "branches"
+        } will be added.`;
+    }
+
     setConfirmModal({
       type: "info",
-      title: "Buy Subscription Plan?",
-      message:
-        `Purchase ${plan.plan_name} for ₹${formatAmount(plan.price)}. ` +
-        `${planDuration} will be added to your current validity. ` +
-        branchMessage,
-      confirmText: "Buy Plan",
+
+      title:
+        planCategory === "branch_addon"
+          ? "Buy Branch Add-on?"
+          : "Buy Subscription Plan?",
+
+      message: `Purchase ${plan.plan_name} for ₹${formatAmount(
+        plan.price,
+      )}. ${purchaseMessage}`,
+
+      confirmText:
+        planCategory === "branch_addon" ? "Add Branches" : "Buy Plan",
+
       cancelText: "Cancel",
+
       onConfirm: async () => {
         try {
           setBuyingPlanId(plan.id);
+
           const response = await api.post("/subscriptions/my/buy-plan", {
             plan_id: plan.id,
           });
+
           toast.success(
             response.data?.message || "Subscription purchased successfully",
           );
+
           await fetchBillingData();
           setShowPlansModal(false);
         } catch (error) {
@@ -334,6 +414,7 @@ function BillingSubscription() {
       },
     });
   };
+
   const handleToggleAutoRenewal = async () => {
     if (!subscription?.id) return;
     try {
@@ -385,13 +466,6 @@ function BillingSubscription() {
                 history.
               </p>
             </div>
-          </div>
-          <div className="flex w-fit items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
-            <CalendarDays
-              size={16}
-              className="text-blue-600 dark:text-blue-400"
-            />
-            Last updated: {formatDate(new Date())}
           </div>
         </div>
       </div>
@@ -461,10 +535,19 @@ function BillingSubscription() {
           />
         </>
       )}
+
       {showPlansModal && (
         <Modal
-          title="Manage Subscription"
-          description="View available plans and generate subscription invoice."
+          title={
+            hasRunningSubscription(subscription)
+              ? "Branch Add-on Plans"
+              : "Available Subscription Plans"
+          }
+          description={
+            hasRunningSubscription(subscription)
+              ? "Increase your branch limit without changing your current subscription validity."
+              : "Choose a duration-only or complete subscription plan."
+          }
           icon={<Crown size={20} />}
           onClose={() => setShowPlansModal(false)}
           maxWidth="max-w-6xl"
@@ -478,6 +561,7 @@ function BillingSubscription() {
           />
         </Modal>
       )}
+
       {showSubscriptionHistoryModal && (
         <Modal
           title="Subscription History"
@@ -574,7 +658,7 @@ function SubscriptionRecordsTable({ subscriptions, formatDate, formatAmount }) {
               "Valid Till",
               "Features",
             ].map((column) => (
-              <th key={column} className="p-4 text-left text-sm font-medium">
+              <th key={column} className="p-4 text-left text-sm font-semibold">
                 {column}
               </th>
             ))}
@@ -582,19 +666,14 @@ function SubscriptionRecordsTable({ subscriptions, formatDate, formatAmount }) {
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <EmptyRow colSpan={8} text="No subscriptions found." />
+            <EmptyRow colSpan={7} text="No subscriptions found." />
           ) : (
             rows.map((subscription, index) => {
               const uiStatus = getSubscriptionUiStatus(subscription);
               const freePlan = isFreePlan(subscription);
               const validTill =
                 subscription.renewal_date || subscription.trial_end_date;
-              const featureCount = subscription.features
-                ? subscription.features
-                    .split(/\n|,/)
-                    .map((feature) => feature.trim())
-                    .filter(Boolean).length
-                : 0;
+
               return (
                 <tr
                   key={subscription.id || index}
@@ -634,12 +713,8 @@ function SubscriptionRecordsTable({ subscriptions, formatDate, formatAmount }) {
                   <td className="p-4 text-slate-600 dark:text-slate-300">
                     {formatDate(validTill)}
                   </td>
-                  <td className="p-4 text-slate-600 dark:text-slate-300">
-                    {featureCount > 0
-                      ? `${featureCount} ${
-                          featureCount === 1 ? "feature" : "features"
-                        }`
-                      : "-"}
+                  <td className="max-w-[320px] whitespace-normal break-words p-4 leading-6 text-slate-600 dark:text-slate-300">
+                    {String(subscription.features || "").trim() || "-"}
                   </td>
                 </tr>
               );
@@ -896,6 +971,7 @@ function SummaryBox({ title, value, icon }) {
     </div>
   );
 }
+
 function PlansModalContent({
   plans,
   subscription,
@@ -903,7 +979,8 @@ function PlansModalContent({
   buyingPlanId,
   onBuy,
 }) {
-  const currentPlanId = Number(subscription?.plan_id);
+  const runningSubscription = hasRunningSubscription(subscription);
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {plans.length === 0 ? (
@@ -912,35 +989,54 @@ function PlansModalContent({
             className="mx-auto text-slate-400 dark:text-slate-500"
             size={30}
           />
+
           <p className="mt-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-            No active plans available
+            {runningSubscription
+              ? "No branch add-on plans available"
+              : "No subscription plans available"}
+          </p>
+
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {runningSubscription
+              ? "Your current subscription will continue without any changes."
+              : "Please contact support for subscription assistance."}
           </p>
         </div>
       ) : (
         plans.map((plan) => {
-          const isCurrent = Number(plan.id) === currentPlanId;
           const freePlan = isFreePlan(plan);
+          const planCategory = getPlanCategory(plan);
+          const branchAddon = planCategory === "branch_addon";
+
+          const planBranches = Number(plan.max_branches ?? 0);
+
           return (
             <div
               key={plan.id}
-              className={`flex flex-col rounded-xl border p-4 shadow-sm ${
-                isCurrent
-                  ? "border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40"
-                  : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-              }`}
+              className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
             >
-              {/* Plan name and status */}
               <div className="flex items-start justify-between gap-2">
                 <h3 className="min-w-0 break-words text-base font-semibold text-slate-900 dark:text-white">
                   {plan.plan_name}
                 </h3>
-                {isCurrent && (
-                  <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-sm font-medium text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
-                    Current
-                  </span>
-                )}
+
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    branchAddon
+                      ? "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300"
+                      : planCategory === "duration_only"
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                        : "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+                  }`}
+                >
+                  {branchAddon
+                    ? "Branch Add-on"
+                    : planCategory === "duration_only"
+                      ? "Duration Plan"
+                      : "Complete Plan"}
+                </span>
               </div>
-              {/* Price */}
+
               <div className="mt-3">
                 {freePlan ? (
                   <span className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
@@ -951,41 +1047,48 @@ function PlansModalContent({
                     <span className="text-lg font-semibold text-slate-900 dark:text-white">
                       ₹ {formatAmount(plan.price)}
                     </span>
+
                     <span className="ml-1 text-sm text-slate-500 dark:text-slate-400">
-                      / {formatPlanDuration(plan)}
+                      {branchAddon
+                        ? "/ one-time add-on"
+                        : `/ ${formatPlanDuration(plan)}`}
                     </span>
                   </>
                 )}
               </div>
-              {/* Duration and branches */}
+
               <div className="mt-3 flex items-center divide-x divide-slate-200 rounded-lg border border-slate-200 bg-slate-50 py-2 dark:divide-slate-700 dark:border-slate-700 dark:bg-slate-800">
                 <div className="min-w-0 flex-1 px-2.5">
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Duration
+                    Validity
                   </p>
-                  <p className="mt-0.5 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-                    {formatPlanDuration(plan)}
+
+                  <p className="mt-0.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {branchAddon ? "No change" : formatPlanDuration(plan)}
                   </p>
                 </div>
+
                 <div className="min-w-0 flex-1 px-2.5">
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Branches
+                    Branches Added
                   </p>
+
                   <p className="mt-0.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                    {Number(plan.max_branches ?? 0)}
+                    {planBranches}
                   </p>
                 </div>
               </div>
-              {/* Features */}
+
               <div className="mt-3 flex-1 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800">
                 <p className="text-sm font-medium text-slate-400 dark:text-slate-500">
                   Features
                 </p>
+
                 <p className="mt-0.5 line-clamp-2 text-sm leading-5 text-slate-600 dark:text-slate-300">
                   {plan.features || "No features added"}
                 </p>
               </div>
-              {/* Action */}
+
               {freePlan ? (
                 <button
                   type="button"
@@ -993,24 +1096,21 @@ function PlansModalContent({
                   className="mt-3 inline-flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
                 >
                   <Crown size={14} />
-                  {isCurrent ? "Current Free Plan" : "Default Free Plan"}
+                  Default Free Plan
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => onBuy(plan)}
                   disabled={buyingPlanId === plan.id}
-                  className={`mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold ${
-                    isCurrent
-                      ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                      : "bg-blue-600 text-white hover:bg-blue-700"
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                  className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Send size={14} />
+
                   {buyingPlanId === plan.id
                     ? "Processing..."
-                    : isCurrent
-                      ? "Renew Plan"
+                    : branchAddon
+                      ? "Add Branches"
                       : "Buy Plan"}
                 </button>
               )}
@@ -1021,6 +1121,7 @@ function PlansModalContent({
     </div>
   );
 }
+
 function InvoiceTable({
   invoices,
   totalInvoices,
@@ -1059,7 +1160,7 @@ function InvoiceTable({
                 "Status",
                 "Action",
               ].map((column) => (
-                <th key={column} className="p-4 text-left text-sm font-medium">
+                <th key={column} className="p-4 text-left text-sm font-semibold">
                   {column}
                 </th>
               ))}
@@ -1168,7 +1269,7 @@ function PaymentTable({
                 "Status",
                 "Receipt",
               ].map((column) => (
-                <th key={column} className="p-4 text-left text-sm font-medium">
+                <th key={column} className="p-4 text-left text-sm font-semibold">
                   {column}
                 </th>
               ))}
@@ -1319,7 +1420,6 @@ function Modal({ title, description, icon, onClose, children, maxWidth }) {
   );
 }
 
-
 function EmptySubscription({ onManage }) {
   return (
     <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50 dark:bg-blue-950/40 p-10 text-center shadow-sm">
@@ -1342,7 +1442,6 @@ function EmptySubscription({ onManage }) {
   );
 }
 
-
 function EmptyRow({ colSpan, text }) {
   return (
     <tr>
@@ -1360,7 +1459,6 @@ function EmptyRow({ colSpan, text }) {
     </tr>
   );
 }
-
 
 function ModalPagination({ page, totalPages, totalRecords, setPage }) {
   return (
@@ -1392,7 +1490,6 @@ function ModalPagination({ page, totalPages, totalRecords, setPage }) {
     </div>
   );
 }
-
 
 function ConfirmModal({
   type = "warning",
@@ -1467,7 +1564,6 @@ function ConfirmModal({
     document.body,
   );
 }
-
 
 function StatusBadge({ status }) {
   const value = String(status || "").toLowerCase();

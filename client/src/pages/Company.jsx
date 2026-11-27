@@ -910,7 +910,7 @@ function CompanyTable({ companies, onView, onEdit, onDelete }) {
               <th
                 key={heading}
                 scope="col"
-                className="px-3 py-3 text-left text-sm font-medium"
+                className="px-3 py-3 text-left text-sm font-semibold "
               >
                 {heading}
               </th>

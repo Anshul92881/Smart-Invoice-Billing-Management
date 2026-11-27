@@ -405,24 +405,26 @@ function RolePermissions() {
           >
             <table className="w-full min-w-[680px] text-[15px]">
               <thead className="bg-slate-50 text-slate-600 dark:bg-slate-950/70 dark:text-slate-300">
-                <tr>
+                <tr className="border-b border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-200">
                   <th
                     scope="col"
-                    className="w-[40%] px-6 py-4 text-left font-semibold"
+                    className="w-[40%] whitespace-nowrap px-6 py-4 text-left text-sm font-semibold"
                   >
                     Module
                   </th>
+
                   <th
                     scope="col"
-                    className="px-4 py-4 text-center font-semibold"
+                    className="whitespace-nowrap px-4 py-4 text-center text-sm font-semibold"
                   >
                     Company Admin
                   </th>
+
                   {shownRoles.map((role) => (
                     <th
                       scope="col"
                       key={role.key}
-                      className="px-4 py-4 text-center font-semibold"
+                      className="whitespace-nowrap px-4 py-4 text-center text-sm font-semibold"
                     >
                       {role.label}
                     </th>

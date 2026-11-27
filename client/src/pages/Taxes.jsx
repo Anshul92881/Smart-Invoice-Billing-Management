@@ -815,7 +815,7 @@ function TaxTable({
             ].map((head) => (
               <th
                 key={head}
-                className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap"
+                className="px-4 py-3 text-left text-sm font-semibold whitespace-nowrap"
               >
                 {head}
               </th>
@@ -977,6 +977,15 @@ function TaxForm({
           error={errors.tax_percentage}
           placeholder="18"
           required
+        />
+
+        <Input
+          label="HSN / SAC Code"
+          name="hsn_sac_code"
+          value={formData.hsn_sac_code}
+          onChange={handleChange}
+          error={errors.hsn_sac_code}
+          placeholder="Enter 4 to 8 digit code"
         />
       </Section>
       <Section title="GST / TDS / TCS Split">
@@ -1243,7 +1252,6 @@ function FormModal({ title, description, icon, onClose, children }) {
   );
 }
 
-
 function Section({ title, children }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -1252,10 +1260,8 @@ function Section({ title, children }) {
       </h3>
 
       <div
-        className={`grid grid-cols-1 gap-4 ${
-          title === "Tax Rule Details"
-            ? "md:grid-cols-3"
-            : "sm:grid-cols-2"
+        className={`grid grid-cols-1 gap-3 ${
+          title === "Tax Rule Details" ? "md:grid-cols-4" : "sm:grid-cols-2"
         }`}
       >
         {children}
@@ -1263,7 +1269,6 @@ function Section({ title, children }) {
     </div>
   );
 }
-
 
 function SummaryCard({ title, value, icon, color }) {
   const tone = color.includes("emerald")

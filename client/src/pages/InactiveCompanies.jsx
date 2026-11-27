@@ -255,7 +255,7 @@ function InactiveCompaniesTable({ companies, loading, onView }) {
     <div className="w-full min-w-0">
       <table className="w-full table-fixed text-left text-sm">
         <colgroup>
-          {[22, 22, 16, 10, 13, 10, 7].map((width, index) => (
+          {[21, 21, 20, 15, 18, 17, 8].map((width, index) => (
             <col key={index} style={{ width: `${width}%` }} />
           ))}
         </colgroup>
@@ -274,7 +274,7 @@ function InactiveCompaniesTable({ companies, loading, onView }) {
               <th
                 key={head}
                 scope="col"
-                className={`px-3 py-3 font-medium leading-5 ${
+                className={`px-3 py-3 font-semibold leading-5 ${
                   index >= 3 ? "text-center" : "text-left"
                 } ${index === 0 ? "pl-5" : ""}`}
               >

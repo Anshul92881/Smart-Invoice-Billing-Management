@@ -345,14 +345,6 @@ function DocumentRenderer({
 
                 {(companyView.email || companyView.phone) && (
                   <div className="text-[12px] font-medium leading-[18px] text-slate-600">
-                    {companyView.email && (
-                      <p className="break-words py-1">
-                        <span className="font-semibold text-slate-800">
-                          Email:
-                        </span>{" "}
-                        {companyView.email}
-                      </p>
-                    )}
 
                     {companyView.phone && (
                       <p className="py-1">

@@ -764,7 +764,7 @@ function PaymentTable({ payments, formatDate, formatPaymentMethod }) {
             ].map((head) => (
               <th
                 key={head}
-                className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap"
+                className="px-4 py-3 text-left text-sm font-semibold whitespace-nowrap"
               >
                 {head}
               </th>

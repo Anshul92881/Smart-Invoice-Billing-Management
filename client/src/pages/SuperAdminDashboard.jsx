@@ -1214,7 +1214,7 @@ function ResponsiveTable({ headers, rows, emptyText, colSpan }) {
 
 function TableHead({ title }) {
   return (
-    <th className="p-4 text-left text-sm font-normal text-blue-800 dark:text-blue-200">
+    <th className="p-4 text-left text-sm font-semibold text-blue-800 dark:text-blue-200">
       {title}
     </th>
   );

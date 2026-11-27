@@ -664,7 +664,7 @@ function AccountantTable({
                       : "descending"
                     : undefined
                 }
-                className="px-5 py-4 text-left text-sm font-medium"
+                className="px-5 py-4 text-left text-sm font-semibold"
               >
                 {key && onSort ? (
                   <button

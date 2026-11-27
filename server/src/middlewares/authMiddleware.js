@@ -72,32 +72,91 @@ const authMiddleware = async (req, res, next) => {
     const companyRoles = ["company_admin", "accountant", "sales_user"];
 
     if (companyRoles.includes(req.user.role) && req.user.company_id) {
-      const [companies] = await db.query(
+      const [accessRows] = await db.query(
         `
-        SELECT status
-        FROM tbl_companies
-        WHERE id = ?
+        SELECT
+          u.id,
+          u.status AS user_status,
+          u.company_id,
+
+          c.status AS company_status,
+          c.kyc_status,
+
+          (
+            SELECT company_admin.status
+            FROM tbl_users company_admin
+            WHERE company_admin.company_id = u.company_id
+              AND company_admin.role = 'company_admin'
+            ORDER BY company_admin.id ASC
+            LIMIT 1
+          ) AS company_admin_status
+
+        FROM tbl_users u
+
+        LEFT JOIN tbl_companies c
+          ON c.id = u.company_id
+
+        WHERE u.id = ?
         LIMIT 1
         `,
-        [req.user.company_id],
+        [req.user.id],
       );
 
-      if (!companies.length) {
+      if (accessRows.length === 0) {
         return res.status(403).json({
-          message: "Company not found",
-          company_inactive: true,
+          message: "User account not found",
+          force_logout: true,
         });
       }
 
-      if (companies[0].status !== "active") {
+      const access = accessRows[0];
+
+      /*
+       * Pending KYC Company Admin is allowed to continue
+       * with the existing limited KYC flow.
+       */
+      const isPendingKycCompanyAdmin =
+        req.user.role === "company_admin" &&
+        ["pending", "submitted"].includes(access.kyc_status);
+
+      /*
+       * Block an individually inactive user.
+       */
+      if (access.user_status !== "active" && !isPendingKycCompanyAdmin) {
         return res.status(403).json({
-          message: "Company account is inactive. Please contact Super Admin.",
+          message: "Your account is inactive",
+          force_logout: true,
+        });
+      }
+
+      /*
+       * Block all company users when the company is inactive.
+       */
+      if (access.company_status !== "active" && !isPendingKycCompanyAdmin) {
+        return res.status(403).json({
+          message: "Company account is inactive",
           company_inactive: true,
+          force_logout: true,
+        });
+      }
+
+      /*
+       * Block Accountant and Sales User when
+       * the Company Admin is inactive.
+       */
+      if (
+        ["accountant", "sales_user"].includes(req.user.role) &&
+        access.company_admin_status !== "active"
+      ) {
+        return res.status(403).json({
+          message: "Company Admin account is inactive",
+          company_admin_inactive: true,
+          force_logout: true,
         });
       }
     }
 
-    next();
+    return next();
   } catch (error) {
     return res.status(401).json({
       message: "Invalid or expired token",

@@ -1137,7 +1137,7 @@ function CustomerTable({
               <th
                 key={label}
                 scope="col"
-                className="whitespace-nowrap px-5 py-4 text-left text-sm font-medium"
+                className="whitespace-nowrap px-5 py-4 text-left text-sm font-semibold"
               >
                 {label}
               </th>

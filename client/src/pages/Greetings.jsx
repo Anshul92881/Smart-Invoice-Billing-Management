@@ -676,12 +676,12 @@ function Greetings() {
           <table className="w-full min-w-[980px] text-sm">
             <thead className="bg-blue-50/70 text-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
               <tr>
-                <th className="p-4 text-left text-sm font-medium">Occasion</th>
-                <th className="p-4 text-left text-sm font-medium">Schedule</th>
-                <th className="p-4 text-left text-sm font-medium">Repeat</th>
-                <th className="p-4 text-left text-sm font-medium">Delivery</th>
-                <th className="p-4 text-left text-sm font-medium">Status</th>
-                <th className="p-4 text-right text-sm font-medium">Actions</th>
+                <th className="p-4 text-left text-sm font-semibold">Occasion</th>
+                <th className="p-4 text-left text-sm font-semibold">Schedule</th>
+                <th className="p-4 text-left text-sm font-semibold">Repeat</th>
+                <th className="p-4 text-left text-sm font-semibold">Delivery</th>
+                <th className="p-4 text-left text-sm font-semibold">Status</th>
+                <th className="p-4 text-right text-sm font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-slate-900">

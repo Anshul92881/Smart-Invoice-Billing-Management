@@ -405,7 +405,7 @@ function AuditTable({
   return (
     <div className="w-full overflow-x-auto">
       <table className="w-full min-w-[1180px] text-left text-sm [&_th]:whitespace-nowrap [&_td:not(:nth-child(7))]:whitespace-nowrap">
-        <thead className="bg-slate-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+        <thead className="border-b border-blue-200 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/40">
           <tr>
             {[
               "Date",
@@ -420,7 +420,8 @@ function AuditTable({
             ].map((head) => (
               <th
                 key={head}
-                className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                scope="col"
+                className="whitespace-nowrap px-4 py-4 text-left text-sm font-semibold text-blue-800 first:pl-5 last:pr-5 dark:text-blue-200"
               >
                 {head}
               </th>

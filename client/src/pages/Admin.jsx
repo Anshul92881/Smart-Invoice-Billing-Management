@@ -506,7 +506,7 @@ function AdminsTable({ admins, onView, onEdit, onToggleStatus }) {
             {["Admin", "Email", "Company", "Status", "Actions"].map((head) => (
               <th
                 key={head}
-                className="px-3 py-4 text-left text-sm font-medium text-blue-800 dark:text-blue-200 first:pl-5 last:pr-5"
+                className="px-3 py-4 text-left text-sm font-semibold text-blue-800 dark:text-blue-200 first:pl-5 last:pr-5"
               >
                 {head}
               </th>

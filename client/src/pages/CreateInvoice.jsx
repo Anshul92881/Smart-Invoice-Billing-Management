@@ -714,10 +714,18 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
         tax_rate: "",
       }));
 
+      setProductErrors((prev) => ({
+        ...prev,
+        tax_id: "",
+        tax_rate: "",
+      }));
+
       return;
     }
 
     const selectedTax = getSelectedTax(value);
+
+    const selectedTaxHsn = normalizeUpper(selectedTax?.hsn_sac_code || "");
 
     autoFilledGstRef.current = false;
 
@@ -725,12 +733,22 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
       ...prev,
       tax_id: value,
       tax_rate: selectedTax?.tax_percentage ?? "",
+      hsn_sac_code: selectedTaxHsn || prev.hsn_sac_code,
     }));
+
+    if (selectedTaxHsn) {
+      setHsnSelected(true);
+      setSelectedHsnDetails(null);
+      setHsnSuggestions([]);
+      setHsnSearched(false);
+      setHsnError("");
+    }
 
     setProductErrors((prev) => ({
       ...prev,
       tax_id: "",
       tax_rate: "",
+      hsn_sac_code: "",
     }));
   };
 
@@ -965,13 +983,26 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
         createdTax;
 
       if (selectedTaxId) {
+        const selectedTaxHsn = normalizeUpper(
+          selectedTax?.hsn_sac_code || payload.hsn_sac_code || "",
+        );
+
         autoFilledGstRef.current = false;
 
         setProductForm((prev) => ({
           ...prev,
           tax_id: String(selectedTaxId),
           tax_rate: selectedTax?.tax_percentage ?? payload.tax_percentage,
+          hsn_sac_code: selectedTaxHsn || prev.hsn_sac_code,
         }));
+
+        if (selectedTaxHsn) {
+          setHsnSelected(true);
+          setSelectedHsnDetails(null);
+          setHsnSuggestions([]);
+          setHsnSearched(false);
+          setHsnError("");
+        }
       }
 
       resetTaxForm();
@@ -3188,7 +3219,9 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
 
                     ...taxes.map((tax) => ({
                       value: String(tax.id),
-                      label: `${tax.tax_name} - ${tax.tax_percentage}%`,
+                      label: `${tax.tax_name} — ${Number(tax.tax_percentage || 0)}%${
+                        tax.hsn_sac_code ? ` — HSN/SAC ${tax.hsn_sac_code}` : ""
+                      }`,
                     })),
 
                     ...(canManageTaxes
@@ -3210,6 +3243,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
                 suggestions={hsnSuggestions}
                 suggestionLoading={hsnLoading}
                 suggestionError={hsnError}
+                disabled={hsnSelected}
               />
 
               <Input
@@ -3341,7 +3375,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
             resetTaxForm();
           }}
         >
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <Input
               icon={<BadgePercent size={16} />}
               label="Tax Name"
@@ -3420,7 +3454,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
               />
             </Field>
 
-            <label className="mt-7 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+            <label className="mt-7 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 md:col-span-3">
               <input
                 type="checkbox"
                 name="reverse_charge"
@@ -3431,7 +3465,7 @@ function CreateInvoice({ modalMode = false, onClose, onCreated }) {
               Reverse Charge
             </label>
 
-            <div className="md:col-span-2 xl:col-span-3">
+            <div className="md:col-span-4">
               <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <FileText size={16} />
                 Description
@@ -3677,6 +3711,7 @@ function ProductHsnSacPicker({
   suggestions = [],
   suggestionLoading = false,
   suggestionError = "",
+  disabled = false,
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -3766,13 +3801,20 @@ function ProductHsnSacPicker({
       <input
         type="text"
         autoComplete="off"
+        disabled={disabled}
         value={focused ? query : value || ""}
         placeholder="Type HSN code or description..."
         onFocus={() => {
+          if (disabled) return;
+
           setQuery("");
           setFocused(true);
         }}
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(event) => {
+          if (!disabled) {
+            setQuery(event.target.value);
+          }
+        }}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             setFocused(false);
@@ -3783,9 +3825,10 @@ function ProductHsnSacPicker({
             setFocused(false);
           }, 180);
         }}
-        className={`input ${error ? "input-error" : ""}`}
+        className={`input ${
+          error ? "input-error" : ""
+        } disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800`}
       />
-
       {error && (
         <p className="mt-1 text-sm font-semibold text-red-600 dark:text-red-400">
           {error}

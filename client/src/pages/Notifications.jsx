@@ -228,13 +228,13 @@ function NotificationsTable({ notifications, loading, onMarkRead }) {
       <table className="w-full min-w-[1200px] table-auto text-left text-sm [&_th]:whitespace-nowrap [&_td]:align-middle">
         <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           <tr>
-            <th className="p-4 text-left text-sm font-medium">Alert</th>
-            <th className="p-4 text-left text-sm font-medium">Type</th>
-            <th className="p-4 text-left text-sm font-medium">Company</th>
-            <th className="p-4 text-left text-sm font-medium">User</th>
-            <th className="p-4 text-left text-sm font-medium">Status</th>
-            <th className="p-4 text-left text-sm font-medium">Date</th>
-            <th className="p-4 text-left text-sm font-medium">Action</th>
+            <th className="p-4 text-left text-sm font-semibold">Alert</th>
+            <th className="p-4 text-left text-sm font-semibold">Type</th>
+            <th className="p-4 text-left text-sm font-semibold">Company</th>
+            <th className="p-4 text-left text-sm font-semibold">User</th>
+            <th className="p-4 text-left text-sm font-semibold">Status</th>
+            <th className="p-4 text-left text-sm font-semibold">Date</th>
+            <th className="p-4 text-left text-sm font-semibold">Action</th>
           </tr>
         </thead>
         <tbody>

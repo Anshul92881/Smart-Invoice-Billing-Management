@@ -23,13 +23,17 @@ import {
 } from "lucide-react";
 
 function getPlanDuration(plan) {
+  const durationValue = Number(plan?.duration_value);
+  const durationUnit = plan?.duration_unit;
+
   if (
-    Number(plan?.duration_value) > 0 &&
-    ["day", "month", "year"].includes(plan?.duration_unit)
+    Number.isInteger(durationValue) &&
+    durationValue >= 0 &&
+    ["day", "month", "year"].includes(durationUnit)
   ) {
     return {
-      value: Number(plan.duration_value),
-      unit: plan.duration_unit,
+      value: durationValue,
+      unit: durationUnit,
     };
   }
 
@@ -66,12 +70,21 @@ function getPlanDuration(plan) {
     };
   }
 
-  return { value: 1, unit: "month" };
+  return {
+    value: 0,
+    unit: "month",
+  };
 }
 
 function formatPlanDuration(plan) {
   const { value, unit } = getPlanDuration(plan);
+
+  if (value === 0) {
+    return "No duration extension";
+  }
+
   const label = unit.charAt(0).toUpperCase() + unit.slice(1);
+
   return `${value} ${label}${value === 1 ? "" : "s"}`;
 }
 
@@ -111,6 +124,69 @@ function isFreeSubscription(subscription) {
     subscription?.plan_type === "free" ||
     subscription?.is_free === 1 ||
     Number(subscription?.price || 0) === 0
+  );
+}
+
+function getSubscriptionSummary(subscriptions = []) {
+  const companyIds = new Set();
+  const activeCompanyIds = new Set();
+  const freeCompanyIds = new Set();
+
+  subscriptions.forEach((subscription) => {
+    const companyId = Number(subscription.company_id);
+
+    if (!Number.isInteger(companyId) || companyId <= 0) {
+      return;
+    }
+
+    companyIds.add(companyId);
+
+    if (Number(subscription.is_current) === 1) {
+      activeCompanyIds.add(companyId);
+
+      if (isFreeSubscription(subscription)) {
+        freeCompanyIds.add(companyId);
+      }
+    }
+  });
+
+  const inactiveSubscriptions = [...companyIds].filter(
+    (companyId) => !activeCompanyIds.has(companyId),
+  ).length;
+
+  return {
+    totalSubscriptions: companyIds.size,
+    activeSubscriptions: activeCompanyIds.size,
+    freeSubscriptions: freeCompanyIds.size,
+    inactiveSubscriptions,
+  };
+}
+
+// Subscription collections: paid records only; sum integer paise.
+function getPaidPayments(records = []) {
+  return records.filter(
+    (item) =>
+      String(item.payment_status || "")
+        .trim()
+        .toLowerCase() === "paid",
+  );
+}
+
+function getPaymentPaise(value) {
+  const text = String(value ?? "").trim();
+  if (!/^-?\d+(?:\.\d{1,2})?$/.test(text)) return null;
+  const negative = text.startsWith("-");
+  const [whole, fraction = ""] = text.replace(/^-/, "").split(".");
+  const paise = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+  return Number.isSafeInteger(paise) ? (negative ? -paise : paise) : null;
+}
+
+function sumPaymentAmounts(records) {
+  return (
+    records.reduce(
+      (total, item) => total + (getPaymentPaise(item.amount) ?? 0),
+      0,
+    ) / 100
   );
 }
 
@@ -172,6 +248,13 @@ function Subscriptions() {
     1,
     Math.ceil(filteredSubscriptions.length / tableLimit),
   );
+
+  // Data refresh ke baad records kam ho jayein to khali page par na rahe
+  useEffect(() => {
+    if (subscriptionPage > subscriptionTotalPages) {
+      setSubscriptionPage(subscriptionTotalPages);
+    }
+  }, [subscriptionPage, subscriptionTotalPages]);
 
   const fetchData = async () => {
     try {
@@ -258,25 +341,32 @@ function Subscriptions() {
   const savePlan = async (e) => {
     e.preventDefault();
 
-    if (!planForm.plan_name.trim()) {
+    const planName = planForm.plan_name.trim();
+    const price = Number(planForm.price);
+    const durationValue = Number(planForm.duration_value);
+    const maxBranches = Number(planForm.max_branches);
+
+    if (!planName) {
       toast.error("Plan name is required");
       return;
     }
 
     if (
       planForm.plan_type === "paid" &&
-      (!planForm.price || Number(planForm.price) <= 0)
+      (!Number.isFinite(price) || price <= 0)
     ) {
       toast.error("Valid plan price is required");
       return;
     }
 
-    if (!planForm.duration_value || Number(planForm.duration_value) <= 0) {
-      toast.error("Plan duration must be greater than 0");
+    if (
+      planForm.duration_value === "" ||
+      !Number.isInteger(durationValue) ||
+      durationValue < 0
+    ) {
+      toast.error("Plan duration must be 0 or a positive whole number");
       return;
     }
-
-    const maxBranches = Number(planForm.max_branches);
 
     if (
       planForm.max_branches === "" ||
@@ -286,31 +376,42 @@ function Subscriptions() {
       toast.error("Max branches must be 0 or a positive whole number");
       return;
     }
+
+    if (durationValue === 0 && maxBranches === 0) {
+      toast.error(
+        "Duration or max branches, at least one must be greater than 0",
+      );
+      return;
+    }
+
     try {
       const payload = {
         ...planForm,
-        price: planForm.plan_type === "free" ? 0 : Number(planForm.price),
-        duration_value: Number(planForm.duration_value),
+        plan_name: planName,
+        price: planForm.plan_type === "free" ? 0 : price,
+        duration_value: durationValue,
         duration_unit: planForm.duration_unit,
+
         billing_cycle:
           planForm.plan_type === "paid"
-            ? `${Number(planForm.duration_value)}_${planForm.duration_unit}`
+            ? `${durationValue}_${planForm.duration_unit}`
             : null,
-        validity_days: durationToDays(
-          planForm.duration_value,
-          planForm.duration_unit,
-        ),
+
+        validity_days: durationToDays(durationValue, planForm.duration_unit),
+
         // Remove this compatibility field after backend migration is complete.
         trial_days:
           planForm.plan_type === "free"
-            ? durationToDays(planForm.duration_value, planForm.duration_unit)
+            ? durationToDays(durationValue, planForm.duration_unit)
             : 0,
+
         max_branches: maxBranches,
         is_default: planForm.plan_type === "free" ? 1 : 0,
       };
 
       if (editingPlanId) {
         await api.put(`/subscriptions/plans/${editingPlanId}`, payload);
+
         toast.success("Plan updated successfully");
       } else {
         await api.post("/subscriptions/plans", payload);
@@ -457,21 +558,16 @@ function Subscriptions() {
     );
   };
 
-  const paidPayments = payments.filter(
-    (item) => item.payment_status === "paid",
-  );
+  const paidPayments = getPaidPayments(payments);
+  const totalRevenue = sumPaymentAmounts(paidPayments);
 
-  const totalRevenue = paidPayments.reduce(
-    (sum, item) => sum + Number(item.amount || 0),
-    0,
-  );
-
-  const activeSubscriptions = subscriptions.filter(
-    (item) => Number(item.is_current) === 1,
+  // These cards count plan definitions, not companies or assignments.
+  const totalSubscriptions = plans.length;
+  const activeSubscriptions = plans.filter(
+    (plan) => String(plan.status || "active").toLowerCase() === "active",
   ).length;
-
-  const freeSubscriptions = subscriptions.filter(
-    (item) => Number(item.is_current) === 1 && isFreeSubscription(item),
+  const freeSubscriptions = plans.filter(
+    (plan) => Number(plan.is_default) === 1 && isFreePlan(plan),
   ).length;
 
   const safeCompanies = Array.isArray(companies)
@@ -518,8 +614,8 @@ function Subscriptions() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={<Building2 size={20} />}
-          title="Total Subscriptions"
-          value={subscriptions.length}
+          title="Total Subscription Plans"
+          value={totalSubscriptions}
           color="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"
           onClick={() => setModalType("total")}
         />
@@ -845,6 +941,7 @@ function Subscriptions() {
       {modalType && (
         <SubscriptionStatsModal
           type={modalType}
+          plans={plans}
           subscriptions={subscriptions}
           payments={payments}
           search={modalSearch}
@@ -1000,7 +1097,8 @@ function CreatePlanModal({
                 >
                   <input
                     type="number"
-                    min="1"
+                    min="0"
+                    step="1"
                     name="duration_value"
                     value={planForm.duration_value}
                     onChange={(e) =>
@@ -1132,7 +1230,7 @@ function SubscriptionsTable({
                 </td>
 
                 <td className="whitespace-nowrap p-4">
-                  <p className="font-semibold text-slate-800 dark:text-slate-100">
+                  <p className="font-medium text-slate-800 dark:text-slate-100">
                     {subscription.plan_name || "-"}
                   </p>
 
@@ -1141,7 +1239,7 @@ function SubscriptionsTable({
                   </p>
                 </td>
 
-                <td className="p-4 font-semibold text-slate-900 dark:text-white">
+                <td className="p-4 font-medium text-slate-900 dark:text-white">
                   {isFree
                     ? "Free"
                     : `₹ ${Number(subscription.price || 0).toFixed(2)}`}
@@ -1159,17 +1257,17 @@ function SubscriptionsTable({
                   />
                 </td>
 
-                <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">
+                <td className="p-4 font-medium text-slate-600 dark:text-slate-300">
                   {getValidTillDate(subscription)}
                 </td>
 
                 <td className="p-4">
                   {!isCurrent ? (
-                    <span className="text-sm font-semibold text-slate-400">
+                    <span className="text-sm font-medium text-slate-400">
                       Not current
                     </span>
                   ) : isFree ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
                       <XCircle size={12} />
                       Disabled
                     </span>
@@ -1177,7 +1275,7 @@ function SubscriptionsTable({
                     <button
                       type="button"
                       onClick={() => toggleAutoRenewal(subscription)}
-                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold ${
+                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium ${
                         subscription.auto_renewal
                           ? "bg-green-50 text-green-700 dark:bg-emerald-950/40 dark:text-emerald-300"
                           : "bg-rose-50 text-rose-600 dark:bg-rose-950/20 dark:text-rose-300"
@@ -1469,24 +1567,45 @@ function Pagination({ page, totalPages, totalRecords, setPage }) {
 
 function SubscriptionStatsModal({
   type,
+  plans,
   subscriptions,
   payments,
   search,
   setSearch,
   onClose,
 }) {
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [historyFilter, setHistoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const companyOptions = [
+    ...new Map(
+      subscriptions.map((item) => [
+        String(item.company_id),
+        item.company_name || "Unnamed company",
+      ]),
+    ),
+  ];
+
   const filteredSubscriptions = useMemo(() => {
     const keyword = search.trim().toLowerCase();
 
     const rows = subscriptions.filter((item) => {
       const isCurrent = Number(item.is_current) === 1;
+      if (companyFilter !== "all" && String(item.company_id) !== companyFilter)
+        return false;
+      if (historyFilter === "current" && !isCurrent) return false;
+      if (historyFilter === "history" && isCurrent) return false;
+      if (statusFilter !== "all" && item.status !== statusFilter) return false;
 
       if (type === "active") {
         return isCurrent;
       }
 
       if (type === "free") {
-        return isCurrent && isFreeSubscription(item);
+        return (
+          isCurrent && Number(item.is_default) === 1 && isFreeSubscription(item)
+        );
       }
 
       return true;
@@ -1505,10 +1624,14 @@ function SubscriptionStatsModal({
         .toLowerCase()
         .includes(keyword),
     );
-  }, [subscriptions, search, type]);
+  }, [subscriptions, search, type, companyFilter, historyFilter, statusFilter]);
 
-  const filteredPayments = payments
-    .filter((item) => item.payment_status === "paid")
+  const allPaidPayments = getPaidPayments(payments);
+  const filteredPayments = allPaidPayments
+    .filter(
+      (item) =>
+        companyFilter === "all" || String(item.company_id) === companyFilter,
+    )
     .filter((item) => {
       const keyword = search.trim().toLowerCase();
 
@@ -1523,27 +1646,26 @@ function SubscriptionStatsModal({
         .includes(keyword);
     });
 
-  const totalSubscriptions = subscriptions.length;
+  const {
+    totalSubscriptions,
+    activeSubscriptions,
+    freeSubscriptions,
+    inactiveSubscriptions,
+  } = getSubscriptionSummary(subscriptions);
 
-  const activeSubscriptions = subscriptions.filter(
-    (item) => Number(item.is_current) === 1,
+  const revenueTotal = sumPaymentAmounts(filteredPayments);
+  const allTimeRevenue = sumPaymentAmounts(allPaidPayments);
+  const invalidPaidAmounts = allPaidPayments.filter(
+    (item) => getPaymentPaise(item.amount) === null,
   ).length;
-
-  const freeSubscriptions = subscriptions.filter(
-    (item) => Number(item.is_current) === 1 && isFreeSubscription(item),
-  ).length;
-
-  const inactiveSubscriptions = subscriptions.filter(
-    (item) =>
-      item.status === "cancelled" ||
-      item.status === "expired" ||
-      item.status === "inactive",
-  ).length;
-
-  const revenueTotal = filteredPayments.reduce(
-    (sum, item) => sum + Number(item.amount || 0),
-    0,
-  );
+  const revenueCompanies = [
+    ...new Map(
+      payments.map((item) => [
+        String(item.company_id),
+        item.company_name || "Unnamed company",
+      ]),
+    ),
+  ];
 
   const paidCompanies = new Set(
     filteredPayments.map((item) => item.company_id || item.company_name),
@@ -1553,19 +1675,20 @@ function SubscriptionStatsModal({
 
   const configMap = {
     total: {
-      title: "Total Subscriptions",
-      subtitle: "All assigned company subscriptions.",
+      title: "Company Subscription History",
+      subtitle:
+        "Company-wise assignments and history. The overview card counts plan definitions.",
       icon: <Building2 size={22} />,
       color: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300",
     },
     active: {
-      title: "Active Plans",
+      title: "Current Company Subscriptions",
       subtitle: "Currently active company subscriptions.",
       icon: <CheckCircle2 size={22} />,
       color: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700",
     },
     free: {
-      title: "Default Free Plans",
+      title: "Companies on Default Free Plans",
       subtitle: "Companies currently using a free subscription.",
       icon: <CalendarClock size={22} />,
       color: "bg-amber-50 dark:bg-amber-950/40 text-amber-700",
@@ -1617,31 +1740,57 @@ function SubscriptionStatsModal({
               <ModalStatsGrid>
                 <ModalStatCard
                   title="Paid Revenue"
-                  value={`₹ ${Number(revenueTotal || 0).toFixed(2)}`}
+                  value={`₹ ${allTimeRevenue.toFixed(2)}`}
                   icon={<IndianRupee size={18} />}
                   className="bg-purple-50 dark:bg-purple-950/40 text-purple-700"
                 />
                 <ModalStatCard
-                  title="Paid Payments"
-                  value={filteredPayments.length}
+                  title="Paid Payments (All)"
+                  value={allPaidPayments.length}
                   icon={<CreditCard size={18} />}
                   className="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"
                 />
                 <ModalStatCard
-                  title="Companies"
+                  title="Companies (Filtered)"
                   value={paidCompanies}
                   icon={<Building2 size={18} />}
                   className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700"
                 />
                 <ModalStatCard
-                  title="Showing Records"
-                  value={filteredPayments.length}
+                  title="Filtered Amount"
+                  value={`₹ ${revenueTotal.toFixed(2)}`}
                   icon={<Activity size={18} />}
                   className="bg-amber-50 dark:bg-amber-950/40 text-amber-700"
                 />
               </ModalStatsGrid>
 
-              <SearchBox value={search} setValue={setSearch} />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <SearchBox value={search} setValue={setSearch} />
+                <CustomSelect
+                  value={companyFilter}
+                  onChange={setCompanyFilter}
+                  searchable
+                  placeholder="All companies"
+                  options={[
+                    { value: "all", label: "All companies" },
+                    ...revenueCompanies.map(([id, name]) => ({
+                      value: id,
+                      label: name,
+                    })),
+                  ]}
+                />
+              </div>
+              <p className="text-sm text-slate-500">
+                {filteredPayments.length} paid payment records shown. Paid
+                Revenue is the all-time total; Filtered Amount follows search
+                and company selection.
+              </p>
+              {invalidPaidAmounts > 0 && (
+                <p role="alert" className="text-sm text-red-600">
+                  {invalidPaidAmounts} paid records have missing or invalid
+                  amounts. Total excludes these amounts; verify payment data.
+                </p>
+              )}
 
               <RevenueModalTable
                 filteredPayments={filteredPayments}
@@ -1650,35 +1799,67 @@ function SubscriptionStatsModal({
             </div>
           ) : (
             <div className="space-y-5">
-              <ModalStatsGrid>
-                <ModalStatCard
-                  title="Total Subscriptions"
-                  value={totalSubscriptions}
-                  icon={<Building2 size={18} />}
-                  className="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-800">
+                <p className="font-semibold">
+                  {filteredSubscriptions.length} subscription records across{" "}
+                  {
+                    new Set(
+                      filteredSubscriptions.map((item) => item.company_id),
+                    ).size
+                  }{" "}
+                  companies
+                </p>
+                <p className="mt-1 text-slate-500">
+                  Plan catalogue: {plans.length} plans. History can contain
+                  multiple assignments per company.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <SearchBox value={search} setValue={setSearch} />
+                <CustomSelect
+                  value={companyFilter}
+                  onChange={setCompanyFilter}
+                  searchable
+                  placeholder="All companies"
+                  options={[
+                    { value: "all", label: "All companies" },
+                    ...companyOptions.map(([id, name]) => ({
+                      value: id,
+                      label: name,
+                    })),
+                  ]}
                 />
-                <ModalStatCard
-                  title="Active"
-                  value={activeSubscriptions}
-                  icon={<CheckCircle2 size={18} />}
-                  className="bg-green-50 dark:bg-emerald-950/40 text-green-700"
+                <CustomSelect
+                  value={historyFilter}
+                  onChange={setHistoryFilter}
+                  placeholder="Current and history"
+                  options={[
+                    { value: "all", label: "Current and history" },
+                    { value: "current", label: "Current plans" },
+                    { value: "history", label: "Other assignments" },
+                  ]}
                 />
-                <ModalStatCard
-                  title="Free Plans"
-                  value={freeSubscriptions}
-                  icon={<CalendarClock size={18} />}
-                  className="bg-amber-50 dark:bg-amber-950/40 text-amber-700"
+                <CustomSelect
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  placeholder="All statuses"
+                  options={[
+                    { value: "all", label: "All statuses" },
+                    ...[
+                      ...new Set(
+                        subscriptions
+                          .map((item) => item.status)
+                          .filter(Boolean),
+                      ),
+                    ].map((status) => ({
+                      value: status,
+                      label: status
+                        .replaceAll("_", " ")
+                        .replace(/\b\w/g, (letter) => letter.toUpperCase()),
+                    })),
+                  ]}
                 />
-                <ModalStatCard
-                  title="Inactive Subscriptions"
-                  value={inactiveSubscriptions}
-                  icon={<XCircle size={18} />}
-                  className="bg-red-50 dark:bg-red-950/40 text-red-700"
-                />
-              </ModalStatsGrid>
-
-              <SearchBox value={search} setValue={setSearch} />
-
+              </div>
               <SubscriptionModalTable subscriptions={filteredSubscriptions} />
             </div>
           )}
@@ -1732,11 +1913,11 @@ function ModalStatCard({ title, value, icon, className }) {
   );
 }
 
-function RevenueModalTable({ filteredPayments }) {
+function RevenueModalTable({ filteredPayments, revenueTotal }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-      <div className="w-full min-w-0">
-        <table className="w-full table-fixed text-left text-sm [&_td]:align-middle [&_td]:[overflow-wrap:anywhere]">
+      <div className="w-full overflow-x-auto">
+        <table className="w-full min-w-[900px] table-auto text-left text-sm [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap [&_td]:align-middle">
           <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
             <tr>
               <TableHead title="Company" />
@@ -1753,19 +1934,21 @@ function RevenueModalTable({ filteredPayments }) {
                 key={payment.id}
                 className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:bg-slate-700 dark:bg-slate-800"
               >
-                <td className="px-3 py-3 font-semibold text-slate-900 dark:text-white">
+                <td className="p-4 font-semibold text-slate-900 dark:text-white">
                   {payment.company_name || "-"}
                 </td>
-                <td className="px-3 py-3 font-semibold text-slate-600 dark:text-slate-300">
+                <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">
                   {payment.plan_name || "-"}
                 </td>
-                <td className="px-3 py-3 font-semibold text-slate-900 dark:text-white">
-                  ₹ {Number(payment.amount || 0).toFixed(2)}
+                <td className="p-4 font-semibold text-slate-900 dark:text-white">
+                  {getPaymentPaise(payment.amount) === null
+                    ? "Invalid amount"
+                    : `₹ ${(getPaymentPaise(payment.amount) / 100).toFixed(2)}`}
                 </td>
-                <td className="px-3 py-3">
+                <td className="p-4">
                   <StatusBadge status={payment.payment_status} />
                 </td>
-                <td className="px-3 py-3 font-semibold text-slate-600 dark:text-slate-300">
+                <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">
                   {formatDate(payment.payment_date)}
                 </td>
               </tr>
@@ -1782,6 +1965,16 @@ function RevenueModalTable({ filteredPayments }) {
               </tr>
             )}
           </tbody>
+          <tfoot className="border-t border-slate-200 dark:border-slate-700">
+            <tr>
+              <td colSpan={2} className="p-4 font-semibold">
+                Filtered paid total
+              </td>
+              <td colSpan={3} className="p-4 font-semibold">
+                ₹ {revenueTotal.toFixed(2)}
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
@@ -1790,132 +1983,91 @@ function RevenueModalTable({ filteredPayments }) {
 
 function SubscriptionModalTable({ subscriptions }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-      <div className="w-full min-w-0">
-        <table className="w-full table-fixed text-left text-sm [&_td]:align-middle [&_td]:[overflow-wrap:anywhere]">
-          <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
-            <tr>
-              <TableHead title="Company" />
-              <TableHead title="Plan" />
-              <TableHead title="Amount" />
-              <TableHead title="Plan Branches" />
-              <TableHead title="Status" />
-              <TableHead title="Valid Till" />
-              <TableHead title="Auto Renewal" />
-            </tr>
-          </thead>
-
-          <tbody>
-            {subscriptions.map((subscription) => {
-              const isCurrent = Number(subscription.is_current) === 1;
-
-              const isPrevious = !isCurrent && subscription.status === "active";
-
-              const isFree = isFreeSubscription(subscription);
-
-              return (
-                <tr
-                  key={subscription.id}
-                  className="border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700"
-                >
-                  <td className="px-3 py-3 font-semibold text-slate-900 dark:text-white">
-                    {subscription.company_name || "-"}
-
-                    {subscription.company_email && (
-                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                        {subscription.company_email}
-                      </p>
-                    )}
-                  </td>
-
-                  <td className="px-3 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-slate-800 dark:text-slate-100">
-                        {subscription.plan_name || "-"}
-                      </p>
-
-                      {isCurrent && (
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-sm font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                          Current
-                        </span>
-                      )}
-
-                      {isPrevious && (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-sm font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                          Previous
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      {formatPlanDuration(subscription)}
-                    </p>
-                  </td>
-
-                  <td className="px-3 py-3 font-semibold text-slate-900 dark:text-white">
-                    {isFree
-                      ? "Free"
-                      : `₹ ${Number(subscription.price || 0).toFixed(2)}`}
-                  </td>
-
-                  <td className="px-3 py-3 font-semibold text-slate-700 dark:text-slate-200">
-                    {subscription.max_branches ?? 0}
-                  </td>
-
-                  <td className="px-3 py-3">
-                    <StatusBadge
-                      status={
-                        isCurrent
-                          ? "current"
-                          : isPrevious
-                            ? "previous"
-                            : subscription.status
-                      }
-                    />
-                  </td>
-
-                  <td className="px-3 py-3 font-semibold text-slate-600 dark:text-slate-300">
-                    {getValidTillDate(subscription)}
-                  </td>
-
-                  <td className="px-3 py-3">
-                    {!isCurrent ? (
-                      <span className="text-sm font-semibold text-slate-400">
-                        Not current
-                      </span>
-                    ) : isFree ? (
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                        Disabled
-                      </span>
-                    ) : (
-                      <span
-                        className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                          subscription.auto_renewal
-                            ? "bg-green-50 text-green-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                            : "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
-                        }`}
-                      >
-                        {subscription.auto_renewal ? "Enabled" : "Disabled"}
+    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+      <table className="w-full min-w-[1100px] table-auto text-left text-sm [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
+        <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
+          <tr>
+            {[
+              "Company",
+              "Plan",
+              "Type",
+              "Assigned On",
+              "Valid Till",
+              "Status",
+            ].map((label) => (
+              <th key={label} className="p-4 font-semibold">
+                {label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {subscriptions.map((item) => {
+            const kind = item.subscription_kind;
+            const typeLabel =
+              {
+                branch_addon: "Branch Add-on",
+                duration_only: "Duration",
+                complete: "Complete",
+              }[kind] || "—";
+            const status = item.display_status || item.status || "Unknown";
+            const tone = /cancel|expired|failed/i.test(status)
+              ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+              : /current|^active$/i.test(status)
+                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                : /payment|upcoming|trial/i.test(status)
+                  ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
+            return (
+              <tr
+                key={item.id}
+                className="border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
+              >
+                <td className="p-4">
+                  <p className="font-semibold">{item.company_name || "—"}</p>
+                  <p className="mt-1 text-slate-500">
+                    {item.company_email || "—"}
+                  </p>
+                </td>
+                <td className="p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{item.plan_name || "—"}</span>
+                    {Number(item.is_default) === 1 && (
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+                        Default
                       </span>
                     )}
-                  </td>
-                </tr>
-              );
-            })}
-
-            {subscriptions.length === 0 && (
-              <tr>
-                <td
-                  colSpan="7"
-                  className="p-8 text-center text-slate-500 dark:text-slate-400"
-                >
-                  No matching subscription records found.
+                  </div>
+                  <p className="mt-1 text-slate-500">
+                    {formatPlanDuration(item)}
+                  </p>
+                </td>
+                <td className="p-4">{typeLabel}</td>
+                <td className="p-4">{formatDate(item.start_date)}</td>
+                <td className="p-4">
+                  {kind === "branch_addon"
+                    ? "No time expiry"
+                    : getValidTillDate(item)}
+                </td>
+                <td className="p-4">
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 font-semibold capitalize ${tone}`}
+                  >
+                    {status}
+                  </span>
                 </td>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            );
+          })}
+          {subscriptions.length === 0 && (
+            <tr>
+              <td colSpan={6} className="p-8 text-center text-slate-500">
+                No matching subscription records found.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -1984,7 +2136,7 @@ function StatCard({
   badgeLabel,
 }) {
   const tones = {
-    "Total Subscriptions":
+    "Total Subscription Plans":
       "border-blue-200 from-blue-50 dark:border-blue-900/50 dark:from-blue-950/30",
     "Active Plans":
       "border-emerald-200 from-emerald-50 dark:border-emerald-900/50 dark:from-emerald-950/30",
@@ -2001,7 +2153,9 @@ function StatCard({
       title={
         Number(badge) > 0 && badgeLabel ? badgeLabel : "Click to view details"
       }
-      className={`flex min-w-0 items-center gap-3 rounded-2xl border bg-gradient-to-br to-white p-4 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:to-slate-900 ${tones[title] || "border-slate-200 from-slate-50 dark:border-slate-800"}`}
+      className={`flex min-w-0 items-center gap-3 rounded-2xl border bg-gradient-to-br to-white p-4 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:to-slate-900 ${
+        tones[title] || "border-slate-200 from-slate-50 dark:border-slate-800"
+      }`}
     >
       <span className="relative shrink-0">
         <span className={`flex rounded-xl p-3 ${color}`}>{icon}</span>
@@ -2074,7 +2228,7 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`inline-flex max-w-full items-center justify-center rounded-full border px-2.5 py-1 text-center text-sm font-semibold capitalize shadow-sm ${
+      className={`inline-flex max-w-full items-center justify-center rounded-full border px-2.5 py-1 text-center text-sm font-medium capitalize shadow-sm ${
         styles[value] ||
         "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
       }`}

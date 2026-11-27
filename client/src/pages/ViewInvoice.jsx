@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
 import DocumentRenderer from "./DocumentRenderer";
+
 import {
   ArrowLeft,
   Ban,
@@ -13,6 +14,8 @@ import {
   Send,
   XCircle,
 } from "lucide-react";
+
+
 const DEFAULT_TEMPLATE = {
   show_logo: true,
   show_company_gst_pan: true,
@@ -26,6 +29,8 @@ const DEFAULT_TEMPLATE = {
   show_notes: true,
   show_signature: true,
 };
+
+
 function safeJson(value) {
   if (!value) return {};
   if (typeof value === "string") {
@@ -37,6 +42,8 @@ function safeJson(value) {
   }
   return value || {};
 }
+
+
 function safeTemplate(snapshot, fallback) {
   const parsedSnapshot = safeJson(snapshot);
   return {
@@ -45,6 +52,8 @@ function safeTemplate(snapshot, fallback) {
     ...(parsedSnapshot.template || parsedSnapshot),
   };
 }
+
+
 function ViewInvoice() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -53,12 +62,16 @@ function ViewInvoice() {
   const canPushToCrm = ["company_admin", "accountant", "sales_user"].includes(
     user?.role,
   );
+
+
   const [invoice, setInvoice] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [emailing, setEmailing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [downloading, setDownloading] = useState(false);
+
+
   const fetchInvoice = async () => {
     try {
       setLoading(true);
@@ -71,18 +84,24 @@ function ViewInvoice() {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     fetchInvoice();
   }, [id]);
+
+
   const [searchParams] = useSearchParams();
   const isPrint = searchParams.get("print") === "true";
+
   const handleDownload = async () => {
     if (!invoice) return;
+
     try {
       setDownloading(true);
       const res = await api.get(`/invoices/${id}/download`, {
         responseType: "blob",
       });
+
       const blob = new Blob([res.data], { type: "application/pdf" });
       const fileUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -102,6 +121,7 @@ function ViewInvoice() {
       setDownloading(false);
     }
   };
+
   const handleSendEmail = async () => {
     try {
       setEmailing(true);
@@ -114,6 +134,8 @@ function ViewInvoice() {
       setEmailing(false);
     }
   };
+
+
   const confirmAction = ({ title, description, confirmText, onConfirm }) => {
     toast(
       (t) => (
@@ -154,6 +176,8 @@ function ViewInvoice() {
       },
     );
   };
+
+
   const handleCancel = async () => {
     if (!invoice) return;
     confirmAction({
@@ -174,6 +198,8 @@ function ViewInvoice() {
       },
     });
   };
+
+
   const handlePushToCrm = async () => {
     try {
       const res = await api.post(`/invoices/${id}/push-to-crm`);
@@ -182,13 +208,16 @@ function ViewInvoice() {
       toast.error(error.response?.data?.message || "CRM sync failed");
     }
   };
+
   const handlePrint = () => {
     window.print();
   };
+
   const snapshot = useMemo(
     () => safeJson(invoice?.billing_template_snapshot),
     [invoice],
   );
+
   const template = useMemo(
     () =>
       safeTemplate(
@@ -197,6 +226,7 @@ function ViewInvoice() {
       ),
     [invoice],
   );
+
   const rendererCompany = useMemo(() => {
     const company = snapshot.company || {};
     return {
@@ -210,6 +240,7 @@ function ViewInvoice() {
       logo: company.logo || invoice?.logo || "",
     };
   }, [snapshot, invoice]);
+
   const rendererBranch = useMemo(() => {
     const branch = snapshot.branch || {};
     return {
@@ -218,6 +249,7 @@ function ViewInvoice() {
       branch_code: branch.branch_code || invoice?.branch_code || "",
     };
   }, [snapshot, invoice]);
+
   const rendererBank = useMemo(() => {
     const bank = snapshot.bank || {};
     return {
@@ -234,6 +266,8 @@ function ViewInvoice() {
       currency: invoice?.currency || bank.currency || "INR",
     };
   }, [snapshot, invoice]);
+
+
   const rendererCustomer = useMemo(
     () => ({
       customer_name: invoice?.customer_name || "",
@@ -247,6 +281,7 @@ function ViewInvoice() {
     }),
     [invoice],
   );
+
   if (loading) {
     return (
       <div className="flex min-h-[280px] items-center justify-center">
@@ -262,6 +297,7 @@ function ViewInvoice() {
       </div>
     );
   }
+
   if (!invoice) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -279,6 +315,7 @@ function ViewInvoice() {
       </div>
     );
   }
+
   const canCancel =
     invoice.status !== "cancelled" &&
     invoice.status !== "paid" &&
@@ -475,6 +512,8 @@ function ViewInvoice() {
     </div>
   );
 }
+
+
 function StatusBadge({ status }) {
   const styles = {
     draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",

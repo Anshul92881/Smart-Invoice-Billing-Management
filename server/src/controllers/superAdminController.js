@@ -711,3 +711,343 @@ export const testSuperAdminSmtpSettings = async (
     });
   }
 };
+
+/*
+|--------------------------------------------------------------------------
+| GET DEFAULT EMAIL SETTINGS
+|--------------------------------------------------------------------------
+*/
+
+export const getDefaultEmailSettings = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `
+      SELECT
+        id,
+        smtp_host,
+        smtp_port,
+        smtp_user,
+        smtp_secure,
+        from_email,
+        from_name,
+        reply_to,
+        created_at,
+        updated_at,
+
+        CASE
+          WHEN smtp_pass IS NOT NULL
+            AND TRIM(smtp_pass) != ''
+          THEN 1
+          ELSE 0
+        END AS has_password
+
+      FROM tbl_default_email_settings
+      WHERE id = 1
+      LIMIT 1
+      `,
+    );
+
+    if (rows.length === 0) {
+      return res.status(200).json({
+        configured: false,
+        settings: null,
+      });
+    }
+
+    return res.status(200).json({
+      configured: true,
+
+      settings: {
+        ...rows[0],
+
+        smtp_secure:
+          Number(rows[0].smtp_secure) === 1,
+
+        has_password:
+          Number(rows[0].has_password) === 1,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "GET DEFAULT EMAIL SETTINGS ERROR:",
+      error,
+    );
+
+    return res.status(500).json({
+      message: "Failed to fetch default email settings",
+      error: error.message,
+    });
+  }
+};
+
+/*
+|--------------------------------------------------------------------------
+| SAVE DEFAULT EMAIL SETTINGS
+|--------------------------------------------------------------------------
+*/
+
+export const saveDefaultEmailSettings = async (req, res) => {
+  try {
+    const smtpHost = String(
+      req.body.smtp_host || "",
+    ).trim();
+
+    const smtpPort = Number(req.body.smtp_port);
+
+    const smtpUser = String(
+      req.body.smtp_user || "",
+    ).trim();
+
+    const enteredPassword = String(
+      req.body.smtp_pass || "",
+    ).trim();
+
+    const smtpSecure = normalizeSmtpSecure(
+      req.body.smtp_secure,
+    );
+
+    const fromEmail = String(
+      req.body.from_email || "",
+    )
+      .trim()
+      .toLowerCase();
+
+    const fromName =
+      String(req.body.from_name || "").trim() ||
+      "Smart Invoice & Billing";
+
+    const replyTo =
+      String(req.body.reply_to || "")
+        .trim()
+        .toLowerCase() || null;
+
+    if (!smtpHost) {
+      return res.status(400).json({
+        message: "SMTP host is required",
+      });
+    }
+
+    if (
+      !Number.isInteger(smtpPort) ||
+      smtpPort < 1 ||
+      smtpPort > 65535
+    ) {
+      return res.status(400).json({
+        message: "Valid SMTP port is required",
+      });
+    }
+
+    if (!smtpUser) {
+      return res.status(400).json({
+        message: "SMTP username is required",
+      });
+    }
+
+    if (!isValidEmail(fromEmail)) {
+      return res.status(400).json({
+        message: "Valid from email is required",
+      });
+    }
+
+    if (replyTo && !isValidEmail(replyTo)) {
+      return res.status(400).json({
+        message: "Reply-to email is invalid",
+      });
+    }
+
+    const [existingRows] = await db.query(
+      `
+      SELECT smtp_pass
+      FROM tbl_default_email_settings
+      WHERE id = 1
+      LIMIT 1
+      `,
+    );
+
+    let finalPassword = enteredPassword;
+
+    // Keep the saved password when the password field is blank.
+    if (!finalPassword && existingRows.length > 0) {
+      finalPassword = existingRows[0].smtp_pass;
+    }
+
+    if (!finalPassword) {
+      return res.status(400).json({
+        message: "SMTP password is required",
+      });
+    }
+
+    await db.query(
+      `
+      INSERT INTO tbl_default_email_settings
+      (
+        id,
+        smtp_host,
+        smtp_port,
+        smtp_user,
+        smtp_pass,
+        smtp_secure,
+        from_email,
+        from_name,
+        reply_to
+      )
+      VALUES
+      (
+        1, ?, ?, ?, ?, ?, ?, ?, ?
+      )
+
+      ON DUPLICATE KEY UPDATE
+        smtp_host = VALUES(smtp_host),
+        smtp_port = VALUES(smtp_port),
+        smtp_user = VALUES(smtp_user),
+        smtp_pass = VALUES(smtp_pass),
+        smtp_secure = VALUES(smtp_secure),
+        from_email = VALUES(from_email),
+        from_name = VALUES(from_name),
+        reply_to = VALUES(reply_to)
+      `,
+      [
+        smtpHost,
+        smtpPort,
+        smtpUser,
+        finalPassword,
+        smtpSecure ? 1 : 0,
+        fromEmail,
+        fromName,
+        replyTo,
+      ],
+    );
+
+    return res.status(200).json({
+      message: "Default email settings saved successfully",
+      configured: true,
+    });
+  } catch (error) {
+    console.error(
+      "SAVE DEFAULT EMAIL SETTINGS ERROR:",
+      error,
+    );
+
+    return res.status(500).json({
+      message: "Failed to save default email settings",
+      error: error.message,
+    });
+  }
+};
+
+/*
+|--------------------------------------------------------------------------
+| TEST DEFAULT EMAIL SETTINGS
+|--------------------------------------------------------------------------
+*/
+
+export const testDefaultEmailSettings = async (req, res) => {
+  try {
+    const testEmail = String(
+      req.body.test_email || "",
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!isValidEmail(testEmail)) {
+      return res.status(400).json({
+        message: "Valid test email is required",
+      });
+    }
+
+    const [rows] = await db.query(
+      `
+      SELECT
+        smtp_host,
+        smtp_port,
+        smtp_user,
+        smtp_pass,
+        smtp_secure,
+        from_email,
+        from_name,
+        reply_to
+
+      FROM tbl_default_email_settings
+      WHERE id = 1
+      LIMIT 1
+      `,
+    );
+
+    if (rows.length === 0) {
+      return res.status(400).json({
+        message: "Please save Default Email settings first",
+      });
+    }
+
+    const settings = rows[0];
+
+    const smtpTransporter =
+      createSmtpTransporter(settings);
+
+    await smtpTransporter.verify();
+
+    await smtpTransporter.sendMail({
+      from: {
+        name:
+          settings.from_name ||
+          "Smart Invoice & Billing",
+
+        address: settings.from_email,
+      },
+
+      to: testEmail,
+
+      subject:
+        "Default Email Test - Smart Invoice",
+
+      text:
+        "Your Default Email settings are working correctly.",
+
+      html: `
+        <div
+          style="
+            font-family: Arial, sans-serif;
+            padding: 24px;
+            color: #0f172a;
+          "
+        >
+          <h2 style="margin: 0 0 12px;">
+            Default Email Test Successful
+          </h2>
+
+          <p style="margin: 0; line-height: 1.6;">
+            Your Default Email settings are working correctly.
+          </p>
+
+          <p style="margin: 12px 0 0; line-height: 1.6;">
+            Companies using the Default Email option will send
+            Greetings, Quotations and Invoices through this email.
+          </p>
+        </div>
+      `,
+
+      ...(settings.reply_to
+        ? {
+            replyTo: settings.reply_to,
+          }
+        : {}),
+    });
+
+    return res.status(200).json({
+      message:
+        `Default Email test sent successfully to ${testEmail}`,
+    });
+  } catch (error) {
+    console.error(
+      "TEST DEFAULT EMAIL SETTINGS ERROR:",
+      error,
+    );
+
+    return res.status(500).json({
+      message:
+        "Unable to send Default Email test. Please check SMTP settings.",
+
+      error: error.message,
+    });
+  }
+};

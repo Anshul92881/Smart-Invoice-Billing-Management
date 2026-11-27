@@ -358,7 +358,7 @@ function CompanyKyc() {
                 <TableHead title="Status" />
                 <TableHead title="Attempts" />
                 <TableHead title="Docs" />
-                <th className="px-3 py-3 text-left text-sm font-medium text-blue-800 dark:text-blue-200">
+                <th className="px-3 py-3 text-left text-sm font-semibold text-blue-800 dark:text-blue-200">
                   View
                 </th>
               </tr>
@@ -973,7 +973,7 @@ function InfoBox({ icon, label, value }) {
 }
 function TableHead({ title }) {
   return (
-    <th className="px-3 py-3 text-left text-sm font-medium text-blue-800 dark:text-blue-200">
+    <th className="px-3 py-3 text-left text-sm font-semibold text-blue-800 dark:text-blue-200">
       {title}
     </th>
   );

@@ -51,6 +51,65 @@ export const createCompanyTransporter = (company = {}) => {
   });
 };
 
+const getCompanyEmailSettings = async (companyId) => {
+  const [rows] = await db.query(
+    `
+    SELECT
+      id,
+      name,
+      email,
+      email_sender_type,
+
+      smtp_host,
+      smtp_port,
+      smtp_user,
+      smtp_pass,
+      smtp_secure,
+
+      from_email,
+      from_name,
+      reply_to
+
+    FROM tbl_companies
+    WHERE id = ?
+    LIMIT 1
+    `,
+    [companyId],
+  );
+
+  if (rows.length === 0) {
+    throw new Error("Company not found");
+  }
+
+  return rows[0];
+};
+
+const getDefaultEmailSettings = async () => {
+  const [rows] = await db.query(
+    `
+    SELECT
+      smtp_host,
+      smtp_port,
+      smtp_user,
+      smtp_pass,
+      smtp_secure,
+      from_email,
+      from_name,
+      reply_to
+
+    FROM tbl_default_email_settings
+    WHERE id = 1
+    LIMIT 1
+    `,
+  );
+
+  if (rows.length === 0) {
+    throw new Error("Default Email is not configured by SuperAdmin");
+  }
+
+  return rows[0];
+};
+
 export const logEmailAttempt = async ({
   company_id,
   module_type,
@@ -106,11 +165,71 @@ export const sendCompanyEmail = async ({
     throw new Error("Valid recipient email is required");
   }
 
-  const transporter = createCompanyTransporter(company);
+  /*
+  |--------------------------------------------------------------------------
+  | GET CURRENT COMPANY EMAIL SETTINGS
+  |--------------------------------------------------------------------------
+  */
 
-  const fromEmail = normalizeText(company.from_email) || normalizeText(company.smtp_user);
-  const fromName = normalizeText(company.from_name) || normalizeText(company.name) || "Company";
-  const replyTo = normalizeText(company.reply_to) || fromEmail;
+  const currentCompany = await getCompanyEmailSettings(companyId);
+
+  const emailSenderType =
+    currentCompany.email_sender_type === "default" ? "default" : "own";
+
+  let selectedSettings;
+  let fromEmail;
+  let fromName;
+  let replyTo;
+
+  /*
+  |--------------------------------------------------------------------------
+  | DEFAULT EMAIL
+  |--------------------------------------------------------------------------
+  */
+
+  if (emailSenderType === "default") {
+    const defaultSettings = await getDefaultEmailSettings();
+
+    selectedSettings = defaultSettings;
+
+    fromEmail =
+      normalizeText(defaultSettings.from_email) ||
+      normalizeText(defaultSettings.smtp_user);
+
+    fromName =
+      normalizeText(defaultSettings.from_name) || "Smart Invoice & Billing";
+
+    /*
+     * When Default Email is selected, replies should go
+     * to the same email address that sent the message.
+     */
+    replyTo = fromEmail;
+  } else {
+    /*
+    |--------------------------------------------------------------------------
+    | COMPANY OWN EMAIL
+    |--------------------------------------------------------------------------
+    */
+
+    selectedSettings = currentCompany;
+
+    fromEmail =
+      normalizeText(currentCompany.from_email) ||
+      normalizeText(currentCompany.smtp_user);
+
+    fromName =
+      normalizeText(currentCompany.from_name) ||
+      normalizeText(currentCompany.name) ||
+      "Company";
+
+    /*
+     * For Own Email, use the company's Reply-To email.
+     * If it is empty, use the sender email.
+     */
+    replyTo = normalizeText(currentCompany.reply_to) || fromEmail;
+  }
+
+  const transporter = createCompanyTransporter(selectedSettings);
 
   const mailOptions = {
     from: `"${fromName}" <${fromEmail}>`,
@@ -139,6 +258,7 @@ export const sendCompanyEmail = async ({
       success: true,
       messageId: info.messageId,
       response: info.response,
+      email_sender_type: emailSenderType,
     };
   } catch (error) {
     await logEmailAttempt({

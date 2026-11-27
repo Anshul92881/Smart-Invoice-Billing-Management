@@ -1662,24 +1662,40 @@ export const getEmailSettings = async (req, res) => {
     const [rows] = await db.query(
       `
       SELECT
-        id,
-        name,
-        smtp_host,
-        smtp_port,
-        smtp_user,
-        smtp_secure,
-        from_email,
-        from_name,
-        reply_to
-      FROM tbl_companies
-      WHERE id = ?
+        company.id,
+        company.name,
+        company.email_sender_type,
+        company.smtp_host,
+        company.smtp_port,
+        company.smtp_user,
+        company.smtp_secure,
+        company.from_email,
+        company.from_name,
+        company.reply_to,
+
+        CASE
+          WHEN default_email.id IS NOT NULL THEN 1
+          ELSE 0
+        END AS default_email_configured,
+
+        default_email.from_email AS default_from_email,
+        default_email.from_name AS default_from_name
+
+      FROM tbl_companies AS company
+
+      LEFT JOIN tbl_default_email_settings AS default_email
+        ON default_email.id = 1
+
+      WHERE company.id = ?
       LIMIT 1
       `,
       [companyId],
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ message: "Company not found" });
+      return res.status(404).json({
+        message: "Company not found",
+      });
     }
 
     return res.json(rows[0]);
@@ -1701,6 +1717,77 @@ export const updateEmailSettings = async (req, res) => {
       });
     }
 
+    const emailSenderType = normalizeText(
+      req.body.email_sender_type || "own",
+    ).toLowerCase();
+
+    if (!["default", "own"].includes(emailSenderType)) {
+      return res.status(400).json({
+        message: "Email sender type must be default or own",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | USE DEFAULT EMAIL
+    |--------------------------------------------------------------------------
+    */
+
+    if (emailSenderType === "default") {
+      const [defaultEmailRows] = await db.query(
+        `
+        SELECT id
+        FROM tbl_default_email_settings
+        WHERE id = 1
+        LIMIT 1
+        `,
+      );
+
+      if (defaultEmailRows.length === 0) {
+        return res.status(400).json({
+          message: "Default Email is not configured by SuperAdmin",
+        });
+      }
+
+      const [result] = await db.query(
+        `
+        UPDATE tbl_companies
+        SET email_sender_type = 'default'
+        WHERE id = ?
+        `,
+        [companyId],
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          message: "Company not found",
+        });
+      }
+
+      await createAuditLog({
+        company_id: companyId,
+        user_id: req.user.id,
+        role: req.user.role,
+        action: "UPDATE",
+        module_name: "Email_Settings",
+        record_id: companyId,
+        description: "Company selected SuperAdmin Default Email",
+        ip_address: req.ip,
+        user_agent: getUserAgent(req),
+      });
+
+      return res.json({
+        message: "Default Email selected successfully",
+        email_sender_type: "default",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | USE COMPANY OWN SMTP
+    |--------------------------------------------------------------------------
+    */
+
     const {
       smtp_host,
       smtp_port,
@@ -1713,18 +1800,27 @@ export const updateEmailSettings = async (req, res) => {
     } = req.body;
 
     const normalizedSmtpHost = normalizeText(smtp_host);
+
     const normalizedSmtpPort = Number(smtp_port);
+
     const normalizedSmtpUser = normalizeText(smtp_user);
+
     const normalizedFromEmail = normalizeEmail(from_email);
+
     const normalizedReplyTo = normalizeEmail(reply_to);
+
     const normalizedFromName = normalizeText(from_name);
 
     if (!normalizedSmtpHost) {
-      return res.status(400).json({ message: "SMTP host is required" });
+      return res.status(400).json({
+        message: "SMTP host is required",
+      });
     }
 
     if (!SMTP_HOST_REGEX.test(normalizedSmtpHost)) {
-      return res.status(400).json({ message: "Invalid SMTP host" });
+      return res.status(400).json({
+        message: "Invalid SMTP host",
+      });
     }
 
     if (
@@ -1732,27 +1828,33 @@ export const updateEmailSettings = async (req, res) => {
       normalizedSmtpPort < 1 ||
       normalizedSmtpPort > 65535
     ) {
-      return res
-        .status(400)
-        .json({ message: "SMTP port must be between 1 and 65535" });
+      return res.status(400).json({
+        message: "SMTP port must be between 1 and 65535",
+      });
     }
 
     if (!normalizedSmtpUser) {
-      return res.status(400).json({ message: "SMTP user is required" });
+      return res.status(400).json({
+        message: "SMTP user is required",
+      });
     }
 
     if (normalizedFromEmail && !isValidEmail(normalizedFromEmail)) {
-      return res.status(400).json({ message: "Invalid from email format" });
+      return res.status(400).json({
+        message: "Invalid from email format",
+      });
     }
 
     if (normalizedReplyTo && !isValidEmail(normalizedReplyTo)) {
-      return res.status(400).json({ message: "Invalid reply-to email format" });
+      return res.status(400).json({
+        message: "Invalid reply-to email format",
+      });
     }
 
     if (normalizedFromName && normalizedFromName.length > 100) {
-      return res
-        .status(400)
-        .json({ message: "From name must be less than 100 characters" });
+      return res.status(400).json({
+        message: "From name must be less than 100 characters",
+      });
     }
 
     const [companyRows] = await db.query(
@@ -1766,7 +1868,9 @@ export const updateEmailSettings = async (req, res) => {
     );
 
     if (companyRows.length === 0) {
-      return res.status(404).json({ message: "Company not found" });
+      return res.status(404).json({
+        message: "Company not found",
+      });
     }
 
     const existingPass = companyRows[0].smtp_pass;
@@ -1777,7 +1881,9 @@ export const updateEmailSettings = async (req, res) => {
         : existingPass;
 
     if (!finalPassword) {
-      return res.status(400).json({ message: "SMTP password is required" });
+      return res.status(400).json({
+        message: "SMTP password is required",
+      });
     }
 
     const testCompany = {
@@ -1798,6 +1904,7 @@ export const updateEmailSettings = async (req, res) => {
       `
       UPDATE tbl_companies
       SET
+        email_sender_type = 'own',
         smtp_host = ?,
         smtp_port = ?,
         smtp_user = ?,
@@ -1828,13 +1935,15 @@ export const updateEmailSettings = async (req, res) => {
       action: "UPDATE",
       module_name: "Email_Settings",
       record_id: companyId,
-      description: "Company email settings updated",
+      description: "Company selected and updated Own SMTP",
       ip_address: req.ip,
       user_agent: getUserAgent(req),
     });
 
     return res.json({
-      message: "Email settings saved and SMTP verified successfully",
+      message: "Own Email settings saved and SMTP verified successfully",
+
+      email_sender_type: "own",
     });
   } catch (error) {
     console.error("Update email settings error:", {
@@ -1866,11 +1975,15 @@ export const sendTestEmail = async (req, res) => {
     }
 
     if (!testEmail) {
-      return res.status(400).json({ message: "Test email is required" });
+      return res.status(400).json({
+        message: "Test email is required",
+      });
     }
 
     if (!isValidEmail(testEmail)) {
-      return res.status(400).json({ message: "Invalid test email format" });
+      return res.status(400).json({
+        message: "Invalid test email format",
+      });
     }
 
     const [rows] = await db.query(
@@ -1878,14 +1991,18 @@ export const sendTestEmail = async (req, res) => {
       SELECT
         id,
         name,
+        email_sender_type,
+
         smtp_host,
         smtp_port,
         smtp_user,
         smtp_pass,
         smtp_secure,
+
         from_email,
         from_name,
         reply_to
+
       FROM tbl_companies
       WHERE id = ?
       LIMIT 1
@@ -1894,16 +2011,22 @@ export const sendTestEmail = async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ message: "Company not found" });
+      return res.status(404).json({
+        message: "Company not found",
+      });
     }
 
     const company = rows[0];
 
+    const emailSenderType =
+      company.email_sender_type === "default" ? "default" : "own";
+
     if (
-      !company.smtp_host ||
-      !company.smtp_port ||
-      !company.smtp_user ||
-      !company.smtp_pass
+      emailSenderType === "own" &&
+      (!company.smtp_host ||
+        !company.smtp_port ||
+        !company.smtp_user ||
+        !company.smtp_pass)
     ) {
       return res.status(400).json({
         message: "Please save valid SMTP settings before sending a test email",
@@ -1912,32 +2035,66 @@ export const sendTestEmail = async (req, res) => {
 
     const safeCompanyName = escapeHtml(company.name);
 
-    await sendCompanyEmail({
+    const result = await sendCompanyEmail({
       company,
       to: testEmail,
+
       subject: `Test Email from ${company.name}`,
+
       html: `
-        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
+        <div
+          style="
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #111827;
+          "
+        >
           <h2>Email Configuration Successful</h2>
+
           <p>Hello,</p>
-          <p>This is a test email from <strong>${safeCompanyName}</strong>.</p>
-          <p>Your SMTP email configuration is working correctly.</p>
+
+          <p>
+            This is a test email from
+            <strong>${safeCompanyName}</strong>.
+          </p>
+
+          <p>
+            Your selected email configuration is
+            working correctly.
+          </p>
+
+          <p>
+            Email method:
+            <strong>
+              ${emailSenderType === "default" ? "Default Email" : "Own Email"}
+            </strong>
+          </p>
+
           <br />
-          <p>Regards,<br />${safeCompanyName}</p>
+
+          <p>
+            Regards,<br />
+            ${safeCompanyName}
+          </p>
         </div>
       `,
-      text: `Email configuration successful for ${company.name}`,
+
+      text:
+        `Email configuration successful for ` +
+        `${company.name}. ` +
+        `Email method: ${emailSenderType}.`,
+
       module_type: "test",
       reference_id: null,
     });
 
     return res.json({
       message: "Test email sent successfully",
+      email_sender_type: result.email_sender_type || emailSenderType,
     });
   } catch (error) {
     return res.status(500).json({
-      message: "Test email failed",
-      error: error.message,
+      message: error.message || "Test email failed",
     });
   }
 };

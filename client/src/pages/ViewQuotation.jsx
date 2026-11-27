@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import toast from "react-hot-toast";
 import DocumentRenderer from "./DocumentRenderer";
+
 import {
   ArrowLeft,
   FileText,
@@ -16,6 +17,8 @@ import {
   Send,
   Pencil,
 } from "lucide-react";
+
+
 const DEFAULT_TEMPLATE = {
   show_logo: true,
   show_company_gst_pan: true,
@@ -30,6 +33,8 @@ const DEFAULT_TEMPLATE = {
   show_signature: true,
   show_qr_code: false,
 };
+
+
 const ALLOWED_STATUS_OPTIONS = [
   { value: "draft", label: "Draft" },
   { value: "sent", label: "Sent" },
@@ -38,12 +43,16 @@ const ALLOWED_STATUS_OPTIONS = [
   { value: "expired", label: "Expired" },
   { value: "cancelled", label: "Cancelled" },
 ];
+
+
 const BLOCKED_CONVERT_STATUSES = [
   "converted",
   "cancelled",
   "rejected",
   "expired",
 ];
+
+
 const BLOCKED_EMAIL_STATUSES = ["cancelled", "converted"];
 function safeJson(value) {
   if (!value) return {};
@@ -56,6 +65,8 @@ function safeJson(value) {
   }
   return value || {};
 }
+
+
 function safeTemplate(snapshot) {
   const parsed = safeJson(snapshot);
   return {
@@ -63,15 +74,21 @@ function safeTemplate(snapshot) {
     ...(parsed.template || parsed),
   };
 }
+
+
 function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
+
+
 function ViewQuotation() {
+
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const printRef = useRef(null);
   const storedUser = localStorage.getItem("user");
+
   let user = null;
   try {
     user = storedUser ? JSON.parse(storedUser) : null;
@@ -81,6 +98,7 @@ function ViewQuotation() {
   const canPushToCrm = ["company_admin", "accountant", "sales_user"].includes(
     user?.role,
   );
+
   const isPrint = searchParams.get("print") === "true";
   const [quotation, setQuotation] = useState(null);
   const [items, setItems] = useState([]);
@@ -90,6 +108,8 @@ function ViewQuotation() {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [pushingToCrm, setPushingToCrm] = useState(false);
+
+
   const fetchQuotation = async () => {
     try {
       setLoading(true);
@@ -104,10 +124,13 @@ function ViewQuotation() {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     fetchQuotation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+
   const updateStatus = async (status) => {
     if (!quotation || quotation.status === status) return;
     if (quotation.status === "converted") {
@@ -135,6 +158,8 @@ function ViewQuotation() {
       setStatusUpdating(false);
     }
   };
+
+
   const confirmAction = ({ title, description, confirmText, onConfirm }) => {
     toast(
       (t) => (
@@ -175,6 +200,8 @@ function ViewQuotation() {
       },
     );
   };
+
+
   const convertToInvoice = async () => {
     if (!quotation) return;
     if (BLOCKED_CONVERT_STATUSES.includes(quotation.status)) {
@@ -206,12 +233,15 @@ function ViewQuotation() {
       },
     });
   };
+
+
   const sendQuotationEmail = async () => {
     if (!quotation) return;
     if (BLOCKED_EMAIL_STATUSES.includes(quotation.status)) {
       toast.error("This quotation cannot be emailed");
       return;
     }
+
     try {
       setSendingEmail(true);
       const res = await api.post(`/quotations/send-email/${id}`);
@@ -225,6 +255,8 @@ function ViewQuotation() {
       setSendingEmail(false);
     }
   };
+
+
   const downloadQuotationPdf = async () => {
     if (!quotation) return;
     try {
@@ -251,6 +283,8 @@ function ViewQuotation() {
       setDownloading(false);
     }
   };
+
+
   const handlePushToCrm = async () => {
     if (!quotation || pushingToCrm) return;
     try {
@@ -268,14 +302,20 @@ function ViewQuotation() {
       setPushingToCrm(false);
     }
   };
+
+
   const snapshot = useMemo(
     () => safeJson(quotation?.billing_template_snapshot),
     [quotation],
   );
+
+
   const template = useMemo(
     () => safeTemplate(quotation?.billing_template_snapshot),
     [quotation],
   );
+
+
   const rendererCompany = useMemo(() => {
     const company = snapshot.company || {};
     return {
@@ -289,6 +329,7 @@ function ViewQuotation() {
       logo: company.logo || quotation?.business_logo || "",
     };
   }, [snapshot, quotation]);
+
   const rendererBranch = useMemo(() => {
     const branch = snapshot.branch || {};
     return {
@@ -297,7 +338,9 @@ function ViewQuotation() {
       branch_code: branch.branch_code || quotation?.branch_code || "",
     };
   }, [snapshot, quotation]);
+
   const rendererBank = useMemo(() => snapshot.bank || {}, [snapshot]);
+
   const rendererCustomer = useMemo(
     () => ({
       customer_name: quotation?.customer_name || "",
@@ -310,6 +353,7 @@ function ViewQuotation() {
     }),
     [quotation],
   );
+
   if (loading) {
     return (
       <div className="flex min-h-[320px] w-full items-center justify-center px-3 sm:px-4">
@@ -328,6 +372,8 @@ function ViewQuotation() {
       </div>
     );
   }
+
+
   if (!quotation) {
     return (
       <div className="w-full rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-8">
@@ -351,9 +397,12 @@ function ViewQuotation() {
       </div>
     );
   }
+
+
   const canEdit = ["draft", "sent"].includes(quotation.status);
   const canConvert = !BLOCKED_CONVERT_STATUSES.includes(quotation.status);
   const canEmail = !BLOCKED_EMAIL_STATUSES.includes(quotation.status);
+
   const canChangeStatus = !["converted", "cancelled"].includes(
     quotation.status,
   );
@@ -677,26 +726,7 @@ function ViewQuotation() {
     </div>
   );
 }
-function ActionButton({
-  label,
-  icon,
-  onClick,
-  disabled = false,
-  className = "",
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      className={`flex h-10 min-w-0 items-center justify-center gap-2 rounded-xl px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:text-sm ${className}`}
-    >
-      <span className="shrink-0">{icon}</span>
-      <span className="truncate">{label}</span>
-    </button>
-  );
-}
+
 function StatusDropdown({ value, onChange, disabled = false }) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -770,6 +800,8 @@ function StatusDropdown({ value, onChange, disabled = false }) {
     </div>
   );
 }
+
+
 function StatusBadge({ status }) {
   const styles = {
     draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
@@ -794,4 +826,6 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+
+
 export default ViewQuotation;

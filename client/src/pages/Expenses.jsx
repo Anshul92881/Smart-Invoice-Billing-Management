@@ -135,22 +135,11 @@ function Expenses() {
     status: "active",
   };
 
-  const defaultCategories = [
-    "Office Rent",
-    "Internet",
-    "Salary",
-    "Travel",
-    "Utilities",
-    "Software",
-    "Marketing",
-    "Stationery",
-    "Maintenance",
-  ];
-
   const [expenses, setExpenses] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [branches, setBranches] = useState([]);
-  const [categories, setCategories] = useState(defaultCategories);
+  const [categories, setCategories] = useState([]);
+  const [categoryLoading, setCategoryLoading] = useState(false);
 
   const [formData, setFormData] = useState(initialForm);
   const [vendorForm, setVendorForm] = useState(initialVendorForm);
@@ -176,13 +165,15 @@ function Expenses() {
 
   const fetchData = async () => {
     try {
-      const [expenseRes, branchRes] = await Promise.all([
+      const [expenseRes, branchRes, categoryRes] = await Promise.all([
         api.get("/expenses"),
         api.get("/branches"),
+        api.get("/expenses/categories"),
       ]);
 
       const expenseList = getList(expenseRes.data, "expenses");
       const branchList = getList(branchRes.data, "branches");
+      const categoryList = getList(categoryRes.data, "categories");
 
       setExpenses(expenseList);
 
@@ -195,17 +186,19 @@ function Expenses() {
         ),
       );
 
-      const categoriesFromExpenses = expenseList
-        .map((expense) => cleanString(expense.category))
+      const companyCategories = categoryList
+        .map((category) => cleanString(category.category_name))
         .filter(Boolean);
 
-      setCategories((prev) => [
-        ...new Set([...prev, ...categoriesFromExpenses]),
-      ]);
+      setCategories(companyCategories);
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch expenses");
+      toast.error(
+        error.response?.data?.message || "Failed to fetch expense data",
+      );
+
       setExpenses([]);
       setBranches([]);
+      setCategories([]);
     }
 
     try {
@@ -222,8 +215,17 @@ function Expenses() {
   };
 
   useEffect(() => {
+    setExpenses([]);
+    setVendors([]);
+    setBranches([]);
+    setCategories([]);
+
+    setCategoryFilter("");
+    setBranchFilter("");
+    setCurrentPage(1);
+
     fetchData();
-  }, []);
+  }, [user?.company_id]);
 
   const activeBranches = useMemo(
     () =>
@@ -775,27 +777,63 @@ function Expenses() {
     }
   };
 
-  const handleCreateCategory = () => {
+  const handleCreateCategory = async () => {
     const finalCategory = validateCategoryName(categoryName);
 
-    if (!finalCategory) return;
+    if (!finalCategory || categoryLoading) return;
 
     const alreadyExists = categories.some(
       (category) => category.toLowerCase() === finalCategory.toLowerCase(),
     );
 
-    if (!alreadyExists) {
-      setCategories((prev) => [...prev, finalCategory]);
+    if (alreadyExists) {
+      setFormData((prev) => ({
+        ...prev,
+        category: finalCategory,
+      }));
+
+      setCategoryName("");
+      setShowCategoryModal(false);
+
+      toast.error("Category already exists");
+      return;
     }
 
-    setFormData((prev) => ({
-      ...prev,
-      category: finalCategory,
-    }));
+    try {
+      setCategoryLoading(true);
 
-    setCategoryName("");
-    setShowCategoryModal(false);
-    toast.success("Category added successfully");
+      const response = await api.post("/expenses/categories", {
+        category_name: finalCategory,
+      });
+
+      const savedCategory = cleanString(response.data?.category?.category_name);
+
+      if (!savedCategory) {
+        throw new Error("Category was not returned by server");
+      }
+
+      setCategories((prev) =>
+        [...prev, savedCategory].sort((a, b) => a.localeCompare(b)),
+      );
+
+      setFormData((prev) => ({
+        ...prev,
+        category: savedCategory,
+      }));
+
+      setCategoryName("");
+      setShowCategoryModal(false);
+
+      toast.success("Category added successfully");
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to add category",
+      );
+    } finally {
+      setCategoryLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -1060,7 +1098,7 @@ function Expenses() {
       {showExpenseModal && (
         <FormModal
           title={editId ? "Update Expense" : "Add Expense"}
-          description="Vendor optional hai. Direct company expense ke liye vendor blank chhod sakte ho."
+          description="Manage expenses of your orgnization. Vendor is optional for direct company expenses."
           icon={<Wallet size={21} />}
           onClose={closeExpenseModal}
         >
@@ -1136,6 +1174,7 @@ function Expenses() {
             categoryName={categoryName}
             setCategoryName={setCategoryName}
             handleCreateCategory={handleCreateCategory}
+            categoryLoading={categoryLoading}
             onCancel={() => setShowCategoryModal(false)}
           />
         </FormModal>
@@ -1207,7 +1246,7 @@ function ExpenseTable({
             ].map((head) => (
               <th
                 key={head}
-                className="px-4 py-3 text-left text-sm font-medium whitespace-nowrap"
+                className="px-4 py-3 text-left text-sm font-semibold whitespace-nowrap"
               >
                 {head}
               </th>
@@ -1747,6 +1786,7 @@ function CategoryForm({
   categoryName,
   setCategoryName,
   handleCreateCategory,
+  categoryLoading,
   onCancel,
 }) {
   return (
@@ -1765,6 +1805,7 @@ function CategoryForm({
       <ModalActions
         onCancel={onCancel}
         onSave={handleCreateCategory}
+        loading={categoryLoading}
         saveText="Save Category"
       />
     </>

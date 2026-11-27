@@ -462,7 +462,7 @@ function BranchTable({
                 <th
                   key={head}
                   scope="col"
-                  className="px-2.5 py-3 text-left text-sm font-medium"
+                  className="px-2.5 py-3 text-left text-sm font-semibold"
                 >
                   {head}
                 </th>

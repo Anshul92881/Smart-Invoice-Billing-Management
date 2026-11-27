@@ -194,9 +194,48 @@ const getSenderDetails = async (greeting) => {
 
     const [companies] = await db.query(
       `
+    SELECT
+      id,
+      name,
+      email,
+      email_sender_type,
+
+      smtp_host,
+      smtp_port,
+      smtp_user,
+      smtp_pass,
+      smtp_secure,
+
+      from_email,
+      from_name,
+      reply_to
+
+    FROM tbl_companies
+    WHERE id = ?
+    LIMIT 1
+    `,
+      [greeting.company_id],
+    );
+
+    if (companies.length === 0) {
+      throw new Error("Greeting company was not found.");
+    }
+
+    const company = companies[0];
+
+    const emailSenderType =
+      company.email_sender_type === "default" ? "default" : "own";
+
+    /*
+  |--------------------------------------------------------------------------
+  | USE SUPERADMIN DEFAULT EMAIL
+  |--------------------------------------------------------------------------
+  */
+
+    if (emailSenderType === "default") {
+      const [defaultEmailRows] = await db.query(
+        `
       SELECT
-        id,
-        name,
         smtp_host,
         smtp_port,
         smtp_user,
@@ -205,22 +244,63 @@ const getSenderDetails = async (greeting) => {
         from_email,
         from_name,
         reply_to
-      FROM tbl_companies
-      WHERE id = ?
+
+      FROM tbl_default_email_settings
+      WHERE id = 1
       LIMIT 1
       `,
-      [greeting.company_id],
-    );
+      );
 
-    if (!companies.length) {
-      throw new Error("Greeting company was not found.");
+      if (defaultEmailRows.length === 0) {
+        throw new Error(
+          "Default Email is not configured by SuperAdmin. Greeting email was not sent.",
+        );
+      }
+
+      const defaultSettings = defaultEmailRows[0];
+
+      const smtpTransporter = createSmtpTransporter(defaultSettings);
+
+      const defaultFromEmail = String(
+        defaultSettings.from_email || defaultSettings.smtp_user || "",
+      ).trim();
+
+      if (!smtpTransporter || !defaultFromEmail) {
+        throw new Error(
+          "Default Email configuration is incomplete. Greeting email was not sent.",
+        );
+      }
+
+      return {
+        mailTransporter: smtpTransporter,
+
+        // Keep the company identity in the greeting.
+        senderName:
+          company.name ||
+          defaultSettings.from_name ||
+          "Smart Invoice & Billing",
+
+        fromAddress: defaultFromEmail,
+
+        replyTo: defaultFromEmail,
+
+        smtpSource: "default",
+      };
     }
 
-    const company = companies[0];
+    /*
+  |--------------------------------------------------------------------------
+  | USE COMPANY OWN SMTP
+  |--------------------------------------------------------------------------
+  */
 
     const smtpTransporter = createSmtpTransporter(company);
 
-    if (!smtpTransporter || !String(company.from_email || "").trim()) {
+    const companyFromEmail = String(
+      company.from_email || company.smtp_user || "",
+    ).trim();
+
+    if (!smtpTransporter || !companyFromEmail) {
       throw new Error(
         "Company SMTP is not configured. Greeting email was not sent.",
       );
@@ -232,9 +312,9 @@ const getSenderDetails = async (greeting) => {
       senderName:
         company.from_name || company.name || "Smart Invoice & Billing",
 
-      fromAddress: company.from_email,
+      fromAddress: companyFromEmail,
 
-      replyTo: company.reply_to || null,
+      replyTo: company.reply_to || companyFromEmail,
 
       smtpSource: "company",
     };

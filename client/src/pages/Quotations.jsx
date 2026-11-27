@@ -416,7 +416,7 @@ function QuotationTable({ quotations, canManageQuotation, onCancel }) {
         <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
           <tr>
             {[
-              "Quotation No",
+              "Quotation No.",
               "Branch",
               "Customer",
               "Date",
@@ -428,7 +428,7 @@ function QuotationTable({ quotations, canManageQuotation, onCancel }) {
               <th
                 key={head}
                 scope="col"
-                className="px-3 py-3 text-left text-sm font-medium"
+                className="px-3 py-3 text-left text-sm font-semibold"
               >
                 {head}
               </th>

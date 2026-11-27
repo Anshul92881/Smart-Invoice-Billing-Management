@@ -165,6 +165,15 @@ const toNumber = (value, fallback = 0) => {
 
 const isOnlyNumbers = (value) => /^[0-9]+$/.test(String(value || "").trim());
 
+const LOW_STOCK_LIMIT = 10;
+// Same rule as the product list API: active products, active variants, <= 10.
+function isLowStockProduct(product) {
+  if ((product.status || "active") !== "active") return false;
+  return Number(product.variant_count || 0) > 0
+    ? Number(product.low_stock_variant_count || 0) > 0
+    : Number(product.quantity || 0) <= LOW_STOCK_LIMIT;
+}
+
 function Products() {
   const user = JSON.parse(localStorage.getItem("user"));
   const [rolePermissions, setRolePermissions] = useState({});
@@ -209,6 +218,7 @@ function Products() {
   };
 
   const [products, setProducts] = useState([]);
+  const [showLowStock, setShowLowStock] = useState(false);
   const [taxes, setTaxes] = useState([]);
   const [branches, setBranches] = useState([]);
 
@@ -393,21 +403,7 @@ function Products() {
 
     const inactive = products.length - active;
 
-    const lowStock = products.filter((product) => {
-      const isActive = (product.status || "active") === "active";
-
-      if (!isActive) {
-        return false;
-      }
-
-      const hasVariants = Number(product.variant_count || 0) > 0;
-
-      if (hasVariants) {
-        return Number(product.low_stock_variant_count || 0) > 0;
-      }
-
-      return Number(product.quantity || 0) <= 10;
-    }).length;
+    const lowStock = products.filter(isLowStockProduct).length;
 
     return {
       total: products.length,
@@ -934,22 +930,32 @@ function Products() {
       }
 
       const selectedTax = getSelectedTax(value);
+
+      const selectedTaxHsn = normalizeUpper(selectedTax?.hsn_sac_code || "");
+
       autoFilledGstRef.current = false;
 
       setFormData((prev) => ({
         ...prev,
         tax_id: value,
         tax_rate: selectedTax?.tax_percentage ?? "",
+        hsn_sac_code: selectedTaxHsn || prev.hsn_sac_code,
       }));
 
-      if (errors.tax_id || errors.tax_rate || errors.hsn_sac_code) {
-        setErrors((prev) => ({
-          ...prev,
-          tax_id: "",
-          tax_rate: "",
-          hsn_sac_code: "",
-        }));
+      if (selectedTaxHsn) {
+        setHsnSelected(true);
+        setSelectedHsnDetails(null);
+        setHsnSuggestions([]);
+        setHsnSearched(false);
+        setHsnError("");
       }
+
+      setErrors((prev) => ({
+        ...prev,
+        tax_id: "",
+        tax_rate: "",
+        hsn_sac_code: "",
+      }));
 
       return;
     }
@@ -1150,11 +1156,24 @@ function Products() {
         newTax;
 
       if (selectedTaxId && Number(selectedTax?.is_active) === 1) {
+        const selectedTaxHsn = normalizeUpper(
+          selectedTax?.hsn_sac_code || payload.hsn_sac_code || "",
+        );
+
         setFormData((prev) => ({
           ...prev,
           tax_id: String(selectedTaxId),
           tax_rate: selectedTax?.tax_percentage ?? payload.tax_percentage,
+          hsn_sac_code: selectedTaxHsn || prev.hsn_sac_code,
         }));
+
+        if (selectedTaxHsn) {
+          setHsnSelected(true);
+          setSelectedHsnDetails(null);
+          setHsnSuggestions([]);
+          setHsnSearched(false);
+          setHsnError("");
+        }
       }
 
       resetTaxForm();
@@ -1380,7 +1399,7 @@ function Products() {
       );
       return;
     }
-    if (variantMode && formData.status !== "active") {
+    if (variantMode && !editId && formData.status !== "active") {
       setVariantMessage("Create variants for an active product first.");
       return;
     }
@@ -1548,6 +1567,12 @@ function Products() {
 
   return (
     <div className="products-workspace w-full min-w-0 space-y-5 text-[15px] text-slate-700 dark:text-slate-200">
+      {showLowStock && (
+        <LowStockModal
+          products={products.filter(isLowStockProduct)}
+          onClose={() => setShowLowStock(false)}
+        />
+      )}
       {!viewProduct ? (
         <>
           <header className="flex flex-col justify-between gap-4 py-1 sm:flex-row sm:items-center">
@@ -1606,6 +1631,11 @@ function Products() {
                 value={value}
                 icon={<Icon size={20} />}
                 color={color}
+                onClick={
+                  title === "Low Stock"
+                    ? () => setShowLowStock(true)
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -1935,6 +1965,7 @@ function HsnSacPicker({
   suggestionLoading = false,
   suggestionError = "",
   hint,
+  disabled = false,
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -2001,20 +2032,34 @@ function HsnSacPicker({
         type="text"
         autoComplete="off"
         value={focused ? query : value || ""}
-        placeholder="Type HSN code or description..."
+        placeholder={
+          disabled ? "Selected HSN/SAC code" : "Type HSN code or description..."
+        }
+        disabled={disabled}
         onFocus={() => {
+          if (disabled) return;
+
           setQuery("");
           setFocused(true);
         }}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => {
+          if (disabled) return;
+
+          setQuery(e.target.value);
+        }}
         onKeyDown={(e) => {
-          if (e.key === "Escape") setFocused(false);
+          if (e.key === "Escape") {
+            setFocused(false);
+          }
         }}
         onBlur={() => {
-          // Leave enough time for a search-result click to register.
           setTimeout(() => setFocused(false), 180);
         }}
-        className={`input relative z-10 ${error ? "input-error" : ""}`}
+        className={`input relative z-10 ${error ? "input-error" : ""} ${
+          disabled
+            ? "cursor-not-allowed bg-slate-100 text-slate-600 opacity-80 dark:bg-slate-800 dark:text-slate-300"
+            : ""
+        }`}
       />
       {hint && (
         <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
@@ -2071,7 +2116,7 @@ function TaxMiniForm({
 }) {
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <ModalInput
           icon={<BadgePercent size={16} />}
           label="Tax Name"
@@ -2119,6 +2164,16 @@ function TaxMiniForm({
           required
         />
 
+        <ModalInput
+          icon={<FileText size={16} />}
+          label="HSN / SAC Code"
+          name="hsn_sac_code"
+          value={taxForm.hsn_sac_code}
+          onChange={handleTaxChange}
+          error={taxErrors.hsn_sac_code}
+          placeholder="Enter 4 to 8 digit code"
+        />
+
         <Field icon={<CheckCircle2 size={16} />} label="Status">
           <CustomDropdown
             value={taxForm.is_active ? "active" : "inactive"}
@@ -2138,7 +2193,7 @@ function TaxMiniForm({
           />
         </Field>
 
-        <label className="flex items-center md:col-span-2 gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200 md:col-span-3">
           <input
             type="checkbox"
             name="reverse_charge"
@@ -2148,7 +2203,7 @@ function TaxMiniForm({
           Reverse Charge
         </label>
 
-        <div className="md:col-span-2">
+        <div className="md:col-span-4">
           <label className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
             <FileText size={16} />
             Description
@@ -2416,7 +2471,7 @@ function ProductTable({
               <th
                 key={head}
                 scope="col"
-                className="whitespace-nowrap px-5 py-4 text-left text-sm font-medium"
+                className="whitespace-nowrap px-5 py-4 text-left text-sm font-semiboldS"
               >
                 {head}
               </th>
@@ -2490,6 +2545,11 @@ function ProductTable({
                   ? variantStockById[product.id].quantity
                   : Number(product.quantity || 0)}{" "}
                 {product.unit_type || ""}
+                {isLowStockProduct(product) && (
+                  <span className="mt-1 block text-sm font-semibold text-amber-700 dark:text-amber-300">
+                    Low Stock
+                  </span>
+                )}
                 {variantStockById[product.id]?.count > 0 && (
                   <span className="block text-sm text-slate-500 dark:text-slate-400">
                     {variantStockById[product.id].count} variants
@@ -2960,7 +3020,9 @@ function ProductForm({
                 : []),
               ...taxes.map((tax) => ({
                 value: String(tax.id),
-                label: `${tax.tax_name} - ${tax.tax_percentage}%`,
+                label: `${tax.tax_name} — ${Number(tax.tax_percentage || 0)}%${
+                  tax.hsn_sac_code ? ` — HSN/SAC ${tax.hsn_sac_code}` : ""
+                }`,
               })),
               ...(canManageTaxes
                 ? [{ value: "__add_tax__", label: "+ Add New Tax Rule" }]
@@ -2976,6 +3038,12 @@ function ProductForm({
           suggestions={hsnSuggestions}
           suggestionLoading={hsnLoading}
           suggestionError={hsnError}
+          disabled={hsnSelected}
+          hint={
+            hsnSelected
+              ? "HSN/SAC code is locked after selection."
+              : "Search and select the correct HSN/SAC classification."
+          }
         />
 
         <Input
@@ -3253,7 +3321,7 @@ function ProductDetail({ product, onClose, onEdit }) {
         </aside>
 
         <div className="min-w-0 space-y-5">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4 sm:grid-cols-2 xl:grid-cols-4">
             {metrics.map(([label, value, Icon, tone]) => (
               <div key={label} className={`${card} min-w-0 p-4`}>
                 <div className="flex items-center gap-2">
@@ -3507,7 +3575,162 @@ function Section({ title, children }) {
   );
 }
 
-function StatsCard({ title, value, icon, color }) {
+function LowStockModal({ products, onClose }) {
+  const [rows, setRows] = useState([]);
+  const [errors, setErrors] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const resultRows = [];
+      const failures = [];
+      // Small request batches avoid requesting every product simultaneously.
+      for (let start = 0; start < products.length; start += 5) {
+        if (cancelled) return;
+        await Promise.all(
+          products.slice(start, start + 5).map(async (product) => {
+            if (Number(product.variant_count || 0) === 0) {
+              resultRows.push({
+                product,
+                key: `product-${product.id}`,
+                sku: product.sku,
+                variant: "Single product",
+                quantity: Number(product.quantity || 0),
+              });
+              return;
+            }
+            try {
+              const variants = await getSavedVariants(product);
+              const lowVariants = variants.filter(
+                (variant) =>
+                  variant.status === "active" &&
+                  Number(variant.quantity || 0) <= LOW_STOCK_LIMIT,
+              );
+              if (!lowVariants.length)
+                failures.push(
+                  `${product.product_name}: stock changed; refresh product list.`,
+                );
+              lowVariants.forEach((variant) => {
+                const attributes = asVariantAttributes(variant.attributes);
+                resultRows.push({
+                  product,
+                  key: `variant-${product.id}-${variant.id || variant.sku}`,
+                  sku: variant.sku,
+                  variant:
+                    Object.entries(attributes)
+                      .map(([key, value]) => `${key}: ${value}`)
+                      .join(" / ") ||
+                    variant.variant_name ||
+                    "Variant",
+                  quantity: Number(variant.quantity || 0),
+                });
+              });
+            } catch {
+              failures.push(
+                `${product.product_name}: unable to load variants. Close and reopen to retry.`,
+              );
+            }
+          }),
+        );
+      }
+      if (!cancelled) {
+        setRows(resultRows);
+        setErrors(failures);
+        setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [products]);
+
+  return (
+    <FormModal
+      title="Low Stock Products"
+      description={`Active stock at or below ${LOW_STOCK_LIMIT} units; each low-stock variant is listed separately.`}
+      icon={<Boxes size={22} />}
+      onClose={onClose}
+    >
+      {loading ? (
+        <p role="status" className="py-8 text-center text-slate-500">
+          Loading stock details…
+        </p>
+      ) : (
+        <>
+          {errors.length > 0 && (
+            <div
+              role="alert"
+              className="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-800"
+            >
+              {errors.map((message) => (
+                <p key={message}>{message}</p>
+              ))}
+            </div>
+          )}
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <table className="w-full min-w-[800px] text-left text-sm">
+              <thead className="bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
+                <tr>
+                  {[
+                    "Product",
+                    "Variant / SKU",
+                    "Branch",
+                    "Available Stock",
+                    "Low-stock Limit",
+                  ].map((label) => (
+                    <th
+                      key={label}
+                      className="whitespace-nowrap p-4 font-medium"
+                    >
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr
+                    key={row.key}
+                    className="border-t border-slate-100 dark:border-slate-800"
+                  >
+                    <td className="p-4 font-medium">
+                      {row.product.product_name || "—"}
+                    </td>
+                    <td className="p-4">
+                      <p>{row.variant}</p>
+                      <p className="mt-1 text-slate-500">{row.sku || "—"}</p>
+                    </td>
+                    <td className="p-4">{row.product.branch_name || "—"}</td>
+                    <td className="p-4">
+                      <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700">
+                        {row.quantity} {row.product.unit_type || ""}
+                      </span>
+                    </td>
+                    <td className="p-4">{LOW_STOCK_LIMIT}</td>
+                  </tr>
+                ))}
+                {rows.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-slate-500">
+                      {errors.length
+                        ? "Stock details could not be confirmed."
+                        : "No low-stock items found."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </FormModal>
+  );
+}
+
+function StatsCard({ title, value, icon, color, onClick }) {
+  const Tag = onClick ? "button" : "div";
   const tone = color.includes("emerald")
     ? "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900 dark:from-emerald-950/40 dark:to-slate-900"
     : color.includes("amber")
@@ -3516,7 +3739,10 @@ function StatsCard({ title, value, icon, color }) {
         ? "border-violet-200 bg-gradient-to-br from-violet-50 to-white dark:border-violet-900 dark:from-violet-950/40 dark:to-slate-900"
         : "border-blue-200 bg-gradient-to-br from-blue-50 to-white dark:border-blue-900 dark:from-blue-950/40 dark:to-slate-900";
   return (
-    <div
+    <Tag
+      {...(onClick
+        ? { type: "button", onClick, "aria-haspopup": "dialog" }
+        : {})}
       className={`flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3 text-left shadow-sm ${tone} `}
     >
       <span className={`shrink-0 rounded-lg p-2.5 ${color}`}>{icon}</span>
@@ -3526,10 +3752,10 @@ function StatsCard({ title, value, icon, color }) {
           {value}
         </span>
         <span className="mt-0.5 block text-sm text-slate-500">
-          Current product records
+          {onClick ? "View low-stock details" : "Current product records"}
         </span>
       </span>
-    </div>
+    </Tag>
   );
 }
 

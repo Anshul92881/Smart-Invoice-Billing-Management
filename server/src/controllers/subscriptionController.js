@@ -43,23 +43,30 @@ const calculateSubscriptionExtension = async ({
     year: "YEAR",
   };
 
+  const finalDurationValue = Number(durationValue);
+  const additionalBranches = Number(planBranches);
+
+  if (!Number.isInteger(finalDurationValue) || finalDurationValue < 0) {
+    throw new Error("Invalid subscription duration");
+  }
+
+  if (!Number.isInteger(additionalBranches) || additionalBranches < 0) {
+    throw new Error("Invalid plan branch limit");
+  }
+
+  if (finalDurationValue === 0 && additionalBranches === 0) {
+    throw new Error(
+      "Duration or branches, at least one must be greater than 0",
+    );
+  }
+
   const intervalUnit = intervalUnits[durationUnit];
 
   if (!intervalUnit) {
     throw new Error("Invalid subscription duration unit");
   }
 
-  if (!Number.isInteger(durationValue) || durationValue <= 0) {
-    throw new Error("Invalid subscription duration");
-  }
-
-  const additionalBranches = Number(planBranches || 0);
-
-  if (!Number.isInteger(additionalBranches) || additionalBranches < 0) {
-    throw new Error("Invalid plan branch limit");
-  }
-
-  // Lock the company row to prevent simultaneous limit updates.
+  // Lock company row before changing its branch limit.
   const [companyRows] = await connection.query(
     `
     SELECT id, branch_limit
@@ -75,7 +82,7 @@ const calculateSubscriptionExtension = async ({
     throw new Error("Company not found");
   }
 
-  // Find the latest validity date from previous active subscriptions.
+  // Find the latest validity from previous subscriptions.
   const [validityRows] = await connection.query(
     `
     SELECT
@@ -116,26 +123,31 @@ const calculateSubscriptionExtension = async ({
     throw new Error("Unable to calculate subscription validity");
   }
 
-  const [renewalRows] = await connection.query(
-    `
-    SELECT DATE_FORMAT(
-      DATE_ADD(
-        ?,
-        INTERVAL ? ${intervalUnit}
-      ),
-      '%Y-%m-%d'
-    ) AS renewal_date
-    `,
-    [validityBaseDate, durationValue],
-  );
+  let renewalDate = validityBaseDate;
 
-  const renewalDate = renewalRows[0]?.renewal_date;
+  // Duration 0 means validity will remain unchanged.
+  if (finalDurationValue > 0) {
+    const [renewalRows] = await connection.query(
+      `
+      SELECT DATE_FORMAT(
+        DATE_ADD(
+          ?,
+          INTERVAL ? ${intervalUnit}
+        ),
+        '%Y-%m-%d'
+      ) AS renewal_date
+      `,
+      [validityBaseDate, finalDurationValue],
+    );
+
+    renewalDate = renewalRows[0]?.renewal_date;
+  }
 
   if (!renewalDate) {
     throw new Error("Unable to calculate subscription renewal date");
   }
 
-  // Plan limit is used as a fallback for older companies.
+  // Existing plan limit is used for older company records.
   const [activePlanRows] = await connection.query(
     `
     SELECT
@@ -161,6 +173,7 @@ const calculateSubscriptionExtension = async ({
     activePlanBranchLimit,
   );
 
+  // Branches 0 means branch limit will remain unchanged.
   const updatedBranchLimit = previousBranchLimit + additionalBranches;
 
   return {
@@ -437,11 +450,136 @@ const drawSubscriptionInvoicePdf = ({ doc, invoice }) => {
 };
 
 // GET SUBSCRIPTION PLANS
+// GET SUBSCRIPTION PLANS
 export const getPlans = async (req, res) => {
   try {
     const isSuperAdmin = req.user?.role === "superadmin";
 
-    let query = `
+    /*
+     * SuperAdmin can see every plan.
+     */
+    if (isSuperAdmin) {
+      const [plans] = await db.query(`
+        SELECT
+          id,
+          plan_name,
+          plan_type,
+          price,
+          billing_cycle,
+          duration_value,
+          duration_unit,
+          is_default,
+          max_companies,
+          max_users,
+          max_invoices,
+          max_branches,
+          features,
+          status,
+          created_at,
+
+          CASE
+            WHEN duration_value = 0
+              AND max_branches > 0
+            THEN 'branch_addon'
+
+            WHEN duration_value > 0
+              AND max_branches = 0
+            THEN 'duration_only'
+
+            WHEN duration_value > 0
+              AND max_branches > 0
+            THEN 'complete'
+
+            ELSE 'invalid'
+          END AS plan_category
+
+        FROM tbl_subscription_plans
+
+        ORDER BY
+          is_default DESC,
+          CASE WHEN plan_type = 'free' THEN 1 ELSE 2 END,
+          price ASC,
+          id DESC
+      `);
+
+      return res.status(200).json(plans);
+    }
+
+    /*
+     * Company users only see plans which they can currently purchase.
+     */
+    const companyId = Number(req.user?.company_id);
+
+    if (!Number.isInteger(companyId) || companyId <= 0) {
+      return res.status(400).json({
+        message: "Company ID missing",
+      });
+    }
+
+    /*
+     * Branch add-on subscriptions are not treated as the main subscription.
+     * A valid main subscription must have duration greater than 0.
+     */
+    const [activeSubscriptions] = await db.query(
+      `
+      SELECT cs.id
+      FROM tbl_company_subscriptions cs
+
+      JOIN tbl_subscription_plans sp
+        ON sp.id = cs.plan_id
+
+      WHERE cs.company_id = ?
+        AND sp.duration_value > 0
+        AND (
+          (
+            cs.status = 'active'
+            AND cs.start_date <= CURDATE()
+            AND (
+              cs.renewal_date IS NULL
+              OR cs.renewal_date >= CURDATE()
+            )
+          )
+          OR
+          (
+            cs.status = 'trial'
+            AND cs.start_date <= CURDATE()
+            AND (
+              cs.trial_end_date IS NULL
+              OR cs.trial_end_date >= CURDATE()
+            )
+          )
+        )
+
+      ORDER BY cs.id DESC
+      LIMIT 1
+      `,
+      [companyId],
+    );
+
+    const hasActiveSubscription = activeSubscriptions.length > 0;
+
+    let planCondition;
+
+    if (hasActiveSubscription) {
+      /*
+       * Valid subscription exists:
+       * show branch add-on plans only.
+       */
+      planCondition = `
+        duration_value = 0
+        AND max_branches > 0
+      `;
+    } else {
+      /*
+       * No valid subscription:
+       * show duration-only and complete plans.
+       */
+      planCondition = `
+        duration_value > 0
+      `;
+    }
+
+    const [plans] = await db.query(`
       SELECT
         id,
         plan_name,
@@ -457,27 +595,34 @@ export const getPlans = async (req, res) => {
         max_branches,
         features,
         status,
-        created_at
+        created_at,
+
+        CASE
+          WHEN duration_value = 0
+            AND max_branches > 0
+          THEN 'branch_addon'
+
+          WHEN duration_value > 0
+            AND max_branches = 0
+          THEN 'duration_only'
+
+          WHEN duration_value > 0
+            AND max_branches > 0
+          THEN 'complete'
+
+          ELSE 'invalid'
+        END AS plan_category
+
       FROM tbl_subscription_plans
-    `;
 
-    const params = [];
+      WHERE status = 'active'
+        AND plan_type = 'paid'
+        AND (${planCondition})
 
-    // Company Admin ko sirf active plans dikhne chahiye
-    if (!isSuperAdmin) {
-      query += ` WHERE status = ? `;
-      params.push("active");
-    }
-
-    query += `
       ORDER BY
-        is_default DESC,
-        CASE WHEN plan_type = 'free' THEN 1 ELSE 2 END,
         price ASC,
         id DESC
-    `;
-
-    const [plans] = await db.query(query, params);
+    `);
 
     return res.status(200).json(plans);
   } catch (error) {
@@ -530,9 +675,9 @@ export const createPlan = async (req, res) => {
       });
     }
 
-    if (!Number.isInteger(finalDurationValue) || finalDurationValue <= 0) {
+    if (!Number.isInteger(finalDurationValue) || finalDurationValue < 0) {
       return res.status(400).json({
-        message: "Plan duration must be a positive whole number",
+        message: "Plan duration must be 0 or a positive whole number",
       });
     }
 
@@ -545,6 +690,13 @@ export const createPlan = async (req, res) => {
     if (!Number.isInteger(finalMaxBranches) || finalMaxBranches < 0) {
       return res.status(400).json({
         message: "Max branches must be 0 or a positive whole number",
+      });
+    }
+
+    if (finalDurationValue === 0 && finalMaxBranches === 0) {
+      return res.status(400).json({
+        message:
+          "Duration or max branches, at least one must be greater than 0",
       });
     }
 
@@ -604,7 +756,10 @@ export const createPlan = async (req, res) => {
   FROM tbl_subscription_plans
   WHERE max_branches = ?
     AND duration_value = ?
-    AND duration_unit = ?
+    AND (
+      duration_value = 0
+      OR duration_unit = ?
+    )
   LIMIT 1
   FOR UPDATE
   `,
@@ -776,9 +931,15 @@ export const updatePlan = async (req, res) => {
       });
     }
 
-    if (!Number.isInteger(finalDurationValue) || finalDurationValue <= 0) {
+    if (!allowedDurationUnits.includes(finalDurationUnit)) {
       return res.status(400).json({
-        message: "Plan duration must be a positive whole number",
+        message: "Duration unit must be day, month or year",
+      });
+    }
+
+    if (!Number.isInteger(finalDurationValue) || finalDurationValue < 0) {
+      return res.status(400).json({
+        message: "Plan duration must be 0 or a positive whole number",
       });
     }
 
@@ -791,6 +952,13 @@ export const updatePlan = async (req, res) => {
     if (!Number.isInteger(finalMaxBranches) || finalMaxBranches < 0) {
       return res.status(400).json({
         message: "Max branches must be 0 or a positive whole number",
+      });
+    }
+
+    if (finalDurationValue === 0 && finalMaxBranches === 0) {
+      return res.status(400).json({
+        message:
+          "Duration or max branches, at least one must be greater than 0",
       });
     }
 
@@ -881,7 +1049,10 @@ export const updatePlan = async (req, res) => {
   FROM tbl_subscription_plans
   WHERE max_branches = ?
     AND duration_value = ?
-    AND duration_unit = ?
+    AND (
+      duration_value = 0
+      OR duration_unit = ?
+    )
     AND id != ?
   LIMIT 1
   FOR UPDATE
@@ -1022,6 +1193,7 @@ export const updatePlan = async (req, res) => {
 };
 
 // GET COMPANY SUBSCRIPTIONS
+// SUPERADMIN: GET ALL COMPANY SUBSCRIPTIONS
 export const getCompanySubscriptions = async (req, res) => {
   try {
     const [subscriptions] = await db.query(`
@@ -1042,12 +1214,29 @@ export const getCompanySubscriptions = async (req, res) => {
 
         sp.plan_name,
         sp.plan_type,
+        sp.is_default,
         sp.price,
         sp.billing_cycle,
         sp.duration_value,
         sp.duration_unit,
         sp.max_branches,
         sp.features,
+
+        CASE
+          WHEN sp.duration_value = 0
+            AND sp.max_branches > 0
+          THEN 'branch_addon'
+
+          WHEN sp.duration_value > 0
+            AND sp.max_branches = 0
+          THEN 'duration_only'
+
+          WHEN sp.duration_value > 0
+            AND sp.max_branches > 0
+          THEN 'complete'
+
+          ELSE 'invalid'
+        END AS subscription_kind,
 
         CASE
           WHEN current_plan.current_subscription_id = cs.id
@@ -1059,24 +1248,43 @@ export const getCompanySubscriptions = async (req, res) => {
           WHEN cs.status = 'pending_payment'
           THEN 'Waiting for payment'
 
-          WHEN current_plan.current_subscription_id = cs.id
-          THEN 'Current active plan'
-
-          WHEN cs.status = 'active'
-          THEN 'Previous plan'
-
-          WHEN cs.status = 'trial'
-          THEN 'Trial plan'
-
           WHEN cs.status = 'cancelled'
-          THEN 'Cancelled plan'
+          THEN 'Cancelled'
 
           WHEN cs.status = 'expired'
             OR (
-              cs.renewal_date IS NOT NULL
+              cs.status = 'active'
+              AND cs.renewal_date IS NOT NULL
               AND cs.renewal_date < CURDATE()
             )
-          THEN 'Expired plan'
+            OR (
+              cs.status = 'trial'
+              AND cs.trial_end_date IS NOT NULL
+              AND cs.trial_end_date < CURDATE()
+            )
+          THEN 'Expired'
+
+          WHEN cs.start_date > CURDATE()
+            AND cs.status IN ('active', 'trial')
+          THEN 'Upcoming'
+
+          WHEN sp.duration_value = 0
+            AND sp.max_branches > 0
+            AND cs.status = 'active'
+          THEN 'Active'
+
+          WHEN current_plan.current_subscription_id = cs.id
+            AND cs.status = 'trial'
+          THEN 'Current trial'
+
+          WHEN current_plan.current_subscription_id = cs.id
+          THEN 'Current'
+
+          WHEN cs.status = 'active'
+          THEN 'Previous'
+
+          WHEN cs.status = 'trial'
+          THEN 'Trial'
 
           ELSE cs.status
         END AS display_status
@@ -1091,38 +1299,44 @@ export const getCompanySubscriptions = async (req, res) => {
 
       LEFT JOIN (
         SELECT
-          company_id,
+          current_subscription.company_id,
 
           COALESCE(
             MAX(
               CASE
-                WHEN status = 'active'
-                  AND start_date <= CURDATE()
+                WHEN current_subscription.status = 'active'
+                  AND current_subscription.start_date <= CURDATE()
                   AND (
-                    renewal_date IS NULL
-                    OR renewal_date >= CURDATE()
+                    current_subscription.renewal_date IS NULL
+                    OR current_subscription.renewal_date >= CURDATE()
                   )
-                THEN id
+                  AND current_plan_details.duration_value > 0
+                THEN current_subscription.id
                 ELSE NULL
               END
             ),
 
             MAX(
               CASE
-                WHEN status = 'trial'
-                  AND start_date <= CURDATE()
+                WHEN current_subscription.status = 'trial'
+                  AND current_subscription.start_date <= CURDATE()
                   AND (
-                    trial_end_date IS NULL
-                    OR trial_end_date >= CURDATE()
+                    current_subscription.trial_end_date IS NULL
+                    OR current_subscription.trial_end_date >= CURDATE()
                   )
-                THEN id
+                  AND current_plan_details.duration_value > 0
+                THEN current_subscription.id
                 ELSE NULL
               END
             )
           ) AS current_subscription_id
 
-        FROM tbl_company_subscriptions
-        GROUP BY company_id
+        FROM tbl_company_subscriptions current_subscription
+
+        JOIN tbl_subscription_plans current_plan_details
+          ON current_plan_details.id = current_subscription.plan_id
+
+        GROUP BY current_subscription.company_id
       ) current_plan
         ON current_plan.company_id = cs.company_id
 
@@ -1140,12 +1354,13 @@ export const getCompanySubscriptions = async (req, res) => {
   }
 };
 
+
 // COMPANY SIDE: GET COMPLETE SUBSCRIPTION HISTORY
 export const getMyAllSubscriptions = async (req, res) => {
   try {
-    const companyId = req.user.company_id;
+    const companyId = Number(req.user.company_id);
 
-    if (!companyId) {
+    if (!Number.isInteger(companyId) || companyId <= 0) {
       return res.status(400).json({
         message: "Company ID missing",
       });
@@ -1163,6 +1378,12 @@ export const getMyAllSubscriptions = async (req, res) => {
             AND cs.renewal_date IS NOT NULL
             AND cs.renewal_date < CURDATE()
           THEN 'expired'
+
+          WHEN cs.status = 'trial'
+            AND cs.trial_end_date IS NOT NULL
+            AND cs.trial_end_date < CURDATE()
+          THEN 'expired'
+
           ELSE cs.status
         END AS status,
 
@@ -1182,8 +1403,23 @@ export const getMyAllSubscriptions = async (req, res) => {
         sp.features,
         sp.max_users,
         sp.max_invoices,
-
         sp.max_branches AS plan_max_branches,
+
+        CASE
+          WHEN sp.duration_value = 0
+            AND sp.max_branches > 0
+          THEN 'branch_addon'
+
+          WHEN sp.duration_value > 0
+            AND sp.max_branches = 0
+          THEN 'duration_only'
+
+          WHEN sp.duration_value > 0
+            AND sp.max_branches > 0
+          THEN 'complete'
+
+          ELSE 'invalid'
+        END AS subscription_kind,
 
         GREATEST(
           COALESCE(c.branch_limit, 0),
@@ -1199,6 +1435,7 @@ export const getMyAllSubscriptions = async (req, res) => {
         CASE
           WHEN cs.renewal_date IS NULL
           THEN NULL
+
           ELSE GREATEST(
             DATEDIFF(cs.renewal_date, CURDATE()),
             0
@@ -1215,12 +1452,24 @@ export const getMyAllSubscriptions = async (req, res) => {
           WHEN cs.status = 'pending_payment'
           THEN 'Waiting for payment'
 
+          WHEN sp.duration_value = 0
+            AND sp.max_branches > 0
+          THEN 'Branch add-on'
+
           WHEN current_plan.current_subscription_id = cs.id
           THEN 'Current active plan'
 
-          WHEN cs.status = 'active'
-            AND cs.renewal_date IS NOT NULL
-            AND cs.renewal_date < CURDATE()
+          WHEN cs.status = 'expired'
+            OR (
+              cs.status = 'active'
+              AND cs.renewal_date IS NOT NULL
+              AND cs.renewal_date < CURDATE()
+            )
+            OR (
+              cs.status = 'trial'
+              AND cs.trial_end_date IS NOT NULL
+              AND cs.trial_end_date < CURDATE()
+            )
           THEN 'Expired plan'
 
           WHEN cs.status = 'active'
@@ -1231,9 +1480,6 @@ export const getMyAllSubscriptions = async (req, res) => {
 
           WHEN cs.status = 'cancelled'
           THEN 'Cancelled plan'
-
-          WHEN cs.status = 'expired'
-          THEN 'Expired plan'
 
           ELSE cs.status
         END AS display_status
@@ -1248,38 +1494,45 @@ export const getMyAllSubscriptions = async (req, res) => {
 
       LEFT JOIN (
         SELECT
-          company_id,
+          current_subscription.company_id,
 
           COALESCE(
             MAX(
               CASE
-                WHEN status = 'active'
-                  AND start_date <= CURDATE()
+                WHEN current_subscription.status = 'active'
+                  AND current_subscription.start_date <= CURDATE()
                   AND (
-                    renewal_date IS NULL
-                    OR renewal_date >= CURDATE()
+                    current_subscription.renewal_date IS NULL
+                    OR current_subscription.renewal_date >= CURDATE()
                   )
-                THEN id
+                  AND current_plan_details.duration_value > 0
+                THEN current_subscription.id
                 ELSE NULL
               END
             ),
 
             MAX(
               CASE
-                WHEN status = 'trial'
-                  AND start_date <= CURDATE()
+                WHEN current_subscription.status = 'trial'
+                  AND current_subscription.start_date <= CURDATE()
                   AND (
-                    trial_end_date IS NULL
-                    OR trial_end_date >= CURDATE()
+                    current_subscription.trial_end_date IS NULL
+                    OR current_subscription.trial_end_date >= CURDATE()
                   )
-                THEN id
+                  AND current_plan_details.duration_value > 0
+                THEN current_subscription.id
                 ELSE NULL
               END
             )
           ) AS current_subscription_id
 
-        FROM tbl_company_subscriptions
-        GROUP BY company_id
+        FROM tbl_company_subscriptions current_subscription
+
+        JOIN tbl_subscription_plans current_plan_details
+          ON current_plan_details.id =
+            current_subscription.plan_id
+
+        GROUP BY current_subscription.company_id
       ) current_plan
         ON current_plan.company_id = cs.company_id
 
@@ -1447,8 +1700,9 @@ export const buySubscriptionPlan = async (req, res) => {
     }
 
     const planPrice = Number(plan.price || 0);
-    const durationValue = Number(plan.duration_value || 0);
-    const purchasedBranches = Number(plan.max_branches || 0);
+
+    const durationValue = Number(plan.duration_value);
+    const purchasedBranches = Number(plan.max_branches);
 
     if (planPrice <= 0) {
       await connection.rollback();
@@ -1458,7 +1712,7 @@ export const buySubscriptionPlan = async (req, res) => {
       });
     }
 
-    if (durationValue <= 0) {
+    if (!Number.isInteger(durationValue) || durationValue < 0) {
       await connection.rollback();
 
       return res.status(400).json({
@@ -1466,15 +1720,25 @@ export const buySubscriptionPlan = async (req, res) => {
       });
     }
 
-    const allowedDurationUnits = {
-      day: "DAY",
-      month: "MONTH",
-      year: "YEAR",
-    };
+    if (!Number.isInteger(purchasedBranches) || purchasedBranches < 0) {
+      await connection.rollback();
 
-    const intervalUnit = allowedDurationUnits[plan.duration_unit];
+      return res.status(400).json({
+        message: "Plan branch limit is invalid",
+      });
+    }
 
-    if (!intervalUnit) {
+    if (durationValue === 0 && purchasedBranches === 0) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        message: "Duration or branches, at least one must be greater than 0",
+      });
+    }
+
+    const durationUnit = String(plan.duration_unit || "").toLowerCase();
+
+    if (!allowedDurationUnits.includes(durationUnit)) {
       await connection.rollback();
 
       return res.status(400).json({
@@ -1483,101 +1747,110 @@ export const buySubscriptionPlan = async (req, res) => {
     }
 
     /*
-|--------------------------------------------------------------------------
-| 3. CALCULATE SUBSCRIPTION DATES
-|--------------------------------------------------------------------------
-| New plan immediately start hoga.
-| Current remaining validity new plan ke valid-till mein add hogi.
-*/
-
-    const [baseDateRows] = await connection.query(
+     * Do not allow another purchase while a subscription payment is pending.
+     */
+    const [pendingSubscriptions] = await connection.query(
       `
-  SELECT
-    DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS start_date,
-
-    DATE_FORMAT(
-      CASE
-        WHEN MAX(
-          CASE
-            WHEN status = 'trial'
-              THEN trial_end_date
-            ELSE renewal_date
-          END
-        ) IS NOT NULL
-        AND MAX(
-          CASE
-            WHEN status = 'trial'
-              THEN trial_end_date
-            ELSE renewal_date
-          END
-        ) > CURDATE()
-        THEN MAX(
-          CASE
-            WHEN status = 'trial'
-              THEN trial_end_date
-            ELSE renewal_date
-          END
-        )
-        ELSE CURDATE()
-      END,
-      '%Y-%m-%d'
-    ) AS validity_base_date
-
+  SELECT id
   FROM tbl_company_subscriptions
-
   WHERE company_id = ?
-    AND status IN ('active', 'trial')
+    AND status = 'pending_payment'
+  LIMIT 1
+  FOR UPDATE
   `,
       [companyId],
     );
 
-    const startDate = baseDateRows[0]?.start_date;
-    const validityBaseDate = baseDateRows[0]?.validity_base_date;
+    if (pendingSubscriptions.length > 0) {
+      await connection.rollback();
 
-    const [renewalDateRows] = await connection.query(
-      `
-  SELECT DATE_FORMAT(
-    DATE_ADD(
-      ?,
-      INTERVAL ? ${intervalUnit}
-    ),
-    '%Y-%m-%d'
-  ) AS renewal_date
-  `,
-      [validityBaseDate, durationValue],
-    );
-
-    const renewalDate = renewalDateRows[0]?.renewal_date;
-
-    if (!startDate || !validityBaseDate || !renewalDate) {
-      throw new Error("Unable to calculate subscription validity");
+      return res.status(400).json({
+        message:
+          "Complete the pending subscription payment before purchasing another plan.",
+      });
     }
 
-    const [activePlanLimitRows] = await connection.query(
+    /*
+     * Check whether the company has a valid main subscription.
+     * Duration 0 plans are branch add-ons, so they are ignored here.
+     */
+    const [activeSubscriptions] = await connection.query(
       `
-      SELECT
-        COALESCE(MAX(sp.max_branches), 0) AS active_plan_branches
-      FROM tbl_company_subscriptions cs
-      JOIN tbl_subscription_plans sp
-        ON cs.plan_id = sp.id
-      WHERE cs.company_id = ?
-        AND cs.status = 'active'
-      `,
+  SELECT cs.id
+  FROM tbl_company_subscriptions cs
+
+  JOIN tbl_subscription_plans sp
+    ON sp.id = cs.plan_id
+
+  WHERE cs.company_id = ?
+    AND sp.duration_value > 0
+    AND (
+      (
+        cs.status = 'active'
+        AND cs.start_date <= CURDATE()
+        AND (
+          cs.renewal_date IS NULL
+          OR cs.renewal_date >= CURDATE()
+        )
+      )
+      OR
+      (
+        cs.status = 'trial'
+        AND cs.start_date <= CURDATE()
+        AND (
+          cs.trial_end_date IS NULL
+          OR cs.trial_end_date >= CURDATE()
+        )
+      )
+    )
+
+  ORDER BY cs.id DESC
+  LIMIT 1
+  FOR UPDATE
+  `,
       [companyId],
     );
 
-    const companyBranchLimit = Number(companyRows[0].branch_limit || 0);
+    const hasActiveSubscription = activeSubscriptions.length > 0;
+    const isBranchAddon = durationValue === 0 && purchasedBranches > 0;
 
-    const activePlanBranchLimit = Number(
-      activePlanLimitRows[0]?.active_plan_branches || 0,
-    );
+    /*
+     * A company with an active subscription can only purchase branch add-ons.
+     */
+    if (hasActiveSubscription && !isBranchAddon) {
+      await connection.rollback();
 
-    const existingBranchLimit = Math.max(
-      companyBranchLimit,
-      activePlanBranchLimit,
-    );
+      return res.status(400).json({
+        message:
+          "Your subscription is currently active. You can only purchase branch add-ons.",
+      });
+    }
 
-    const updatedBranchLimit = existingBranchLimit + purchasedBranches;
+    /*
+     * Branch add-ons require an active main subscription.
+     */
+    if (!hasActiveSubscription && isBranchAddon) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        message:
+          "An active subscription is required before purchasing branch add-ons.",
+      });
+    }
+
+    const extensionDetails = await calculateSubscriptionExtension({
+      connection,
+      companyId,
+      subscriptionId: 0,
+      durationValue,
+      durationUnit,
+      planBranches: purchasedBranches,
+    });
+
+    const startDate = extensionDetails.startDate;
+    const renewalDate = extensionDetails.renewalDate;
+    const existingBranchLimit = extensionDetails.previousBranchLimit;
+    const updatedBranchLimit = extensionDetails.updatedBranchLimit;
 
     const [subscriptionResult] = await connection.query(
       `
@@ -2325,17 +2598,30 @@ export const recordSubscriptionPayment = async (req, res) => {
     }
 
     const durationValue = Number(subscription.duration_value);
+
     const durationUnit = String(subscription.duration_unit || "").toLowerCase();
+
+    const planBranches = Number(subscription.max_branches);
 
     if (
       !Number.isInteger(durationValue) ||
-      durationValue <= 0 ||
+      durationValue < 0 ||
+      !Number.isInteger(planBranches) ||
+      planBranches < 0 ||
       !allowedDurationUnits.includes(durationUnit)
     ) {
       await connection.rollback();
 
       return res.status(400).json({
-        message: "Plan duration configuration is invalid",
+        message: "Plan configuration is invalid",
+      });
+    }
+
+    if (durationValue === 0 && planBranches === 0) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        message: "Duration or branches, at least one must be greater than 0",
       });
     }
 
@@ -2687,11 +2973,12 @@ export const getSubscriptionInvoices = async (req, res) => {
 };
 
 // COMPANY SIDE: GET CURRENT SUBSCRIPTION
+// COMPANY SIDE: GET CURRENT MAIN SUBSCRIPTION
 export const getMySubscription = async (req, res) => {
   try {
-    const companyId = req.user.company_id;
+    const companyId = Number(req.user.company_id);
 
-    if (!companyId) {
+    if (!Number.isInteger(companyId) || companyId <= 0) {
       return res.status(400).json({
         message: "Company ID missing",
       });
@@ -2709,6 +2996,12 @@ export const getMySubscription = async (req, res) => {
             AND cs.renewal_date IS NOT NULL
             AND cs.renewal_date < CURDATE()
           THEN 'expired'
+
+          WHEN cs.status = 'trial'
+            AND cs.trial_end_date IS NOT NULL
+            AND cs.trial_end_date < CURDATE()
+          THEN 'expired'
+
           ELSE cs.status
         END AS status,
 
@@ -2729,6 +3022,12 @@ export const getMySubscription = async (req, res) => {
         sp.max_invoices,
         sp.features,
 
+        CASE
+          WHEN sp.max_branches = 0
+          THEN 'duration_only'
+          ELSE 'complete'
+        END AS subscription_kind,
+
         GREATEST(
           COALESCE(c.branch_limit, 0),
           COALESCE(sp.max_branches, 0)
@@ -2745,17 +3044,22 @@ export const getMySubscription = async (req, res) => {
         ) AS remaining_branches,
 
         CASE
-          WHEN cs.renewal_date IS NULL THEN NULL
-          ELSE GREATEST(DATEDIFF(cs.renewal_date, CURDATE()), 0)
+          WHEN cs.renewal_date IS NULL
+          THEN NULL
+
+          ELSE GREATEST(
+            DATEDIFF(cs.renewal_date, CURDATE()),
+            0
+          )
         END AS remaining_days
 
       FROM tbl_company_subscriptions cs
 
       JOIN tbl_subscription_plans sp
-        ON cs.plan_id = sp.id
+        ON sp.id = cs.plan_id
 
       JOIN tbl_companies c
-        ON cs.company_id = c.id
+        ON c.id = cs.company_id
 
       LEFT JOIN (
         SELECT
@@ -2767,6 +3071,13 @@ export const getMySubscription = async (req, res) => {
         ON branch_data.company_id = cs.company_id
 
       WHERE cs.company_id = ?
+
+        /*
+         * Duration 0 plans are branch add-ons.
+         * They must not replace the main current subscription.
+         */
+        AND sp.duration_value > 0
+
         AND cs.status IN (
           'trial',
           'active',
@@ -2800,6 +3111,10 @@ export const getMySubscription = async (req, res) => {
               cs.renewal_date IS NOT NULL
               AND cs.renewal_date < CURDATE()
             )
+            OR (
+              cs.trial_end_date IS NOT NULL
+              AND cs.trial_end_date < CURDATE()
+            )
           THEN 4
 
           ELSE 5
@@ -2822,6 +3137,7 @@ export const getMySubscription = async (req, res) => {
     });
   }
 };
+
 
 // COMPANY SIDE: GET OWN SUBSCRIPTION INVOICES
 export const getMySubscriptionInvoices = async (req, res) => {
@@ -3014,17 +3330,30 @@ export const payMySubscriptionInvoice = async (req, res) => {
     }
 
     const durationValue = Number(invoice.duration_value);
+
     const durationUnit = String(invoice.duration_unit || "").toLowerCase();
+
+    const planBranches = Number(invoice.max_branches);
 
     if (
       !Number.isInteger(durationValue) ||
-      durationValue <= 0 ||
+      durationValue < 0 ||
+      !Number.isInteger(planBranches) ||
+      planBranches < 0 ||
       !allowedDurationUnits.includes(durationUnit)
     ) {
       await connection.rollback();
 
       return res.status(400).json({
-        message: "Plan duration configuration is invalid",
+        message: "Plan configuration is invalid",
+      });
+    }
+
+    if (durationValue === 0 && planBranches === 0) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        message: "Duration or branches, at least one must be greater than 0",
       });
     }
 

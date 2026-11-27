@@ -638,9 +638,354 @@ function Profile() {
           )}
         </form>
       )}
+
+      {isSuperAdmin && (
+        <DefaultEmailSettings defaultTestEmail={user?.email || ""} />
+      )}
     </div>
   );
 }
+
+function DefaultEmailSettings({ defaultTestEmail }) {
+  const [formData, setFormData] = useState({
+    smtp_host: "",
+    smtp_port: "465",
+    smtp_user: "",
+    smtp_pass: "",
+    smtp_secure: true,
+    from_email: "",
+    from_name: "Smart Invoice & Billing",
+    reply_to: "",
+  });
+
+  const [configured, setConfigured] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [testEmail, setTestEmail] = useState(defaultTestEmail);
+
+  useEffect(() => {
+    const loadDefaultEmailSettings = async () => {
+      try {
+        setLoading(true);
+
+        const response = await api.get("/superadmin/default-email-settings");
+
+        const settings = response.data?.settings || {};
+
+        setFormData((previous) => ({
+          ...previous,
+          smtp_host: settings.smtp_host || "",
+          smtp_port: String(settings.smtp_port || 465),
+          smtp_user: settings.smtp_user || "",
+          smtp_pass: "",
+          smtp_secure:
+            settings.smtp_secure === true ||
+            settings.smtp_secure === 1 ||
+            settings.smtp_secure === "1",
+          from_email: settings.from_email || "",
+          from_name: settings.from_name || "Smart Invoice & Billing",
+          reply_to: settings.reply_to || "",
+        }));
+
+        setConfigured(Boolean(response.data?.configured));
+      } catch (error) {
+        toast.error(
+          error.response?.data?.message ||
+            "Failed to load default email settings",
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDefaultEmailSettings();
+  }, []);
+
+  const handleChange = (event) => {
+    const { name, value, type, checked } = event.target;
+
+    setFormData((previous) => ({
+      ...previous,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
+
+  const validateForm = () => {
+    if (!formData.smtp_host.trim()) {
+      toast.error("SMTP host is required");
+      return false;
+    }
+
+    const port = Number(formData.smtp_port);
+
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      toast.error("Enter a valid SMTP port");
+      return false;
+    }
+
+    if (!formData.smtp_user.trim()) {
+      toast.error("SMTP username is required");
+      return false;
+    }
+
+    if (!configured && !formData.smtp_pass) {
+      toast.error("SMTP password is required");
+      return false;
+    }
+
+    if (!formData.from_email.trim()) {
+      toast.error("From email is required");
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSave = async (event) => {
+    event.preventDefault();
+
+    if (!validateForm()) return;
+
+    try {
+      setSaving(true);
+
+      const response = await api.put("/superadmin/default-email-settings", {
+        ...formData,
+        smtp_port: Number(formData.smtp_port),
+      });
+
+      setConfigured(true);
+
+      setFormData((previous) => ({
+        ...previous,
+        smtp_pass: "",
+      }));
+
+      toast.success(
+        response.data?.message || "Default email settings saved successfully",
+      );
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to save default email settings",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    const email = testEmail.trim();
+
+    if (!email) {
+      toast.error("Test email is required");
+      return;
+    }
+
+    try {
+      setTesting(true);
+
+      const response = await api.post(
+        "/superadmin/default-email-settings/test",
+        {
+          test_email: email,
+        },
+      );
+
+      toast.success(response.data?.message || "Test email sent successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Default email test failed");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSave}
+      className="shrink-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+    >
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <SectionTitle
+          icon={<Mail size={19} />}
+          title="Default Company Email"
+          description="Used when a Company Admin selects Default Email for greetings, invoices and quotations."
+          className="mb-0"
+        />
+
+        <span
+          className={`w-fit shrink-0 rounded-full px-3 py-1 text-sm font-semibold ${
+            configured
+              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+              : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+          }`}
+        >
+          {configured ? "Configured" : "Not Configured"}
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm font-medium text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          Loading default email settings...
+        </div>
+      ) : (
+        <>
+          <div className="grid min-w-0 gap-4 lg:grid-cols-3">
+            <SmtpGroup
+              title="Server"
+              description="Default SMTP server details."
+            >
+              <SmtpField
+                label="SMTP Host"
+                name="smtp_host"
+                value={formData.smtp_host}
+                onChange={handleChange}
+                placeholder="smtp.gmail.com"
+              />
+
+              <SmtpField
+                label="SMTP Port"
+                name="smtp_port"
+                type="number"
+                value={formData.smtp_port}
+                onChange={handleChange}
+                placeholder="465"
+              />
+
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                <input
+                  type="checkbox"
+                  name="smtp_secure"
+                  checked={formData.smtp_secure}
+                  onChange={handleChange}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Secure connection (SSL/TLS)
+                </span>
+              </label>
+            </SmtpGroup>
+
+            <SmtpGroup
+              title="Login"
+              description="Default email account credentials."
+            >
+              <SmtpField
+                label="SMTP Username"
+                name="smtp_user"
+                value={formData.smtp_user}
+                onChange={handleChange}
+                placeholder="email@example.com"
+              />
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  SMTP Password
+                </label>
+
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="smtp_pass"
+                    value={formData.smtp_pass}
+                    onChange={handleChange}
+                    placeholder={
+                      configured
+                        ? "Blank means keep current password"
+                        : "Enter SMTP password"
+                    }
+                    autoComplete="new-password"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 dark:focus:ring-blue-950/50"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((previous) => !previous)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                    aria-label="Toggle default SMTP password visibility"
+                  >
+                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
+              </div>
+            </SmtpGroup>
+
+            <SmtpGroup
+              title="Sender"
+              description="Sender details visible to recipients."
+            >
+              <SmtpField
+                label="From Email"
+                name="from_email"
+                type="email"
+                value={formData.from_email}
+                onChange={handleChange}
+                placeholder="billing@example.com"
+              />
+
+              <SmtpField
+                label="From Name"
+                name="from_name"
+                value={formData.from_name}
+                onChange={handleChange}
+                placeholder="Smart Invoice & Billing"
+              />
+
+              <SmtpField
+                label="Reply-To"
+                name="reply_to"
+                type="email"
+                value={formData.reply_to}
+                onChange={handleChange}
+                placeholder="support@example.com"
+              />
+            </SmtpGroup>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 dark:border-slate-800 lg:flex-row lg:items-end lg:justify-between">
+            <div className="w-full lg:max-w-md">
+              <SmtpField
+                label="Test Email Address"
+                type="email"
+                value={testEmail}
+                onChange={(event) => setTestEmail(event.target.value)}
+                placeholder="admin@example.com"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={handleTest}
+                disabled={testing || !configured}
+                title={
+                  configured ? "" : "Save default email settings before testing"
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                <Send size={16} />
+                {testing ? "Sending..." : "Send Test Email"}
+              </button>
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={16} />
+                {saving ? "Saving..." : "Save Default Email"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </form>
+  );
+}
+
 function SectionTitle({ icon, title, description, className = "mb-4" }) {
   return (
     <div className={`flex shrink-0 items-start gap-3 ${className}`}>

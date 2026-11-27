@@ -947,18 +947,30 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
 
     const selectedTax = getSelectedTax(value);
 
+    const selectedTaxHsn = normalizeUpper(selectedTax?.hsn_sac_code || "");
+
     autoFilledGstRef.current = false;
 
     setProductForm((prev) => ({
       ...prev,
       tax_id: value,
       tax_rate: selectedTax?.tax_percentage ?? "",
+      hsn_sac_code: selectedTaxHsn || prev.hsn_sac_code,
     }));
+
+    if (selectedTaxHsn) {
+      setHsnSelected(true);
+      setSelectedHsnDetails(null);
+      setHsnSuggestions([]);
+      setHsnSearched(false);
+      setHsnError("");
+    }
 
     setProductErrors((prev) => ({
       ...prev,
       tax_id: "",
       tax_rate: "",
+      hsn_sac_code: "",
     }));
   };
 
@@ -1218,6 +1230,28 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
         updatedTaxes.find((tax) => String(tax.id) === String(selectedTaxId)) ||
         createdTax;
 
+      if (selectedTaxId && Number(selectedTax?.is_active) === 1) {
+        const selectedTaxHsn = normalizeUpper(
+          selectedTax?.hsn_sac_code || payload.hsn_sac_code || "",
+        );
+
+        autoFilledGstRef.current = false;
+
+        setProductForm((previous) => ({
+          ...previous,
+          tax_id: String(selectedTaxId),
+          tax_rate: selectedTax?.tax_percentage ?? payload.tax_percentage,
+          hsn_sac_code: selectedTaxHsn || previous.hsn_sac_code,
+        }));
+
+        if (selectedTaxHsn) {
+          setHsnSelected(true);
+          setSelectedHsnDetails(null);
+          setHsnSuggestions([]);
+          setHsnSearched(false);
+          setHsnError("");
+        }
+      }
       if (selectedTaxId && Number(selectedTax?.is_active) === 1) {
         autoFilledGstRef.current = false;
 
@@ -2253,32 +2287,81 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
       }
 
       const productId = String(item.product_id);
-      if (!Object.prototype.hasOwnProperty.call(variantsByProduct, productId)) {
+      const requestedQuantity = Number(item.quantity);
+
+      if (!Number.isSafeInteger(requestedQuantity) || requestedQuantity <= 0) {
         toast.error(
-          `Variant information is still loading or unavailable at row ${index + 1}`,
+          `Quantity must be a positive whole number at row ${index + 1}`,
         );
         return false;
       }
-      const productVariants = variantsByProduct[productId];
-      if (productVariants.length) {
-        const selectedVariant = productVariants.find(
-          (variant) => String(variant.id) === String(item.variant_id),
+
+      if (!Object.prototype.hasOwnProperty.call(variantsByProduct, productId)) {
+        toast.error(
+          `Product stock information is still loading at row ${index + 1}`,
         );
+        return false;
+      }
+
+      const productVariants = variantsByProduct[productId];
+
+      if (productVariants.length > 0) {
+        const selectedVariant = productVariants.find(
+          (variant) => Number(variant.id) === Number(item.variant_id),
+        );
+
         if (!selectedVariant || selectedVariant.status !== "active") {
           toast.error(`Please select an active variant at row ${index + 1}`);
           return false;
         }
-        if (!Number.isInteger(Number(item.quantity))) {
+
+        const totalRequestedQuantity = items
+          .filter(
+            (rowItem) => Number(rowItem.variant_id) === Number(item.variant_id),
+          )
+          .reduce((total, rowItem) => total + Number(rowItem.quantity || 0), 0);
+
+        const availableStock = Number(selectedVariant.quantity || 0);
+
+        if (totalRequestedQuantity > availableStock) {
           toast.error(
-            `Variant quantity must be a whole number at row ${index + 1}`,
+            `${selectedVariant.sku || "Selected variant"} has only ${
+              availableStock
+            } item(s) available`,
           );
           return false;
         }
-      }
+      } else {
+        const selectedProduct = products.find(
+          (product) => Number(product.id) === Number(item.product_id),
+        );
 
-      if (Number(item.quantity || 0) <= 0) {
-        toast.error(`Quantity must be greater than 0 at row ${index + 1}`);
-        return false;
+        if (!selectedProduct) {
+          toast.error(`Product information not found at row ${index + 1}`);
+          return false;
+        }
+
+        const totalRequestedQuantity = items
+          .filter(
+            (rowItem) =>
+              Number(rowItem.product_id) === Number(item.product_id) &&
+              !rowItem.variant_id,
+          )
+          .reduce((total, rowItem) => total + Number(rowItem.quantity || 0), 0);
+
+        const availableStock = Number(selectedProduct.quantity || 0);
+
+        if (totalRequestedQuantity > availableStock) {
+          const productName =
+            selectedProduct.product_name ||
+            selectedProduct.name ||
+            "Selected product";
+
+          toast.error(
+            `${productName} has only ${availableStock} item(s) available`,
+          );
+          return false;
+        }
       }
 
       if (Number(item.price || 0) < 0) {
@@ -3436,7 +3519,9 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
 
                     ...taxes.map((tax) => ({
                       value: String(tax.id),
-                      label: `${tax.tax_name} - ${tax.tax_percentage}%`,
+                      label: `${tax.tax_name} — ${Number(tax.tax_percentage || 0)}%${
+                        tax.hsn_sac_code ? ` — HSN/SAC ${tax.hsn_sac_code}` : ""
+                      }`,
                     })),
 
                     ...(canManageTaxes
@@ -3458,6 +3543,7 @@ function CreateQuotation({ modalMode = false, onClose, onCreated }) {
                 suggestions={hsnSuggestions}
                 suggestionLoading={hsnLoading}
                 suggestionError={hsnError}
+                disabled={hsnSelected}
               />
 
               <ModalInput
@@ -3991,6 +4077,7 @@ function ProductHsnSacPicker({
   suggestions = [],
   suggestionLoading = false,
   suggestionError = "",
+  disabled = false,
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -4080,28 +4167,33 @@ function ProductHsnSacPicker({
       <input
         type="text"
         autoComplete="off"
+        disabled={disabled}
         value={focused ? query : value || ""}
         placeholder="Type HSN code or description..."
         onFocus={() => {
+          if (disabled) return;
+
           setQuery("");
           setFocused(true);
         }}
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(event) => {
+          if (!disabled) {
+            setQuery(event.target.value);
+          }
+        }}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             setFocused(false);
           }
         }}
         onBlur={() => {
-          /*
-           * Result button click register hone ke liye
-           * dropdown ko thodi delay se close karna hai.
-           */
           setTimeout(() => {
             setFocused(false);
           }, 180);
         }}
-        className={`input ${error ? "input-error" : ""}`}
+        className={`input ${
+          error ? "input-error" : ""
+        } disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800`}
       />
 
       {error && (

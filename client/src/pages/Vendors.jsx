@@ -600,7 +600,7 @@ function VendorTable({
                 <th
                   key={head}
                   scope="col"
-                  className="px-3 py-3 text-left text-sm font-medium"
+                  className="px-3 py-3 text-left text-sm font-semibold"
                 >
                   {head}
                 </th>

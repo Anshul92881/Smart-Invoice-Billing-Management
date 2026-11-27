@@ -11,45 +11,72 @@ import {
   getSingleExpense,
   updateExpense,
   deleteExpense,
+  getExpenseCategories,
+  createExpenseCategory,
 } from "../controllers/expenseController.js";
 
 const router = express.Router();
 
 router.use(authMiddleware);
 
-// View/List access
+const allowedExpenseRoles = authorizeRoles(
+  "company_admin",
+  "accountant",
+  "sales_user",
+);
+
+// Get expense list
 router.get(
   "/",
-  authorizeRoles("company_admin", "accountant", "sales_user"),
+  allowedExpenseRoles,
   authorizePermission("expenses"),
   getExpenses,
 );
 
+// Get categories for the logged-in company
+router.get(
+  "/categories",
+  allowedExpenseRoles,
+  authorizePermission("expenses"),
+  getExpenseCategories,
+);
+
+// Create category for the logged-in company
+router.post(
+  "/categories",
+  allowedExpenseRoles,
+  authorizePermission("expenses"),
+  createExpenseCategory,
+);
+
+// Get single expense
 router.get(
   "/:id",
-  authorizeRoles("company_admin", "accountant", "sales_user"),
+  allowedExpenseRoles,
   authorizePermission("expenses"),
   getSingleExpense,
 );
 
-// CRUD access
+// Create expense
 router.post(
   "/",
-  authorizeRoles("company_admin", "accountant", "sales_user"),
+  allowedExpenseRoles,
   authorizePermission("expenses"),
   createExpense,
 );
 
+// Update expense
 router.put(
   "/:id",
-  authorizeRoles("company_admin", "accountant", "sales_user"),
+  allowedExpenseRoles,
   authorizePermission("expenses"),
   updateExpense,
 );
 
+// Delete expense
 router.delete(
   "/:id",
-  authorizeRoles("company_admin", "accountant", "sales_user"),
+  allowedExpenseRoles,
   authorizePermission("expenses"),
   deleteExpense,
 );

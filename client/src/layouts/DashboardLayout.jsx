@@ -687,8 +687,11 @@ function DashboardLayout() {
               </button>
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-base font-semibold leading-tight tracking-tight text-slate-900 dark:text-white sm:text-lg">
-                  Welcome back<span role="img" aria-label="hello">👋</span> {user?.name || "User"}
-                 
+                  Welcome back
+                  <span role="img" aria-label="hello">
+                    👋
+                  </span>{" "}
+                  {user?.name || "User"}
                 </h2>
                 <p className="mt-0.5 hidden truncate text-sm font-medium leading-5 text-slate-500 dark:text-slate-400 md:block xl:text-sm">
                   Manage invoices, GST, payments and reports
@@ -721,11 +724,12 @@ function DashboardLayout() {
                   }}
                   aria-label="Open notifications"
                   aria-expanded={notificationOpen}
-                  className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+                  className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-200 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
                 >
                   <Bell size={18} />
+
                   {unreadCount > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-red-600 px-1 text-xs font-semibold text-white dark:border-slate-900">
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
                   )}
@@ -856,7 +860,6 @@ function DashboardLayout() {
                       <p className="shrink-0 text-sm text-slate-500 dark:text-slate-400">
                         {FORMAT_ROLE[role] || "User"}
                       </p>
-
                     </div>
                   </div>
                   <ChevronDown

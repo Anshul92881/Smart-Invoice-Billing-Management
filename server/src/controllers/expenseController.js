@@ -6,7 +6,9 @@ const CATEGORY_REGEX = /^[a-zA-Z0-9\s&.,'()/-]+$/;
 
 const normalizeText = (value) => {
   if (value === undefined || value === null) return "";
-  return String(value).replace(/<[^>]*>?/gm, "").trim();
+  return String(value)
+    .replace(/<[^>]*>?/gm, "")
+    .trim();
 };
 
 const toNumber = (value, fallback = 0) => {
@@ -28,7 +30,9 @@ const isValidDate = (value) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
 
   const date = new Date(`${text}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text
+  );
 };
 
 const formatAmount = (amount) => Number(amount || 0).toFixed(2);
@@ -315,7 +319,10 @@ export const getExpenses = async (req, res) => {
     }
 
     if (hasBranch) {
-      const branchValidation = await validateBranch(company_id, Number(branch_id));
+      const branchValidation = await validateBranch(
+        company_id,
+        Number(branch_id),
+      );
 
       if (branchValidation?.error) {
         return res.status(400).json({ message: branchValidation.error });
@@ -594,6 +601,123 @@ export const deleteExpense = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: "Delete expense error",
+      error: error.message,
+    });
+  }
+};
+
+// Get categories for the logged-in company
+export const getExpenseCategories = async (req, res) => {
+  try {
+    const company_id = req.user.company_id;
+
+    if (!company_id) {
+      return res.status(400).json({
+        message: "Company id missing",
+      });
+    }
+
+    const [categories] = await db.query(
+      `
+      SELECT
+        id,
+        category_name
+      FROM tbl_expense_categories
+      WHERE company_id = ?
+        AND status = 'active'
+      ORDER BY category_name ASC
+      `,
+      [company_id],
+    );
+
+    return res.status(200).json({
+      categories,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to fetch expense categories",
+      error: error.message,
+    });
+  }
+};
+
+// Create category for the logged-in company
+export const createExpenseCategory = async (req, res) => {
+  try {
+    const company_id = req.user.company_id;
+    const categoryName = normalizeText(req.body.category_name);
+
+    if (!company_id) {
+      return res.status(400).json({
+        message: "Company id missing",
+      });
+    }
+
+    if (!categoryName) {
+      return res.status(400).json({
+        message: "Category name is required",
+      });
+    }
+
+    if (categoryName.length < 2 || categoryName.length > 100) {
+      return res.status(400).json({
+        message: "Category must be between 2 and 100 characters",
+      });
+    }
+
+    if (!CATEGORY_REGEX.test(categoryName)) {
+      return res.status(400).json({
+        message: "Category contains invalid characters",
+      });
+    }
+
+    const [existingCategories] = await db.query(
+      `
+      SELECT id
+      FROM tbl_expense_categories
+      WHERE company_id = ?
+        AND LOWER(category_name) = LOWER(?)
+      LIMIT 1
+      `,
+      [company_id, categoryName],
+    );
+
+    if (existingCategories.length > 0) {
+      return res.status(409).json({
+        message: "Category already exists",
+      });
+    }
+
+    const [result] = await db.query(
+      `
+      INSERT INTO tbl_expense_categories
+      (
+        company_id,
+        category_name,
+        is_system,
+        status
+      )
+      VALUES (?, ?, 0, 'active')
+      `,
+      [company_id, categoryName],
+    );
+
+    return res.status(201).json({
+      message: "Category added successfully",
+      category: {
+        id: result.insertId,
+        category_name: categoryName,
+      },
+    });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        message: "Category already exists",
+      });
+    }
+
+    return res.status(500).json({
+      message: "Failed to add expense category",
       error: error.message,
     });
   }
